@@ -9,7 +9,7 @@ import { getEightAmMountainDateTimeLocalForDay, getTodayEightAmMountainDateTimeL
 import { TaskItem, type TaskItemData } from '@/components/admin/task-item';
 import { cn } from '@/lib/cn';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { RailCard } from '@/components/referrals/referral-rail';
 import { Input } from '@/components/ui/input';
 
 interface AdminTask {
@@ -38,8 +38,7 @@ interface AdminTasksCardProps {
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 const CALENDAR_WEEK_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
-
-const nestedPanelClasses = 'rounded-lg border border-border bg-surface-muted p-3';
+const VISIBLE_DUE_TASK_LIMIT = 4;
 
 function padNumber(value: number): string {
   return String(value).padStart(2, '0');
@@ -100,6 +99,8 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
 
   const [statusFilter, setStatusFilter] = useState<'open' | 'completed'>('open');
   const [showUpcoming, setShowUpcoming] = useState(false);
+  const [showAllDue, setShowAllDue] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
   const [showManualForm, setShowManualForm] = useState(false);
   const [manualTitle, setManualTitle] = useState('');
   const [manualDueAt, setManualDueAt] = useState(() => getTodayEightAmMountainDateTimeLocal());
@@ -124,18 +125,21 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
     });
   }, [tasks]);
 
-  const { overdueAndToday, upcoming } = useMemo(() => {
-    const overdueAndToday: AdminTask[] = [];
+  const { overdue, dueToday, upcoming } = useMemo(() => {
+    const overdue: AdminTask[] = [];
+    const dueToday: AdminTask[] = [];
     const upcoming: AdminTask[] = [];
     for (const task of sortedTasks) {
       const bucket = getDueBucket(task.effectiveDueAt);
-      if (bucket === 0 || bucket === 1) {
-        overdueAndToday.push(task);
+      if (bucket === 0) {
+        overdue.push(task);
+      } else if (bucket === 1) {
+        dueToday.push(task);
       } else {
         upcoming.push(task);
       }
     }
-    return { overdueAndToday, upcoming };
+    return { overdue, dueToday, upcoming };
   }, [sortedTasks]);
 
   const tasksByDay = useMemo(() => {
@@ -360,6 +364,7 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
       key={task._id}
       task={task as TaskItemData}
       showAsCompleted={showAsCompleted}
+      overdue={!showAsCompleted && getDueBucket(task.effectiveDueAt) === 0}
       onComplete={handleComplete}
       onDismiss={handleDismiss}
       onSnooze={handleSnooze}
@@ -375,69 +380,103 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
     return null;
   }
 
+  const openCount = overdue.length + dueToday.length + upcoming.length;
+  const dueCount = overdue.length + dueToday.length;
+  const visibleOverdue = showAllDue ? overdue : overdue.slice(0, VISIBLE_DUE_TASK_LIMIT);
+  const visibleDueToday = showAllDue
+    ? dueToday
+    : dueToday.slice(0, Math.max(0, VISIBLE_DUE_TASK_LIMIT - visibleOverdue.length));
+  const hiddenDueCount = dueCount - visibleOverdue.length - visibleDueToday.length;
+  const handleToggleCalendar = () => {
+    if (showCalendar) {
+      handleClearSelectedDay();
+    }
+    setShowCalendar(!showCalendar);
+  };
+
   return (
-    <Card>
-      <CardHeader className="flex-row flex-wrap items-center justify-between gap-3 space-y-0">
-        <div className="space-y-1">
-          <CardTitle>Tasks</CardTitle>
-          <p className="text-sm text-foreground-muted">Admin tasks for this referral.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
+    <RailCard
+      title="Tasks"
+      description={
+        statusFilter === 'open'
+          ? openCount === 0
+            ? 'Nothing open for this referral.'
+            : `${openCount} open ${openCount === 1 ? 'task' : 'tasks'}`
+          : 'Completed tasks for this referral.'
+      }
+      action={
+        <>
+          <button
+            type="button"
             onClick={() => setStatusFilter(statusFilter === 'open' ? 'completed' : 'open')}
+            className="text-[13px] font-semibold text-foreground-muted transition hover:text-foreground"
           >
             {statusFilter === 'open' ? 'Show completed' : 'Show open'}
+          </button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn('h-8 w-8', showCalendar ? 'bg-surface-muted text-foreground' : 'text-foreground-muted')}
+            onClick={handleToggleCalendar}
+            aria-pressed={showCalendar}
+            aria-label={showCalendar ? 'Hide calendar' : 'Show calendar'}
+            title={showCalendar ? 'Hide calendar' : 'Show calendar'}
+          >
+            <CalendarDays className="h-4 w-4" />
           </Button>
           {statusFilter === 'open' && (
             <Button
               size="sm"
+              variant="secondary"
               leadingIcon={<Plus className="h-3.5 w-3.5" />}
               onClick={() => setShowManualForm(!showManualForm)}
+              aria-expanded={showManualForm}
             >
-              Add task
+              Add
             </Button>
           )}
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-      {showManualForm && (
-        <form onSubmit={handleManualSubmit} className={cn('space-y-2', nestedPanelClasses)}>
-          <Input
-            type="text"
-            value={manualTitle}
-            onChange={(e) => setManualTitle(e.target.value)}
-            placeholder="Task name"
-            required
-          />
-          <Input
-            type="datetime-local"
-            value={manualDueAt}
-            onChange={(e) => setManualDueAt(e.target.value)}
-            className="tabular-nums"
-            required
-          />
-          <div className="flex gap-2">
-            <Button type="submit" size="sm">
-              Create
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                setShowManualForm(false);
-                setManualTitle('');
-                setManualDueAt(getTodayEightAmMountainDateTimeLocal());
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
-        </form>
-      )}
+        </>
+      }
+    >
+      <div className={cn('grid gap-5', showCalendar ? 'md:grid-cols-[minmax(0,1fr)_248px]' : null)}>
+        <div className="min-w-0 space-y-4">
+        {showManualForm && (
+          <form onSubmit={handleManualSubmit} className="space-y-2 border-b border-border pb-4">
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_220px]">
+              <Input
+                type="text"
+                value={manualTitle}
+                onChange={(e) => setManualTitle(e.target.value)}
+                placeholder="Task name"
+                required
+              />
+              <Input
+                type="datetime-local"
+                value={manualDueAt}
+                onChange={(e) => setManualDueAt(e.target.value)}
+                className="tabular-nums"
+                required
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button type="submit" size="sm">
+                Create
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setShowManualForm(false);
+                  setManualTitle('');
+                  setManualDueAt(getTodayEightAmMountainDateTimeLocal());
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        )}
 
-      <div className="space-y-6">
         <div>
           {selectedDay ? (
             <div className="mb-2 flex items-center justify-between gap-2">
@@ -463,29 +502,47 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
           <ul className="space-y-2">
             {selectedDay ? (
               selectedDayTasks.length === 0 ? (
-                <li className="py-4 text-center text-sm text-foreground-subtle">No tasks due on this day.</li>
+                <li className="py-3 text-center text-sm text-foreground-subtle">No tasks due on this day.</li>
               ) : (
                 selectedDayTasks.map((task) => renderTaskItem(task, statusFilter === 'completed'))
               )
             ) : statusFilter === 'open' ? (
-              overdueAndToday.length === 0 && upcoming.length === 0 ? (
-                <li className="py-4 text-center text-sm text-foreground-subtle">No open tasks</li>
+              openCount === 0 ? (
+                <li className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-sm text-foreground-subtle">
+                  No open tasks
+                </li>
               ) : (
                 <>
-                  {overdueAndToday.map((task) => renderTaskItem(task, false))}
+                  {visibleOverdue.length > 0 ? (
+                    <TaskGroupLabel label="Overdue" count={overdue.length} tone="danger" />
+                  ) : null}
+                  {visibleOverdue.map((task) => renderTaskItem(task, false))}
+                  {visibleDueToday.length > 0 ? <TaskGroupLabel label="Today" count={dueToday.length} /> : null}
+                  {visibleDueToday.map((task) => renderTaskItem(task, false))}
+                  {hiddenDueCount > 0 || (showAllDue && dueCount > VISIBLE_DUE_TASK_LIMIT) ? (
+                    <li>
+                      <button
+                        type="button"
+                        onClick={() => setShowAllDue(!showAllDue)}
+                        className="text-[13px] font-semibold text-primary transition hover:text-primary-hover"
+                      >
+                        {showAllDue ? 'Show fewer' : `Show ${hiddenDueCount} more`}
+                      </button>
+                    </li>
+                  ) : null}
                   {upcoming.length > 0 && (
-                    <li className="pt-2">
+                    <li className="pt-1">
                       <button
                         type="button"
                         onClick={() => setShowUpcoming(!showUpcoming)}
-                        className="flex items-center gap-1 text-sm font-semibold text-foreground-muted hover:text-foreground"
+                        className="flex items-center gap-1 text-[13px] font-semibold text-foreground-muted hover:text-foreground"
                       >
                         {showUpcoming ? (
                           <ChevronDown className="h-4 w-4" />
                         ) : (
                           <ChevronRight className="h-4 w-4" />
                         )}
-                        Upcoming tasks ({upcoming.length})
+                        Upcoming ({upcoming.length})
                       </button>
                       {showUpcoming && (
                         <ul className="mt-2 space-y-2">
@@ -497,7 +554,9 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
                 </>
               )
             ) : sortedTasks.length === 0 ? (
-              <li className="py-4 text-center text-sm text-foreground-subtle">No completed tasks</li>
+              <li className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-sm text-foreground-subtle">
+                No completed tasks
+              </li>
             ) : (
               sortedTasks.map((task) => renderTaskItem(task, true))
             )}
@@ -508,6 +567,7 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
               {!showDayManualForm ? (
                 <Button
                   size="sm"
+                  variant="secondary"
                   leadingIcon={<Plus className="h-3.5 w-3.5" />}
                   onClick={() => {
                     setShowDayManualForm(true);
@@ -519,10 +579,7 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
                   Add task for this day
                 </Button>
               ) : (
-                <form
-                  onSubmit={handleDayManualSubmit}
-                  className={cn('space-y-2', nestedPanelClasses)}
-                >
+                <form onSubmit={handleDayManualSubmit} className="space-y-2">
                   <Input
                     type="text"
                     value={dayManualTitle}
@@ -561,77 +618,97 @@ export function AdminTasksCard({ referralId, viewerRole }: AdminTasksCardProps) 
             </div>
           ) : null}
         </div>
-
-        <div className="space-y-3 border-t border-border pt-5">
-          <div className="flex items-center justify-between">
-            <div className="inline-flex items-center gap-2 text-sm font-semibold text-foreground">
-              <CalendarDays className="h-4 w-4 text-foreground-subtle" />
-              Calendar
-            </div>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="secondary"
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => setCalendarMonth((prev) => shiftMonth(prev, -1))}
-                aria-label="Previous month"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <p className="min-w-[8rem] text-center text-xs font-medium tabular-nums text-foreground-muted">
-                {calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
-              </p>
-              <Button
-                variant="secondary"
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => setCalendarMonth((prev) => shiftMonth(prev, 1))}
-                aria-label="Next month"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-7 gap-1 text-center text-xs font-medium text-foreground-subtle">
-            {CALENDAR_WEEK_DAYS.map((day) => (
-              <span key={day}>{day}</span>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-7 gap-1">
-            {calendarCells.map((cell, idx) => {
-              if (!cell.dayKey || !cell.label) {
-                return <div key={`empty-${idx}`} className="h-10 rounded-lg bg-surface-muted/40" aria-hidden />;
-              }
-              const dayKey = cell.dayKey;
-              const hasTasks = tasksByDay.has(dayKey);
-              const isSelected = selectedDay === dayKey;
-
-              return (
-                <button
-                  key={dayKey}
-                  type="button"
-                  onClick={() => handleCalendarDaySelect(dayKey)}
-                  className={`relative h-10 rounded-lg border text-sm tabular-nums transition ${
-                    isSelected
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : hasTasks
-                        ? 'border-border-strong bg-surface-muted text-foreground hover:bg-surface-subtle'
-                        : 'border-border text-foreground-subtle hover:bg-surface-muted'
-                  }`}
-                >
-                  {cell.label}
-                  {hasTasks && (
-                    <span className="absolute bottom-1 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-primary" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
         </div>
+
+        {showCalendar ? (
+          <aside className="border-t border-border pt-4 md:border-l md:border-t-0 md:pl-5 md:pt-0">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold tabular-nums text-foreground">
+                  {calendarMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                </p>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => setCalendarMonth((prev) => shiftMonth(prev, -1))}
+                    aria-label="Previous month"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => setCalendarMonth((prev) => shiftMonth(prev, 1))}
+                    aria-label="Next month"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-medium text-foreground-subtle">
+                {CALENDAR_WEEK_DAYS.map((day) => (
+                  <span key={day}>{day.slice(0, 2)}</span>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-7 gap-1">
+                {calendarCells.map((cell, idx) => {
+                  if (!cell.dayKey || !cell.label) {
+                    return <div key={`empty-${idx}`} className="h-8" aria-hidden />;
+                  }
+                  const dayKey = cell.dayKey;
+                  const hasTasks = tasksByDay.has(dayKey);
+                  const isSelected = selectedDay === dayKey;
+
+                  return (
+                    <button
+                      key={dayKey}
+                      type="button"
+                      onClick={() => handleCalendarDaySelect(dayKey)}
+                      className={cn(
+                        'relative h-8 rounded-md text-xs tabular-nums transition',
+                        isSelected
+                          ? 'bg-primary font-semibold text-white'
+                          : hasTasks
+                            ? 'bg-surface-muted font-semibold text-foreground hover:bg-surface-subtle'
+                            : 'text-foreground-subtle hover:bg-surface-muted'
+                      )}
+                    >
+                      {cell.label}
+                      {hasTasks && !isSelected && (
+                        <span className="absolute bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-primary" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              {tasksByDay.size > 0 ? (
+                <p className="text-numeric pt-1 text-xs text-foreground-subtle">
+                  {tasksByDay.size} {tasksByDay.size === 1 ? 'day' : 'days'} with tasks
+                </p>
+              ) : null}
+            </div>
+          </aside>
+        ) : null}
       </div>
-      </CardContent>
-    </Card>
+    </RailCard>
+  );
+}
+
+function TaskGroupLabel({ label, count, tone }: { label: string; count: number; tone?: 'danger' }) {
+  return (
+    <li
+      className={cn(
+        'flex items-center gap-1.5 pt-1 text-eyebrow first:pt-0',
+        tone === 'danger' ? 'text-danger' : 'text-foreground-subtle'
+      )}
+    >
+      {label}
+      <span className="text-numeric">{count}</span>
+    </li>
   );
 }

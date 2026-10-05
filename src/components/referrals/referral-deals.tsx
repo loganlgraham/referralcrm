@@ -4,10 +4,19 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { ChevronDown, ChevronRight, Minus, MoreHorizontal, Plus } from 'lucide-react';
 
-import { DEAL_STATUS_LABELS, DEAL_STATUS_OPTIONS, type DealStatus } from '@/constants/deals';
+import {
+  DEAL_STATUS_LABELS,
+  DEAL_STATUS_OPTIONS,
+  DEAL_STATUS_VALUES,
+  TERMINATED_REASON_LABELS,
+  TERMINATED_REASON_OPTIONS,
+  type DealStatus,
+  type TerminatedReason,
+} from '@/constants/deals';
 import type { LostReason, ReferralStatus } from '@/constants/referrals';
-import { formatCurrency, formatDateMST, formatDateTimeMST } from '@/utils/formatters';
+import { formatCurrencyWhole, formatDateMST, formatDateTimeMST } from '@/utils/formatters';
 import type { ReferralPayment } from '@/types/referral-payment';
 import {
   confirmCloseStatusDate,
@@ -20,9 +29,17 @@ import {
 } from '@/components/referrals/terminate-confirmation-toast';
 import { cn } from '@/lib/cn';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { railCardClasses, railTitleClasses } from '@/components/referrals/referral-rail';
+import { StageTrack } from '@/components/referrals/stage-track';
 import { inputFieldClasses } from '@/components/ui/input';
-import { SectionLabel, sectionLabelClasses } from '@/components/ui/section-label';
+import { sectionLabelClasses } from '@/components/ui/section-label';
 import { EmptyState } from '@/components/ui/empty-state';
 
 interface ReferralDealsProps {
@@ -46,14 +63,14 @@ interface ReferralDealsProps {
 
 type AgentOption = { id: string; name: string };
 
-type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
+const HISTORY_DEAL_STATUSES = new Set(['paid', 'closed', 'terminated', 'payment_sent']);
 
-const TERMINATED_REASON_OPTIONS: { value: TerminatedReason; label: string }[] = [
-  { value: 'inspection', label: 'Inspection' },
-  { value: 'appraisal', label: 'Appraisal' },
-  { value: 'financing', label: 'Financing' },
-  { value: 'changed_mind', label: 'Changed Mind' },
-];
+const isHistoryDealStatus = (status: string | null | undefined) =>
+  typeof status === 'string' && HISTORY_DEAL_STATUSES.has(status);
+
+const isTerminatedDealStatus = (status: DealStatus) => status === 'terminated';
+
+const getDealStatusLabel = (status: DealStatus) => DEAL_STATUS_LABELS[status];
 
 type DealUpdatePayload = {
   status: DealStatus;
@@ -492,20 +509,19 @@ function DealCard({
     setSaving(false);
   };
 
-  const statusLabel = DEAL_STATUS_LABELS[(deal.status as DealStatus | undefined) ?? 'under_contract'];
   const expectedAmountCents = deal.expectedAmountCents ?? 0;
   const reportedNetPaidCents = deal.netReferralFeePaidCents ?? deal.receivedAmountCents;
   const netPaidCents =
     reportedNetPaidCents ??
     (deal.status === 'paid' ? expectedAmountCents : 0);
   const remainingExpectedCents = Math.max(expectedAmountCents - (reportedNetPaidCents ?? 0), 0);
-  const expected = formatCurrency(remainingExpectedCents);
-  const netPaid = formatCurrency(netPaidCents ?? 0);
-  const contractPriceValue = deal.contractPriceCents ? formatCurrency(deal.contractPriceCents) : '—';
+  const expected = formatCurrencyWhole(remainingExpectedCents);
+  const netPaid = formatCurrencyWhole(netPaidCents ?? 0);
+  const contractPriceValue = deal.contractPriceCents ? formatCurrencyWhole(deal.contractPriceCents) : '—';
   const dealSide = deal.side === 'sell' ? 'Sell-side' : 'Buy-side';
-  const terminatedReasonLabel = terminatedReason
-    ? TERMINATED_REASON_OPTIONS.find((option) => option.value === terminatedReason)?.label ??
-      terminatedReason
+  const savedTerminatedReason = deal.terminatedReason as TerminatedReason | null | undefined;
+  const terminatedReasonLabel = savedTerminatedReason
+    ? TERMINATED_REASON_LABELS[savedTerminatedReason] ?? savedTerminatedReason
     : null;
   const defaultPaidAmountDisplay = centsToDisplay(
     deal.expectedAmountCents ??
@@ -596,226 +612,154 @@ function DealCard({
     );
   };
 
+  const dealStatus = (deal.status as DealStatus | undefined) ?? 'under_contract';
+  const trackOptions = DEAL_STATUS_VALUES.filter(
+    (value) => value === dealStatus || statusOptions.some((option) => option.value === value)
+  );
+  const commissionValue = deal.commissionFlatFeeCents
+    ? formatCurrencyWhole(deal.commissionFlatFeeCents)
+    : formatPercent(deal.commissionBasisPoints);
+  const financingLabel = deal.side === 'sell' ? null : deal.usedAfc ? 'AFC financing' : 'Outside lender';
+  const canMarkPaid = viewerRole === 'admin';
+  const canMarkPaymentSent = viewerRole === 'agent';
+  const canSendFeeBreakdown = viewerRole === 'admin';
+  const feeBreakdownDisabled = saving || !deal.closingDate || !deal.agentId;
+  const feeBreakdownStatus: { tone: 'muted' | 'warning'; text: string }[] = [];
+  if (canSendFeeBreakdown) {
+    if (!deal.closingDate) {
+      feeBreakdownStatus.push({ tone: 'warning', text: 'Add a closing date to send the fee breakdown email.' });
+    } else if (!deal.agentId) {
+      feeBreakdownStatus.push({ tone: 'warning', text: 'Assign an agent to send the fee breakdown email.' });
+    } else if (deal.feeBreakdownEmailSentAt) {
+      const sentAt = formatDateTimeMST(deal.feeBreakdownEmailSentAt);
+      feeBreakdownStatus.push({
+        tone: 'muted',
+        text:
+          deal.feeBreakdownEmailSentBy === 'cron'
+            ? `Fee breakdown auto-sent ${sentAt}`
+            : `Fee breakdown sent ${sentAt} by ${
+                deal.feeBreakdownEmailSentByUser?.name ?? deal.feeBreakdownEmailSentByUser?.email ?? 'admin'
+              } (auto-send off)`,
+      });
+    } else if (feeBreakdownAutoSendEnabled !== false) {
+      feeBreakdownStatus.push({ tone: 'muted', text: 'Fee breakdown auto-sends 7 days before closing' });
+    }
+  }
+
+  const isFullyPaid = remainingExpectedCents === 0 && (netPaidCents ?? 0) > 0;
+
+  const metaItems = isCrossSideReadOnly
+    ? [deal.agent?.name ?? 'Unassigned agent', dealSide]
+    : [
+        deal.agent?.name ?? 'Unassigned agent',
+        dealSide,
+        financingLabel,
+        deal.usedAssignedAgent ? 'Assigned agent' : 'Outside agent',
+      ].filter((item): item is string => Boolean(item));
+
+  const dateItems = [
+    { label: 'Created', value: formatDateMST(deal.createdAt) },
+    { label: 'Under contract', value: deal.underContractDate ? formatDateMST(deal.underContractDate) : '—' },
+    { label: 'Closing', value: deal.closingDate ? formatDateMST(deal.closingDate) : '—' },
+    ...(originalClosingDate ? [{ label: 'Original close', value: formatDateMST(originalClosingDate) }] : []),
+  ];
+
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface-muted p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-2">
-          <div className="space-y-1">
-            <SectionLabel>Status</SectionLabel>
-            <p className="text-sm font-semibold text-foreground">{statusLabel}</p>
-            <p className="text-xs text-foreground-subtle">
-              Created <span className="tabular-nums">{formatDateMST(deal.createdAt)}</span>
-            </p>
-            <p className="text-xs text-foreground-subtle">
-              Under contract:{' '}
-              <span className="tabular-nums">
-                {deal.underContractDate ? formatDateMST(deal.underContractDate) : '—'}
-              </span>
-            </p>
-            <p className="text-xs text-foreground-subtle">
-              Closing date:{' '}
-              <span className="tabular-nums">{deal.closingDate ? formatDateMST(deal.closingDate) : '—'}</span>
-            </p>
-            {originalClosingDate ? (
-              <p className="text-xs text-foreground-subtle">
-                Original close date: <span className="tabular-nums">{formatDateMST(originalClosingDate)}</span>
-              </p>
-            ) : null}
-            {deal.status === 'terminated' && (
-              <p className="text-xs font-medium text-danger">
-                Termination reason: {terminatedReasonLabel ?? 'Not specified'}
-              </p>
-            )}
-          </div>
-          {!isCrossSideReadOnly && (
-            <label className={cn('block', sectionLabelClasses)}>
-              <span className="mr-2">Update stage</span>
-              <select
-                value={(deal.status as DealStatus | undefined) ?? 'under_contract'}
-                onChange={(event) =>
-                  onStatusChange(deal, event.target.value as DealStatus)
-                }
-                disabled={!canManage || statusUpdating}
-                className={cn(inputFieldClasses, 'mt-1 h-8 px-2 text-xs')}
-              >
-                {statusOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          {canManage && !isCrossSideReadOnly && (
-            <label className={cn('block', sectionLabelClasses)}>
-              <span className="mr-2">Termination reason</span>
-              <select
-                value={terminatedReason ?? ''}
-                onChange={(event) =>
-                  setTerminatedReason(
-                    event.target.value ? (event.target.value as TerminatedReason) : null
-                  )
-                }
-                disabled={!canManage || statusUpdating}
-                className={cn(inputFieldClasses, 'mt-1 h-8 px-2 text-xs')}
-              >
-                <option value="">Select reason</option>
-                {TERMINATED_REASON_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
+    <div className="flex flex-col gap-4 rounded-card border border-border bg-surface p-4 sm:p-5">
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-base font-bold tracking-[-0.01em] text-foreground">
+            {deal.propertyAddress?.trim() || 'No address yet'}
+          </h3>
+          <p className="mt-0.5 text-[13px] text-foreground-muted">{metaItems.join(' · ')}</p>
         </div>
-        {!isCrossSideReadOnly && (
-          <div className="space-y-1">
-            <SectionLabel>Expected</SectionLabel>
-            <p className="tabular-nums text-sm font-semibold text-foreground">{expected}</p>
-            <p className="text-xs text-foreground-subtle">
-              Net paid: <span className="tabular-nums">{netPaid}</span>
+        {!isCrossSideReadOnly && dealStatus !== 'terminated' ? (
+          <div className="shrink-0 text-right">
+            <p className="text-numeric text-xl font-extrabold leading-none tracking-[-0.02em] text-foreground">
+              {isFullyPaid ? netPaid : expected}
             </p>
+            <p className="mt-1 text-[11px] font-medium text-foreground-subtle">{isFullyPaid ? 'paid' : 'expected'}</p>
           </div>
-        )}
-        <div className="space-y-1 text-sm text-foreground-muted">
-          <p>
-            <span className={sectionLabelClasses}>Contract price: </span>
-            <span className="tabular-nums font-semibold">{contractPriceValue}</span>
-          </p>
-          {!isCrossSideReadOnly && (
-            <>
-              <p>
-                <span className={sectionLabelClasses}>Commission: </span>
-                <span className="tabular-nums font-semibold">
-                  {deal.commissionFlatFeeCents
-                    ? formatCurrency(deal.commissionFlatFeeCents)
-                    : formatPercent(deal.commissionBasisPoints)}
-                </span>
-              </p>
-              <p>
-                <span className={sectionLabelClasses}>Referral fee: </span>
-                <span className="tabular-nums font-semibold">{formatPercent(deal.referralFeeBasisPoints)}</span>
-              </p>
-              <p>
-                <span className={sectionLabelClasses}>Side: </span>
-                <span className="font-semibold">{dealSide}</span>
-              </p>
-              <p>
-                <span className={sectionLabelClasses}>Used AFC: </span>
-                <span className="font-semibold">
-                  {deal.side === 'sell'
-                    ? 'N/A'
-                    : deal.usedAfc
-                      ? 'Financing with AFC'
-                      : 'Financing with another lender'}
-                </span>
-              </p>
-              <p>
-                <span className={sectionLabelClasses}>Used Agent: </span>
-                <span className="font-semibold">{deal.usedAssignedAgent ? 'Yes' : 'No'}</span>
-              </p>
-            </>
-          )}
-          <p>
-            <span className={sectionLabelClasses}>Address: </span>
-            <span className="font-semibold">{deal.propertyAddress?.trim() || '—'}</span>
-          </p>
-          <p>
-            <span className={sectionLabelClasses}>Agent: </span>
-            <span className="font-semibold">{deal.agent?.name ?? 'Unassigned'}</span>
-          </p>
-        </div>
+        ) : null}
         {canManage && (
-          <div className="flex flex-col gap-2 sm:w-44">
-            {viewerRole === 'admin' && (
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={handleMarkPaidClick}
-                disabled={statusUpdating}
-              >
-                Mark Paid
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="Deal actions" className="-mr-2 -mt-1 shrink-0">
+                <MoreHorizontal className="h-4 w-4" />
               </Button>
-            )}
-            {viewerRole === 'agent' && (
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={() => void onStatusChange(deal, 'payment_sent')}
-                disabled={statusUpdating || deal.status === 'payment_sent' || deal.status === 'paid'}
-              >
-                Payment Sent
-              </Button>
-            )}
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => setEditing((previous) => !previous)}
-            >
-              {editing ? 'Close edit' : 'Edit deal'}
-            </Button>
-            <Button
-              type="button"
-              variant="danger"
-              size="sm"
-              onClick={() => onDelete(deal)}
-              loading={deleting}
-            >
-              {deleting ? 'Deleting…' : 'Delete deal'}
-            </Button>
-            {viewerRole === 'admin' && (
-              <>
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={handleSendFeeBreakdown}
-                  disabled={saving || !deal.closingDate || !deal.agentId}
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {canMarkPaid && (
+                <DropdownMenuItem onSelect={handleMarkPaidClick} disabled={statusUpdating}>
+                  Mark paid
+                </DropdownMenuItem>
+              )}
+              {canMarkPaymentSent && (
+                <DropdownMenuItem
+                  onSelect={() => void onStatusChange(deal, 'payment_sent')}
+                  disabled={statusUpdating || deal.status === 'payment_sent' || deal.status === 'paid'}
                 >
-                  {deal.feeBreakdownEmailSentAt ? 'Resend Fee Breakdown Email' : 'Send Fee Breakdown Email'}
-                </Button>
-                {deal.closingDate && (
-                  <div className="space-y-0.5">
-                    <p className="text-xs text-foreground-subtle">
-                      {deal.feeBreakdownEmailSentAt ? (
-                        <>
-                          {deal.feeBreakdownEmailSentBy === 'cron'
-                            ? `✓ Sent ${formatDateTimeMST(deal.feeBreakdownEmailSentAt)} (auto)`
-                            : `✓ Sent ${formatDateTimeMST(deal.feeBreakdownEmailSentAt)} by ${deal.feeBreakdownEmailSentByUser?.name ?? deal.feeBreakdownEmailSentByUser?.email ?? 'admin'}`}
-                        </>
-                      ) : feeBreakdownAutoSendEnabled !== false ? (
-                        '⏰ Auto-sends 7 days before closing.'
-                      ) : null}
-                    </p>
-                    {deal.feeBreakdownEmailSentAt &&
-                      deal.feeBreakdownEmailSentBy !== 'cron' && (
-                        <p className="text-xs text-warning">
-                          Auto-send disabled for this deal because it was sent manually.
-                        </p>
-                      )}
-                  </div>
-                )}
-                {!deal.closingDate && (
-                  <p className="text-xs text-warning">
-                    Add closing date to enable
-                  </p>
-                )}
-                {!deal.agentId && deal.closingDate && (
-                  <p className="text-xs text-warning">
-                    Assign an agent to enable
-                  </p>
-                )}
-              </>
-            )}
-          </div>
+                  Payment sent
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onSelect={() => setEditing((previous) => !previous)}>
+                {editing ? 'Close edit' : 'Edit deal'}
+              </DropdownMenuItem>
+              {canSendFeeBreakdown && (
+                <DropdownMenuItem onSelect={handleSendFeeBreakdown} disabled={feeBreakdownDisabled}>
+                  {deal.feeBreakdownEmailSentAt ? 'Resend fee breakdown email' : 'Send fee breakdown email'}
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem destructive onSelect={() => onDelete(deal)} disabled={deleting}>
+                {deleting ? 'Deleting…' : 'Delete deal'}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
 
+      {!isCrossSideReadOnly ? (
+        <DealFigures
+          items={[
+            { label: 'Contract price', value: contractPriceValue },
+            { label: 'Commission', value: commissionValue },
+            { label: 'Referral fee', value: formatPercent(deal.referralFeeBasisPoints) },
+            { label: 'Net paid', value: netPaid },
+          ]}
+        />
+      ) : (
+        <DealFigures items={[{ label: 'Contract price', value: contractPriceValue }]} />
+      )}
+
+      <StageTrack
+        options={trackOptions}
+        currentStatus={dealStatus}
+        getLabel={getDealStatusLabel}
+        isOutcome={isTerminatedDealStatus}
+        outcomeLabel={terminatedReasonLabel ? `Terminated · ${terminatedReasonLabel}` : null}
+        disabled={!canManage || Boolean(statusUpdating)}
+        ariaLabel="Deal stage"
+        onSelect={(next) => void onStatusChange(deal, next)}
+      />
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border pt-3 text-xs text-foreground-subtle">
+        {dateItems.map((item) => (
+          <span key={item.label}>
+            {item.label} <span className="text-numeric font-medium text-foreground-muted">{item.value}</span>
+          </span>
+        ))}
+        {canManage
+          ? feeBreakdownStatus.map((item) => (
+              <span key={item.text} className={item.tone === 'warning' ? 'font-medium text-warning' : undefined}>
+                {item.text}
+              </span>
+            ))
+          : null}
+      </div>
+
       {editing && canManage && (
-        <form onSubmit={handleSubmit} className="grid gap-3 rounded-lg border border-border bg-surface-raised p-4 sm:grid-cols-2 lg:grid-cols-4">
+        <form onSubmit={handleSubmit} className="grid gap-3 border-t border-border pt-4 sm:grid-cols-2 lg:grid-cols-4">
           <label className="space-y-1 text-xs font-medium text-foreground-muted">
             <span>Contract price</span>
             <input
@@ -1152,6 +1096,7 @@ export function ReferralDeals({
   defaultSide = 'buy',
   borrowerName = 'this referral',
 }: ReferralDealsProps) {
+  const [showPastDeals, setShowPastDeals] = useState(false);
   const [status, setStatus] = useState<DealStatus>('under_contract');
   const [markPaid, setMarkPaid] = useState(false);
   const [expectedAmount, setExpectedAmount] = useState('');
@@ -1337,8 +1282,39 @@ export function ReferralDeals({
     }),
     [deals]
   );
+  const activeDeals = sortedDeals.filter((deal) => !isHistoryDealStatus(deal.status));
+  const pastDeals = sortedDeals.filter((deal) => isHistoryDealStatus(deal.status));
   const shouldHideAgentEmptyState =
     viewerRole === 'agent' && sortedDeals.length === 0 && hiddenOutsideAgentCount > 0;
+
+  const renderDealCard = (deal: ReferralPayment) => {
+    const isCrossSideReadOnly =
+      viewerRole === 'agent' &&
+      (deal.isCrossSideReadOnly === true ||
+        ((viewerAssignedSide === 'buy' || viewerAssignedSide === 'sell') &&
+          (deal.side === 'buy' || deal.side === 'sell') &&
+          deal.side !== viewerAssignedSide));
+    return (
+      <DealCard
+        key={deal._id}
+        deal={deal}
+        agents={agents}
+        agentsLoading={agentsLoading}
+        canManage={canManage && !isCrossSideReadOnly}
+        isCrossSideReadOnly={isCrossSideReadOnly}
+        isAgentOrigin={isAgentOrigin}
+        isAgitDeal={isAgitDeal}
+        statusUpdating={statusUpdating[deal._id]}
+        deleting={deleting[deal._id]}
+        onStatusChange={handleStatusChange}
+        onDelete={handleDelete}
+        onUpdate={handleDealEdit}
+        viewerRole={viewerRole}
+        feeBreakdownAutoSendEnabled={feeBreakdownAutoSendEnabled}
+        borrowerName={borrowerName}
+      />
+    );
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1729,29 +1705,33 @@ export function ReferralDeals({
   };
 
   return (
-    <Card>
-      <CardHeader className="flex-row flex-wrap items-center justify-between gap-3 space-y-0">
-        <div className="space-y-1">
-          <CardTitle>Referral deals</CardTitle>
-          <p className="text-sm text-foreground-muted">Contracts and payouts tied to this referral.</p>
+    <section className={railCardClasses}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <h2 className={railTitleClasses}>Deals</h2>
+          {sortedDeals.length > 0 ? (
+            <span className="text-numeric rounded-full bg-surface-muted px-2.5 py-0.5 text-xs font-semibold text-foreground-muted">
+              {sortedDeals.length}
+            </span>
+          ) : null}
         </div>
         {canManage && canCreateForViewer && (
           <Button
             type="button"
             variant="secondary"
             size="sm"
+            leadingIcon={showForm ? <Minus className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
             onClick={() => setShowForm((previous) => !previous)}
           >
-            <span className="text-lg leading-none">{showForm ? '−' : '+'}</span>
             {showForm ? 'Hide form' : 'Add deal'}
           </Button>
         )}
-      </CardHeader>
-      <CardContent className="space-y-4">
+      </div>
+      <div className="mt-4 space-y-4">
       {canManage && canCreateForViewer && showForm && (
         <form
           onSubmit={handleSubmit}
-          className="grid gap-4 rounded-lg border border-border bg-surface-muted p-4 sm:grid-cols-2 lg:grid-cols-4"
+          className="grid gap-4 rounded-card border border-dashed border-border bg-surface-muted/60 p-4 sm:grid-cols-2 lg:grid-cols-4"
         >
           <label className="space-y-1 text-xs font-medium text-foreground-muted">
             <span>Contract price</span>
@@ -2071,45 +2051,40 @@ export function ReferralDeals({
           )
         ) : (
           <>
-            {sortedDeals.map((deal) => (
-              <DealCard
-                key={deal._id}
-                deal={deal}
-                agents={agents}
-                agentsLoading={agentsLoading}
-                canManage={
-                  canManage &&
-                  !(
-                    viewerRole === 'agent' &&
-                    (deal.isCrossSideReadOnly === true ||
-                      ((viewerAssignedSide === 'buy' || viewerAssignedSide === 'sell') &&
-                        (deal.side === 'buy' || deal.side === 'sell') &&
-                        deal.side !== viewerAssignedSide))
-                  )
-                }
-                isCrossSideReadOnly={
-                  viewerRole === 'agent' &&
-                  (deal.isCrossSideReadOnly === true ||
-                    ((viewerAssignedSide === 'buy' || viewerAssignedSide === 'sell') &&
-                      (deal.side === 'buy' || deal.side === 'sell') &&
-                      deal.side !== viewerAssignedSide))
-                }
-                isAgentOrigin={isAgentOrigin}
-                isAgitDeal={isAgitDeal}
-                statusUpdating={statusUpdating[deal._id]}
-                deleting={deleting[deal._id]}
-                onStatusChange={handleStatusChange}
-                onDelete={handleDelete}
-                onUpdate={handleDealEdit}
-                viewerRole={viewerRole}
-                feeBreakdownAutoSendEnabled={feeBreakdownAutoSendEnabled}
-                borrowerName={borrowerName}
-              />
-            ))}
+            {(activeDeals.length > 0 ? activeDeals : pastDeals).map(renderDealCard)}
+            {activeDeals.length > 0 && pastDeals.length > 0 ? (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowPastDeals((previous) => !previous)}
+                  aria-expanded={showPastDeals}
+                  className="flex items-center gap-1 text-[13px] font-semibold text-foreground-muted transition hover:text-foreground"
+                >
+                  {showPastDeals ? <ChevronDown className="h-4 w-4" aria-hidden /> : <ChevronRight className="h-4 w-4" aria-hidden />}
+                  Past deals ({pastDeals.length})
+                </button>
+                {showPastDeals ? (
+                  <div className="mt-3 space-y-3">{pastDeals.map(renderDealCard)}</div>
+                ) : null}
+              </div>
+            ) : null}
           </>
         )}
       </div>
-      </CardContent>
-    </Card>
+      </div>
+    </section>
+  );
+}
+
+function DealFigures({ items }: { items: { label: string; value: string }[] }) {
+  return (
+    <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-lg bg-surface-muted/60 px-4 py-3 sm:grid-cols-4">
+      {items.map((item) => (
+        <div key={item.label} className="min-w-0">
+          <dt className="text-[11px] font-medium text-foreground-subtle">{item.label}</dt>
+          <dd className="text-numeric mt-0.5 truncate text-sm font-semibold text-foreground">{item.value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }

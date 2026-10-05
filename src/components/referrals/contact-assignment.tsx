@@ -253,26 +253,36 @@ export function ContactAssignment({
   };
 
   return (
-    <div className={className ? `h-full ${className}` : 'h-full'}>
-      <div className="flex h-full flex-col rounded-lg bg-surface-raised px-3 py-2 shadow-sm ring-1 ring-inset ring-border">
-        <div className="flex items-start gap-2">
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium text-foreground-subtle">{title}</p>
-            {formattedContact ? (
-              <div className="mt-0.5 space-y-0.5">
-                <div className="flex items-center gap-1">
-                  {currentContact?.id ? (
-                    <Link
-                      href={type === 'agent' ? `/agents/${currentContact.id}` : `/lenders/${currentContact.id}`}
-                      className="text-base font-semibold text-primary break-words hover:underline"
-                    >
-                      {formattedContact.name}
-                    </Link>
-                  ) : (
-                    <p className="text-base font-semibold text-foreground break-words">{formattedContact.name}</p>
-                  )}
-                  <CopyButton value={formattedContact.name} label="Copy name" />
-                </div>
+    <div className={cn('min-w-0', className)}>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-eyebrow text-foreground-subtle">{title}</p>
+        {canAssign && (
+          <button
+            type="button"
+            className="shrink-0 text-[13px] font-semibold text-primary transition hover:text-primary-hover"
+            onClick={() => setOpen((previous) => !previous)}
+          >
+            {open ? 'Cancel' : formattedContact ? 'Reassign' : 'Assign'}
+          </button>
+        )}
+      </div>
+      <div className="min-w-0">
+          {formattedContact ? (
+            <div className="mt-1.5">
+              <div className="flex min-w-0 items-center gap-1">
+                {currentContact?.id ? (
+                  <Link
+                    href={type === 'agent' ? `/agents/${currentContact.id}` : `/lenders/${currentContact.id}`}
+                    className="min-w-0 break-words text-[15px] font-bold text-foreground hover:text-primary hover:underline"
+                  >
+                    {formattedContact.name}
+                  </Link>
+                ) : (
+                  <p className="min-w-0 break-words text-[15px] font-bold text-foreground">{formattedContact.name}</p>
+                )}
+                <CopyButton value={formattedContact.name} label="Copy name" />
+              </div>
+              <div className="mt-[3px] flex flex-col gap-0.5">
                 {formattedContact.email ? (
                   <ContactLine
                     kind="email"
@@ -292,89 +302,78 @@ export function ContactAssignment({
                   />
                 ) : null}
               </div>
-            ) : (
-              <div className="mt-0.5 space-y-1.5">
-                <p className="text-sm font-semibold text-foreground-muted">
-                  {type === 'mc' ? 'Pending' : 'Unassigned'}
-                </p>
-                {pendingHelper ? (
-                  <p className="rounded-lg border border-primary/20 bg-primary-soft px-2 py-1.5 text-xs leading-snug text-primary">
-                    {pendingHelper}
-                  </p>
-                ) : null}
-              </div>
-            )}
-          </div>
-          {canAssign && (
-            <Button
-              variant="secondary"
-              size="sm"
-              className="ml-auto shrink-0"
-              onClick={() => setOpen((previous) => !previous)}
-            >
-              {open ? 'Cancel' : formattedContact ? 'Reassign' : 'Assign'}
-            </Button>
-          )}
-        </div>
-        {open && canAssign && (
-          <form onSubmit={handleSubmit} className="mt-3 space-y-3">
-            <label className="block space-y-1.5">
-              <span className="text-xs font-medium text-foreground-subtle">Select {title}</span>
-              <Input
-                type="text"
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                className="h-8"
-                placeholder={`Type to filter ${title.toLowerCase()}s…`}
-                disabled={!Array.isArray(options) || options.length === 0 || submitting}
-              />
-              <select
-                value={selected}
-                onChange={(event) => setSelected(event.target.value)}
-                className={cn(selectFieldClasses, 'h-8')}
-                disabled={!Array.isArray(options) || options.length === 0 || submitting}
-              >
-                <option value="">Choose…</option>
-                {filteredOptions.map((option) => (
-                  <option key={option._id} value={option._id}>
-                    {option.name}
-                    {option.active === false ? ' (Inactive)' : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {selectedOption?.active === false && (
-              <p className="rounded-lg border border-warning/30 bg-warning-soft px-2 py-1.5 text-xs text-warning">
-                This {title.toLowerCase()} is marked inactive. You can still assign them, but verify this is intentional.
+            </div>
+          ) : (
+            <div className="mt-1.5 space-y-1.5">
+              <p className="text-sm font-semibold text-foreground-subtle">
+                {type === 'mc' ? 'Pending' : 'Unassigned'}
               </p>
-            )}
-            {type === 'agent' && (
-              <div className="flex flex-col gap-2 rounded-lg border border-dashed border-border p-3 text-xs text-foreground-muted">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="font-medium text-foreground-muted">Need a recommendation?</p>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={handleSuggest}
-                    loading={suggesting}
-                  >
-                    {suggesting ? 'Thinking…' : 'Suggest agent'}
-                  </Button>
-                </div>
-                {suggestionReason && (
-                  <p className="rounded-lg bg-surface-subtle p-2 text-xs text-foreground-muted">
-                    <span className="font-semibold text-foreground-muted">Why:</span> {suggestionReason}
-                  </p>
-                )}
-              </div>
-            )}
-            <Button type="submit" size="sm" className="w-full" disabled={!selected} loading={submitting}>
-              {submitting ? 'Saving…' : 'Save'}
-            </Button>
-          </form>
-        )}
+              {pendingHelper ? (
+                <p className="rounded-lg border border-primary/20 bg-primary-soft px-2 py-1.5 text-xs leading-snug text-primary">
+                  {pendingHelper}
+                </p>
+              ) : null}
+            </div>
+          )}
       </div>
+      {open && canAssign && (
+        <form onSubmit={handleSubmit} className="mt-3 space-y-3">
+          <label className="block space-y-1.5">
+            <span className="text-xs font-medium text-foreground-subtle">Select {title}</span>
+            <Input
+              type="text"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              className="h-8"
+              placeholder={`Type to filter ${title.toLowerCase()}s…`}
+              disabled={!Array.isArray(options) || options.length === 0 || submitting}
+            />
+            <select
+              value={selected}
+              onChange={(event) => setSelected(event.target.value)}
+              className={cn(selectFieldClasses, 'h-8')}
+              disabled={!Array.isArray(options) || options.length === 0 || submitting}
+            >
+              <option value="">Choose…</option>
+              {filteredOptions.map((option) => (
+                <option key={option._id} value={option._id}>
+                  {option.name}
+                  {option.active === false ? ' (Inactive)' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+          {selectedOption?.active === false && (
+            <p className="rounded-lg border border-warning/30 bg-warning-soft px-2 py-1.5 text-xs text-warning">
+              This {title.toLowerCase()} is marked inactive. You can still assign them, but verify this is intentional.
+            </p>
+          )}
+          {type === 'agent' && (
+            <div className="flex flex-col gap-2 rounded-lg border border-dashed border-border p-3 text-xs text-foreground-muted">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <p className="font-medium text-foreground-muted">Need a recommendation?</p>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleSuggest}
+                  loading={suggesting}
+                >
+                  {suggesting ? 'Thinking…' : 'Suggest agent'}
+                </Button>
+              </div>
+              {suggestionReason && (
+                <p className="rounded-lg bg-surface-subtle p-2 text-xs text-foreground-muted">
+                  <span className="font-semibold text-foreground-muted">Why:</span> {suggestionReason}
+                </p>
+              )}
+            </div>
+          )}
+          <Button type="submit" size="sm" className="w-full" disabled={!selected} loading={submitting}>
+            {submitting ? 'Saving…' : 'Save'}
+          </Button>
+        </form>
+      )}
     </div>
   );
 }

@@ -52,9 +52,8 @@ export function ContactLine({
   const { Icon, copyLabel, tabular } = contactKindMeta(kind);
   const displayValue = kind === 'phone' ? formatPhoneNumber(value) || value : value;
   const textClass = cn(
-    'font-display',
-    tabular ? 'tabular-nums' : 'break-all',
-    'text-xs'
+    'font-display text-xs',
+    tabular ? 'tabular-nums' : 'break-words [overflow-wrap:anywhere]'
   );
 
   let valueNode: ReactNode;
@@ -101,7 +100,7 @@ export function ContactLine({
       )}
     >
       <Icon className="h-3.5 w-3.5 shrink-0 text-foreground-subtle" aria-hidden />
-      <span className="min-w-0">{valueNode}</span>
+      <span className="min-w-0 leading-snug">{valueNode}</span>
       <CopyButton value={displayValue} label={copyLabel} />
     </div>
   );

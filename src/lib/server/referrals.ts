@@ -23,6 +23,7 @@ import { resolveAgentSideForReferral, pickPrimarySideForReferral } from '@/lib/s
 import { mergeClosedStatusQuery } from '@/lib/server/merge-closed-status-query';
 import { displayLoanFileNumber } from '@/utils/loan-file-number';
 import { resolveNeedsUpdate } from '@/utils/sla-insights';
+import { parseNetworkList, type NetworkOption } from '@/utils/network-filter';
 import {
   isNoteVisibleTo,
   resolveLastActivity,
@@ -48,7 +49,8 @@ interface GetReferralsParams {
   mc?: string | null;
   agent?: string | null;
   zip?: string | null;
-  ahaBucket?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
+  /** Comma-separated network list, e.g. `AHA,AHA_OOS`. */
+  ahaBucket?: string | null;
   agentReferrals?: 'yes' | 'no' | null;
   search?: string | null;
   timeline?: string | null;
@@ -306,17 +308,18 @@ async function buildReferralFilterQuery(
     }
   }
 
-  if (ahaBucket === 'AHA' || ahaBucket === 'AHA_OOS' || ahaBucket === 'AGIT') {
+  const selectedNetworks = new Set(parseNetworkList(ahaBucket));
+  if (selectedNetworks.size > 0) {
     // Match getReferralDesignation: agent designation wins; otherwise fall back to
     // ahaBucket/org for AHA / AHA_OOS New Leads that have no designated agent yet.
     const designatedAgents = await Agent.find({
       ahaDesignation: { $in: ['AHA', 'AHA_OOS', 'AGIT'] }
     })
       .select('_id ahaDesignation')
-      .lean<{ _id: Types.ObjectId; ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null }[]>();
+      .lean<{ _id: Types.ObjectId; ahaDesignation?: NetworkOption | null }[]>();
 
     const matchingAgentIds = designatedAgents
-      .filter((agent) => agent.ahaDesignation === ahaBucket)
+      .filter((agent) => agent.ahaDesignation != null && selectedNetworks.has(agent.ahaDesignation))
       .map((agent) => agent._id);
     const allDesignatedAgentIds = designatedAgents.map((agent) => agent._id);
 
@@ -330,19 +333,15 @@ async function buildReferralFilterQuery(
       );
     }
 
-    if (ahaBucket === 'AHA_OOS') {
-      orConditions.push({
-        ahaBucket: 'AHA_OOS',
-        assignedAgent: { $nin: allDesignatedAgentIds },
-        buySideAgent: { $nin: allDesignatedAgentIds },
-        sellSideAgent: { $nin: allDesignatedAgentIds }
-      });
-    } else if (ahaBucket === 'AHA') {
-      const noDesignatedAgent = {
-        assignedAgent: { $nin: allDesignatedAgentIds },
-        buySideAgent: { $nin: allDesignatedAgentIds },
-        sellSideAgent: { $nin: allDesignatedAgentIds }
-      };
+    const noDesignatedAgent = {
+      assignedAgent: { $nin: allDesignatedAgentIds },
+      buySideAgent: { $nin: allDesignatedAgentIds },
+      sellSideAgent: { $nin: allDesignatedAgentIds }
+    };
+    if (selectedNetworks.has('AHA_OOS')) {
+      orConditions.push({ ahaBucket: 'AHA_OOS', ...noDesignatedAgent });
+    }
+    if (selectedNetworks.has('AHA')) {
       orConditions.push(
         { ahaBucket: 'AHA', ...noDesignatedAgent },
         { org: 'AHA', ahaBucket: { $ne: 'AHA_OOS' }, ...noDesignatedAgent }
@@ -988,7 +987,9 @@ export async function getReferralById(id: string) {
     createdAt: note.createdAt instanceof Date ? note.createdAt.toISOString() : new Date(note.createdAt).toISOString(),
     hiddenFromAgent: note.hiddenFromAgent,
     hiddenFromMc: note.hiddenFromMc,
-    emailedTargets: Array.isArray(note.emailedTargets) ? note.emailedTargets : []
+    emailedTargets: Array.isArray(note.emailedTargets) ? note.emailedTargets : [],
+    pinned: Boolean(note.pinned),
+    pinnedAt: note.pinnedAt ? new Date(note.pinnedAt).toISOString() : null
   }));
 
   const filteredNotes = notes.filter((note) => isNoteVisibleTo(note, viewerRole));

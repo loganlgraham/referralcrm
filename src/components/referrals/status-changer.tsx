@@ -2,7 +2,6 @@
 
 import { ChangeEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Pencil } from 'lucide-react';
 import {
   getLostReasonOptions,
   getReferralStatusLabel,
@@ -13,11 +12,12 @@ import { ReferralStatus } from '@/models/referral';
 import { toast } from 'sonner';
 import { type TerminatedReason } from '@/constants/deals';
 import { cn } from '@/lib/cn';
-import { Button } from '@/components/ui/button';
-import { inputFieldClasses } from '@/components/ui/input';
+import { Button, buttonClasses } from '@/components/ui/button';
 import { selectFieldClasses } from '@/components/ui/field-group';
 import { confirmLostReason } from '@/components/referrals/lost-reason-confirmation-toast';
 import { confirmReferralTermination } from '@/components/referrals/terminate-confirmation-toast';
+import { StageTrack, isOutcomeStatus } from '@/components/referrals/stage-track';
+import { PreApprovalField } from '@/components/referrals/pre-approval-field';
 import {
   collectUnderContractDeal,
   submitUnderContractDeal
@@ -32,12 +32,21 @@ interface Props {
   isAgentOrigin?: boolean;
   side?: 'buy' | 'sell';
   statusLabel?: string;
-  /** `chips` renders the pipeline as a single row of tappable pills instead of a `<select>`. */
-  mode?: 'select' | 'chips';
+  /**
+   * `chips` renders the pipeline as a single row of tappable pills instead of a `<select>`;
+   * `track` renders it as a segmented progress bar with Lost/Terminated in a close-out menu.
+   */
+  mode?: 'select' | 'chips' | 'track';
+  /** Shown under the current step in `track` mode. */
+  daysInStatus?: number | null;
+  /** Thinner `track` with no per-step labels, for stacking buy and sell tracks. */
+  compactTrack?: boolean;
   /** `toast` collects reasons in an overlay card instead of an inline panel under the control. */
   promptMode?: 'inline' | 'toast';
   /** Names the client in the toast prompts. */
   borrowerName?: string;
+  /** `row` places the status control and pre-approval side by side on wider screens. */
+  layout?: 'stack' | 'row';
   showStatusControl?: boolean;
   showPreApproval?: boolean;
   preApprovalAmountCents?: number;
@@ -57,67 +66,6 @@ interface StatusSubmitExtras {
   sendAgentNpsEmail?: boolean;
 }
 
-const centsToCurrencyInput = (value?: number | null) => {
-  if (!value) {
-    return '';
-  }
-  const amount = value / 100;
-  return Number.isInteger(amount) ? amount.toString() : amount.toFixed(2);
-};
-
-const sanitizeCurrencyInput = (value: string) => {
-  if (!value) {
-    return '';
-  }
-  const stripped = value.replace(/[^0-9.]/g, '');
-  if (!stripped) {
-    return '';
-  }
-
-  const [integerPart = '', ...decimalParts] = stripped.split('.');
-  const decimalPart = decimalParts.join('').slice(0, 2);
-  const normalizedInteger = integerPart.replace(/^0+(?=\d)/, '');
-  const hasDecimal = decimalParts.length > 0;
-  const safeInteger = normalizedInteger || (integerPart.length > 0 ? '0' : '');
-
-  if (!hasDecimal) {
-    return safeInteger;
-  }
-
-  const integerPortion = safeInteger || '0';
-  return decimalPart.length > 0 ? `${integerPortion}.${decimalPart}` : `${integerPortion}.`;
-};
-
-const formatCurrencyInputDisplay = (value: string) => {
-  if (!value) {
-    return '';
-  }
-
-  const [integerPart = '', decimalPart] = value.split('.');
-  const hasDecimal = decimalPart !== undefined;
-  const sanitizedInteger = integerPart.replace(/[^0-9]/g, '');
-  const integerValue = sanitizedInteger ? Number(sanitizedInteger) : 0;
-  const formattedInteger = sanitizedInteger
-    ? integerValue.toLocaleString('en-US')
-    : hasDecimal
-    ? '0'
-    : '';
-
-  if (!hasDecimal) {
-    return formattedInteger;
-  }
-
-  if (decimalPart === undefined) {
-    return formattedInteger;
-  }
-
-  if (decimalPart.length === 0) {
-    return `${formattedInteger}.`;
-  }
-
-  return `${formattedInteger}.${decimalPart}`;
-};
-
 export function StatusChanger({
   referralId,
   status,
@@ -127,8 +75,11 @@ export function StatusChanger({
   side,
   statusLabel = 'Pipeline Status',
   mode = 'select',
+  daysInStatus,
+  compactTrack = false,
   promptMode = 'inline',
   borrowerName = 'this referral',
+  layout = 'stack',
   showStatusControl = true,
   showPreApproval = true,
   preApprovalAmountCents,
@@ -141,10 +92,6 @@ export function StatusChanger({
   const [currentStatus, setCurrentStatus] = useState<ReferralStatus>(normalizedStatus);
   const [persistedStatus, setPersistedStatus] = useState<ReferralStatus>(normalizedStatus);
   const [loading, setLoading] = useState(false);
-  const [preApproval, setPreApproval] = useState(() => centsToCurrencyInput(preApprovalAmountCents));
-  const [preApprovalDirty, setPreApprovalDirty] = useState(false);
-  const [preApprovalSaving, setPreApprovalSaving] = useState(false);
-  const [editingPreApproval, setEditingPreApproval] = useState(false);
   const [pendingLostSelection, setPendingLostSelection] = useState(false);
   const [lostReason, setLostReason] = useState<LostReason | ''>('');
   /** Keeps the chips inert while a prompt toast is open so prompts cannot stack. */
@@ -158,11 +105,6 @@ export function StatusChanger({
   useEffect(() => {
     onUnderContractIntentChange?.(currentStatus === 'Under Contract');
   }, [currentStatus, onUnderContractIntentChange]);
-
-  useEffect(() => {
-    setPreApproval(centsToCurrencyInput(preApprovalAmountCents));
-    setPreApprovalDirty(false);
-  }, [preApprovalAmountCents]);
 
   const pipelineOptions = useMemo(() => {
     const filtered = includeTerminalStatuses
@@ -291,61 +233,25 @@ export function StatusChanger({
     void selectStatus(event.target.value as ReferralStatus);
   };
 
-  const handlePreApprovalChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const sanitized = sanitizeCurrencyInput(event.target.value);
-    setPreApproval(sanitized);
-    setPreApprovalDirty(true);
-  };
-
-  const handlePreApprovalSave = async () => {
-    const amount = Number.parseFloat(preApproval);
-    if (Number.isNaN(amount) || amount < 0) {
-      toast.error('Enter a valid pre-approval amount.');
-      return;
-    }
-    setPreApprovalSaving(true);
-    try {
-      const response = await fetch(`/api/referrals/${referralId}/pre-approval`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount }),
-      });
-      if (!response.ok) {
-        throw new Error('Unable to save pre-approval amount');
-      }
-      const body = (await response.json()) as { preApprovalAmountCents: number; referralFeeDueCents: number };
-      toast.success('Pre-approval updated');
-      setPreApprovalDirty(false);
-      setEditingPreApproval(false);
-      onPreApprovalSaved?.({
-        preApprovalAmountCents: body.preApprovalAmountCents,
-        referralFeeDueCents: body.referralFeeDueCents,
-      });
-      router.refresh();
-    } catch (error) {
-      console.error(error);
-      toast.error(error instanceof Error ? error.message : 'Unable to update pre-approval');
-    } finally {
-      setPreApprovalSaving(false);
-    }
-  };
-
-  const formattedPreApprovalDisplay = preApproval
-    ? `$${formatCurrencyInputDisplay(preApproval)}`
-    : 'No pre-approval';
-
-  const handlePreApprovalCancel = () => {
-    setPreApproval(centsToCurrencyInput(preApprovalAmountCents));
-    setPreApprovalDirty(false);
-    setEditingPreApproval(false);
-  };
-
+  const bothVisible = showStatusControl && showPreApproval;
   return (
     <div className="space-y-4">
-      <div className="space-y-4">
+      <div className={layout === 'row' && bothVisible ? 'grid gap-4 sm:grid-cols-2' : 'space-y-4'}>
         {showStatusControl && (
           <div className="space-y-1">
-            {mode === 'chips' ? (
+            {mode === 'track' ? (
+              <StageTrack
+                options={pipelineOptions}
+                currentStatus={currentStatus}
+                getLabel={(status) => getReferralStatusLabel(status, { isAgentOrigin })}
+                isOutcome={isOutcomeStatus}
+                daysInStatus={daysInStatus}
+                disabled={loading || prompting || pendingLostSelection}
+                compact={compactTrack}
+                ariaLabel={statusLabel}
+                onSelect={(next) => void selectStatus(next)}
+              />
+            ) : mode === 'chips' ? (
               <div className="flex flex-wrap gap-1.5">
                 {pipelineOptions.map((item) => {
                   const isCurrent = item === currentStatus;
@@ -357,12 +263,12 @@ export function StatusChanger({
                       aria-current={isCurrent}
                       onClick={() => void selectStatus(item)}
                       className={cn(
-                        'inline-flex h-9 items-center rounded-pill px-[13px] text-[13px] transition disabled:cursor-default',
+                        buttonClasses({ variant: 'secondary', size: 'md' }),
                         isCurrent
-                          ? 'bg-warning-soft px-3.5 font-bold text-warning shadow-[inset_0_0_0_1px_hsl(var(--warning)/0.35)]'
+                          ? 'bg-warning-soft px-3.5 font-bold text-warning shadow-[inset_0_0_0_1px_hsl(var(--warning)/0.35)] ring-0 hover:bg-warning-soft'
                           : item === 'Lost' || item === 'Terminated'
-                            ? 'border border-border bg-surface font-medium text-foreground-subtle hover:bg-surface-muted'
-                            : 'border border-border bg-surface font-medium text-foreground-muted hover:bg-surface-muted'
+                            ? 'text-foreground-subtle'
+                            : 'text-foreground-muted'
                       )}
                     >
                       {getReferralStatusLabel(item, { isAgentOrigin })}
@@ -447,53 +353,12 @@ export function StatusChanger({
         )}
 
         {showPreApproval && (
-          <div className="space-y-1">
-            <div className="text-xs font-medium text-foreground-subtle">Pre-approval</div>
-            {editingPreApproval ? (
-              <div className="space-y-2">
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={formatCurrencyInputDisplay(preApproval)}
-                  onChange={handlePreApprovalChange}
-                  className={cn(inputFieldClasses, 'tabular-nums')}
-                  placeholder="300,000"
-                  disabled={preApprovalSaving || loading}
-                />
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    onClick={handlePreApprovalSave}
-                    disabled={!preApprovalDirty}
-                    loading={preApprovalSaving}
-                    className="flex-1"
-                  >
-                    {preApprovalSaving ? 'Saving…' : 'Save'}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={handlePreApprovalCancel}
-                    disabled={preApprovalSaving || loading}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center justify-between rounded-lg border border-border-strong/70 bg-surface px-3 py-2 text-sm font-medium text-foreground shadow-[inset_0_1px_1px_rgba(15,23,42,0.03)]">
-                <span className="tabular-nums">{formattedPreApprovalDisplay}</span>
-                <button
-                  type="button"
-                  onClick={() => setEditingPreApproval(true)}
-                  className="inline-flex items-center justify-center rounded-md p-1 text-foreground-subtle transition hover:bg-surface-muted hover:text-foreground-muted"
-                  aria-label="Edit pre-approval"
-                >
-                  <Pencil className="h-4 w-4" aria-hidden="true" />
-                </button>
-              </div>
-            )}
-          </div>
+          <PreApprovalField
+            referralId={referralId}
+            amountCents={preApprovalAmountCents}
+            onSaved={onPreApprovalSaved}
+            disabled={loading}
+          />
         )}
       </div>
     </div>

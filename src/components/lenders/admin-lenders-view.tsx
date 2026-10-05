@@ -28,7 +28,6 @@ export function AdminLendersView() {
         eyebrow="Partner network"
         title="Mortgage consultants"
         description="Manage and browse licensed mortgage consultants."
-        attention={inactiveCount > 0}
         actions={
           <Button type="button" onClick={() => setShowForm((previous) => !previous)}>
             {showForm ? 'Close form' : 'Add mortgage consultant'}

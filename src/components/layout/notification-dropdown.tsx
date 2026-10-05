@@ -4,6 +4,7 @@ import { RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { formatDistanceToNow } from 'date-fns';
+import { buttonClasses } from '@/components/ui/button';
 
 export interface Notification {
   _id: string;
@@ -223,7 +224,11 @@ export function NotificationDropdown({
             type="button"
             onClick={handleMarkAllRead}
             disabled={markingAllRead}
-            className="shrink-0 rounded-full border border-border bg-surface-raised px-3 py-1 text-xs font-medium text-foreground-muted shadow-sm transition hover:border-border-strong hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50"
+            className={buttonClasses({
+              variant: 'secondary',
+              size: 'sm',
+              className: 'shrink-0 text-foreground-muted'
+            })}
           >
             Mark all as read
           </button>

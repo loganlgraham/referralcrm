@@ -445,7 +445,6 @@ export function SettingsForm() {
         eyebrow="Administration"
         title="Settings"
         description="Manage referral fee policies, reports, and data exports."
-        attention={false}
       />
 
       <form onSubmit={handleSubmit}>

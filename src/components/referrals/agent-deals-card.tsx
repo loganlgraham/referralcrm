@@ -10,7 +10,7 @@ import {
   resolveDealReferralFeeBasisPoints
 } from '@/utils/referral';
 import { cn } from '@/lib/cn';
-import { Button } from '@/components/ui/button';
+import { Button, buttonClasses } from '@/components/ui/button';
 import { confirmCloseStatusDate } from '@/components/referrals/status-date-confirmation-toast';
 import {
   confirmReferralTermination,
@@ -146,7 +146,11 @@ function EditDealButton({
       aria-label="Edit deal"
       disabled={disabled}
       onClick={onEdit}
-      className="inline-flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[8px] text-foreground-subtle transition hover:bg-surface-muted hover:text-foreground-muted disabled:opacity-50"
+      className={buttonClasses({
+        variant: 'ghost',
+        size: 'icon',
+        className: 'shrink-0 text-foreground-subtle hover:text-foreground-muted'
+      })}
     >
       <Pencil className="h-[14px] w-[14px]" aria-hidden />
     </button>
@@ -311,10 +315,10 @@ function DealRow({
                 aria-current={isCurrent}
                 onClick={() => void handleStage(option.value)}
                 className={cn(
-                  'inline-flex h-8 items-center rounded-pill px-3 text-xs transition disabled:cursor-default',
+                  buttonClasses({ variant: 'secondary', size: 'sm' }),
                   isCurrent
-                    ? 'bg-warning-soft font-bold text-warning shadow-[inset_0_0_0_1px_hsl(var(--warning)/0.35)]'
-                    : 'border border-border bg-surface font-medium text-foreground-muted hover:bg-surface-muted'
+                    ? 'bg-warning-soft font-bold text-warning shadow-[inset_0_0_0_1px_hsl(var(--warning)/0.35)] ring-0 hover:bg-warning-soft'
+                    : 'text-foreground-muted'
                 )}
               >
                 {option.label}

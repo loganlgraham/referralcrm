@@ -57,7 +57,9 @@ const referralNoteSchema = new Schema(
     hiddenFromAgent: { type: Boolean, default: false },
     hiddenFromMc: { type: Boolean, default: false },
     createdAt: { type: Date, default: Date.now },
-    emailedTargets: { type: [String], enum: ['agent', 'mc', 'admin'], default: [] }
+    emailedTargets: { type: [String], enum: ['agent', 'mc', 'admin'], default: [] },
+    pinned: { type: Boolean, default: false },
+    pinnedAt: { type: Date, default: null }
   },
   { _id: true }
 );
@@ -397,6 +399,8 @@ export interface ReferralDocument {
     hiddenFromMc?: boolean;
     createdAt: Date;
     emailedTargets?: ('agent' | 'mc' | 'admin')[];
+    pinned?: boolean;
+    pinnedAt?: Date | null;
   }[];
   lender?: Types.ObjectId;
   org: 'AFC' | 'AHA';

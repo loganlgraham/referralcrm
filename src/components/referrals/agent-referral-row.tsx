@@ -6,7 +6,7 @@ import { MoreHorizontal } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { getReferralStatusLabel, type ReferralStatus } from '@/constants/referrals';
 import { StatusPill } from '@/components/ui/status-pill';
-import { Button } from '@/components/ui/button';
+import { Button, buttonClasses } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -241,13 +241,15 @@ function RowMenu({ row }: { row: ReferralRow }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon"
           aria-label={`More actions for ${row.borrowerName}`}
-          className="inline-flex h-10 w-9 shrink-0 items-center justify-center rounded-lg text-foreground-subtle transition hover:bg-surface-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="w-9 shrink-0 text-foreground-subtle"
         >
           <MoreHorizontal className="h-[18px] w-[18px]" aria-hidden />
-        </button>
+        </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent>
         <DropdownMenuItem asChild>
@@ -328,12 +330,12 @@ function ExpandedPanel({
                 aria-current={isCurrent}
                 onClick={() => onApplyStatus(row, status)}
                 className={cn(
-                  'inline-flex h-[34px] items-center rounded-pill px-[13px] text-[13px] transition disabled:cursor-default',
+                  buttonClasses({ variant: 'secondary', size: 'md' }),
                   isCurrent
-                    ? 'bg-info-soft font-semibold text-info shadow-[inset_0_0_0_1px_hsl(var(--info)/0.25)]'
+                    ? 'bg-info-soft font-semibold text-info shadow-[inset_0_0_0_1px_hsl(var(--info)/0.25)] ring-0 hover:bg-info-soft'
                     : isQuiet
-                      ? 'border border-border bg-surface font-medium text-foreground-subtle hover:bg-surface-subtle'
-                      : 'border border-border-strong bg-surface font-medium text-foreground hover:bg-surface-subtle'
+                      ? 'text-foreground-subtle'
+                      : undefined
                 )}
               >
                 {getReferralStatusLabel(status)}

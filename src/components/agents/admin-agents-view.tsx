@@ -40,7 +40,6 @@ export function AdminAgentsView() {
         eyebrow="Partner network"
         title="Agents"
         description="Browse and manage real estate agent partners."
-        attention={inactiveCount > 0}
         actions={
           <>
             <Button

@@ -256,6 +256,11 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
               <option value="AHA">AHA</option>
               <option value="AHA_OOS">AHA OOS</option>
               <option value="AGIT">AGIT</option>
+              {ahaBucketValue.includes(',') ? (
+                <option value={ahaBucketValue} disabled hidden>
+                  Multiple
+                </option>
+              ) : null}
             </select>
           </label>
         )}

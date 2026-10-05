@@ -105,17 +105,27 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
   }
 
   const note = referral.notes[noteIndex] as any;
-  const originalContent = note.content || '';
   const noteAuthorName = note.authorName || 'Unknown';
 
-  // Only admins/managers can edit visibility settings
-  const allowVisibilityEdit = session.user.role === 'admin' || session.user.role === 'manager';
+  // Only admins/managers can edit visibility settings or pin notes
+  const isAdminOrManager = session.user.role === 'admin' || session.user.role === 'manager';
 
-  // Update note content (always allowed)
-  note.content = parsed.data.content;
+  if (parsed.data.pinned !== undefined && !isAdminOrManager) {
+    return new NextResponse('Forbidden', { status: 403 });
+  }
 
-  // Update visibility settings (only if user is admin/manager)
-  if (allowVisibilityEdit) {
+  const contentChanged = parsed.data.content !== undefined;
+  if (contentChanged) {
+    note.content = parsed.data.content;
+  }
+
+  const pinChanged = parsed.data.pinned !== undefined && Boolean(note.pinned) !== parsed.data.pinned;
+  if (parsed.data.pinned !== undefined) {
+    note.pinned = parsed.data.pinned;
+    note.pinnedAt = parsed.data.pinned ? note.pinnedAt ?? new Date() : null;
+  }
+
+  if (isAdminOrManager) {
     if (parsed.data.hiddenFromAgent !== undefined) {
       note.hiddenFromAgent = parsed.data.hiddenFromAgent;
     }
@@ -127,14 +137,28 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
   referral.markModified('notes');
   await referral.save();
 
-  // Log activity
-  await logReferralActivity({
-    referralId: referral._id,
-    actorRole: session.user.role,
-    actorId: session.user.id,
-    channel: 'note',
-    content: `Edited note by ${noteAuthorName}: ${parsed.data.content.substring(0, 100)}${parsed.data.content.length > 100 ? '...' : ''}`
-  });
+  const noteContent: string = note.content || '';
+  const contentPreview = `${noteContent.substring(0, 100)}${noteContent.length > 100 ? '...' : ''}`;
+
+  if (contentChanged) {
+    await logReferralActivity({
+      referralId: referral._id,
+      actorRole: session.user.role,
+      actorId: session.user.id,
+      channel: 'note',
+      content: `Edited note by ${noteAuthorName}: ${contentPreview}`
+    });
+  }
+
+  if (pinChanged) {
+    await logReferralActivity({
+      referralId: referral._id,
+      actorRole: session.user.role,
+      actorId: session.user.id,
+      channel: 'note',
+      content: `${parsed.data.pinned ? 'Pinned' : 'Unpinned'} note by ${noteAuthorName}: ${contentPreview}`
+    });
+  }
 
   const updatedNote = referral.notes[noteIndex] as any;
 
@@ -146,6 +170,8 @@ export async function PATCH(request: NextRequest, { params }: Params): Promise<N
     createdAt: updatedNote.createdAt instanceof Date ? updatedNote.createdAt.toISOString() : new Date(updatedNote.createdAt).toISOString(),
     hiddenFromAgent: updatedNote.hiddenFromAgent,
     hiddenFromMc: updatedNote.hiddenFromMc,
-    emailedTargets: Array.isArray(updatedNote.emailedTargets) ? updatedNote.emailedTargets : []
+    emailedTargets: Array.isArray(updatedNote.emailedTargets) ? updatedNote.emailedTargets : [],
+    pinned: Boolean(updatedNote.pinned),
+    pinnedAt: updatedNote.pinnedAt ? new Date(updatedNote.pinnedAt).toISOString() : null
   });
 }

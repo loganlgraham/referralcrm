@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { type ReactNode, useState, useMemo } from 'react';
 import { Mail, Clock, CheckCircle2, Send, Calendar } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
@@ -27,7 +27,23 @@ interface RequestUpdateButtonProps {
   viewerRole: string;
 }
 
-export function RequestUpdateButton({
+export interface RequestUpdateParts {
+  /** Admin-only. False when the viewer cannot request updates; every node is then null. */
+  enabled: boolean;
+  hasAgents: boolean;
+  /** "Request update" button; disabled when no agents are assigned. */
+  trigger: ReactNode;
+  /** Compact last-sent / response / next-scheduled summary. */
+  statusLine: ReactNode;
+  /** Agent picker modal plus the post-send confirmation. Render once near the trigger. */
+  modal: ReactNode;
+}
+
+/**
+ * Request-update flow split into parts so the Team card can place the button in an action row
+ * and the status summary underneath it.
+ */
+export function useRequestUpdate({
   referralId,
   assignedAgent,
   buySideAgent,
@@ -39,17 +55,12 @@ export function RequestUpdateButton({
   status = 'New Lead',
   lastPairedAt,
   viewerRole,
-}: RequestUpdateButtonProps) {
+}: RequestUpdateButtonProps): RequestUpdateParts {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-
-  // Only show for admins
-  if (viewerRole !== 'admin') {
-    return null;
-  }
 
   // Get unique agents
   const agents = useMemo(() => {
@@ -186,76 +197,81 @@ export function RequestUpdateButton({
     return `in ${futureDays} days`;
   };
 
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="space-y-0.5">
-          <p className="text-sm font-semibold text-foreground">Agent updates</p>
-          <p className="text-xs text-foreground-subtle">Ask the assigned agent for a status note.</p>
-        </div>
-        <Button
-          type="button"
-          size="sm"
-          onClick={handleOpenModal}
-          disabled={agents.length === 0}
-          leadingIcon={<Mail className="h-3.5 w-3.5" />}
-        >
-          Request update
-        </Button>
-      </div>
+  const enabled = viewerRole === 'admin';
+  const hasAgents = agents.length > 0;
 
-      {agents.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-foreground-subtle">
-          {statusInfo.lastSent ? (
-            <>
-              <span className="inline-flex items-center gap-1.5">
-                <Clock className="h-3.5 w-3.5" aria-hidden />
-                Last sent: {formatDate(statusInfo.lastSent)} ({daysSince(statusInfo.lastSent)})
-              </span>
-              {statusInfo.agentResponded && statusInfo.responseDate ? (
-                <span className="inline-flex items-center gap-1.5">
-                  <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
-                  Agent updated on {formatDate(statusInfo.responseDate)}
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5">
-                  <Clock className="h-3.5 w-3.5" aria-hidden />
-                  No action yet
-                </span>
-              )}
-            </>
+  if (!enabled) {
+    return { enabled: false, hasAgents, trigger: null, statusLine: null, modal: null };
+  }
+
+  const trigger = (
+    <Button
+      type="button"
+      size="sm"
+      variant="secondary"
+      className="w-full"
+      onClick={handleOpenModal}
+      disabled={!hasAgents}
+      leadingIcon={<Mail className="h-3.5 w-3.5" />}
+    >
+      Request update
+    </Button>
+  );
+
+  const statusLine = hasAgents ? (
+    <div className="flex flex-col gap-1 text-xs text-foreground-subtle">
+      {statusInfo.lastSent ? (
+        <span className="inline-flex items-start gap-1.5">
+          {statusInfo.agentResponded && statusInfo.responseDate ? (
+            <CheckCircle2 className="mt-[1px] h-3.5 w-3.5 shrink-0 text-success" aria-hidden />
           ) : (
-            <span className="inline-flex items-center gap-1.5">
-              <Mail className="h-3.5 w-3.5" aria-hidden />
-              Never sent
-            </span>
+            <Clock className="mt-[1px] h-3.5 w-3.5 shrink-0" aria-hidden />
           )}
-          {nextSendInfo.nextAt ? (
-            <span className="inline-flex items-center gap-1.5">
-              <Calendar className="h-3.5 w-3.5" aria-hidden />
-              {nextSendInfo.nextAt.getTime() < Date.now()
-                ? `Overdue: ${formatDate(nextSendInfo.nextAt)} (${daysSince(nextSendInfo.nextAt)})`
-                : `Next scheduled: ${formatDate(nextSendInfo.nextAt)} (${daysSince(nextSendInfo.nextAt)})`}
-            </span>
-          ) : nextSendInfo.reason ? (
-            <span className="inline-flex items-center gap-1.5">
-              <Calendar className="h-3.5 w-3.5" aria-hidden />
-              {nextSendInfo.reason}
-            </span>
-          ) : null}
-        </div>
+          <span>
+            Last request <span className="text-numeric">{formatDate(statusInfo.lastSent)}</span> ({daysSince(statusInfo.lastSent)})
+            {' · '}
+            {statusInfo.agentResponded && statusInfo.responseDate ? (
+              <>
+                Agent updated <span className="text-numeric">{formatDate(statusInfo.responseDate)}</span>
+              </>
+            ) : (
+              'No reply yet'
+            )}
+          </span>
+        </span>
       ) : (
-        <p className="text-xs text-foreground-subtle">No agents assigned to this referral</p>
+        <span className="inline-flex items-center gap-1.5">
+          <Mail className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          No update requested yet
+        </span>
       )}
+      {nextSendInfo.nextAt ? (
+        <span className="inline-flex items-start gap-1.5">
+          <Calendar className="mt-[1px] h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span>
+            {nextSendInfo.nextAt.getTime() < Date.now() ? 'Auto reminder overdue' : 'Next auto reminder'}{' '}
+            <span className="text-numeric">{formatDate(nextSendInfo.nextAt)}</span> ({daysSince(nextSendInfo.nextAt)})
+          </span>
+        </span>
+      ) : nextSendInfo.reason ? (
+        <span className="inline-flex items-start gap-1.5">
+          <Calendar className="mt-[1px] h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span>{nextSendInfo.reason}</span>
+        </span>
+      ) : null}
+    </div>
+  ) : (
+    <p className="text-xs text-foreground-subtle">Assign an agent to send intros or request updates.</p>
+  );
 
-      {/* Success message outside modal */}
+  const modal = (
+    <>
       {successMessage && !isModalOpen && (
         <div className="rounded-lg bg-success-soft border border-success/30 px-3 py-2 text-xs text-success">
           {successMessage}
         </div>
       )}
 
-      {/* Modal */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -315,6 +331,31 @@ export function RequestUpdateButton({
           </div>
         </div>
       </Modal>
+    </>
+  );
+
+  return { enabled, hasAgents, trigger, statusLine, modal };
+}
+
+/** Standalone stacked layout (button, then status). The Team card composes the parts directly. */
+export function RequestUpdateButton(props: RequestUpdateButtonProps) {
+  const { enabled, trigger, statusLine, modal } = useRequestUpdate(props);
+
+  if (!enabled) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="space-y-0.5">
+          <p className="text-sm font-semibold text-foreground">Agent updates</p>
+          <p className="text-xs text-foreground-subtle">Ask the assigned agent for a status note.</p>
+        </div>
+        <div className="shrink-0">{trigger}</div>
+      </div>
+      {statusLine}
+      {modal}
     </div>
   );
 }

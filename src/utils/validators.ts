@@ -159,11 +159,21 @@ export const createReferralNoteSchema = z.object({
   emailTargets: z.array(z.enum(['agent', 'mc', 'admin'])).optional()
 });
 
-export const updateReferralNoteSchema = z.object({
-  content: z.string().min(1),
-  hiddenFromAgent: z.boolean().optional(),
-  hiddenFromMc: z.boolean().optional()
-});
+export const updateReferralNoteSchema = z
+  .object({
+    content: z.string().min(1).optional(),
+    hiddenFromAgent: z.boolean().optional(),
+    hiddenFromMc: z.boolean().optional(),
+    pinned: z.boolean().optional()
+  })
+  .refine(
+    (value) =>
+      value.content !== undefined ||
+      value.hiddenFromAgent !== undefined ||
+      value.hiddenFromMc !== undefined ||
+      value.pinned !== undefined,
+    { message: 'Nothing to update' }
+  );
 
 export const createAgentNoteSchema = z.object({
   content: z.string().min(1)

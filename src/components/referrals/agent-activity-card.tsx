@@ -8,7 +8,7 @@ import { cn } from '@/lib/cn';
 import { fetcher } from '@/utils/fetcher';
 import { SLA_TIME_ZONE } from '@/utils/sla-insights';
 import { shouldDefaultEmailMcForAgentNotes } from '@/utils/referral-email-defaults';
-import { Button } from '@/components/ui/button';
+import { Button, buttonClasses } from '@/components/ui/button';
 
 export interface AgentActivityNote {
   id: string;
@@ -268,10 +268,8 @@ function NotifyChip({
       disabled={disabled}
       onClick={onToggle}
       className={cn(
-        'inline-flex h-[30px] items-center rounded-pill px-[11px] text-xs transition disabled:cursor-not-allowed disabled:opacity-50',
-        active
-          ? 'bg-primary font-semibold text-white'
-          : 'border border-border bg-surface font-medium text-foreground-muted hover:bg-surface-muted'
+        buttonClasses({ variant: active ? 'primary' : 'secondary', size: 'sm' }),
+        active ? 'hover:text-white' : 'text-foreground-muted'
       )}
     >
       {label}

@@ -68,6 +68,9 @@ describe('AdminTasksCard calendar', () => {
     render(<AdminTasksCard referralId="ref-1" viewerRole="admin" />);
 
     expect(screen.queryByText(HELPER_COPY)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Previous month' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show calendar' }));
 
     const dayButton = screen.getByRole('button', { name: String(taskDay) });
     await waitFor(() => {
@@ -83,6 +86,44 @@ describe('AdminTasksCard calendar', () => {
     expect(screen.queryByText(HELPER_COPY)).not.toBeInTheDocument();
     expect(screen.queryByText(otherTitle)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Clear day filter' })).toBeInTheDocument();
+  });
+
+  it('groups overdue tasks and caps the due list until expanded', async () => {
+    const now = new Date();
+    const overdueTasks = Array.from({ length: 6 }, (_, idx) => {
+      const dueAt = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (idx + 2), 8, 0, 0).toISOString();
+      return {
+        _id: `overdue-${idx}`,
+        referralId: 'ref-overdue',
+        title: `Overdue task ${idx}`,
+        status: 'open',
+        dueAt,
+        effectiveDueAt: dueAt,
+        cycleKey: 'manual',
+        createdAt: dueAt,
+        createdBy: 'admin',
+      };
+    });
+
+    global.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (!init?.method && url.includes('/api/admin/tasks?')) {
+        return { ok: true, json: async () => overdueTasks } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    }) as typeof fetch;
+
+    render(<AdminTasksCard referralId="ref-overdue" viewerRole="admin" />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Overdue')).toBeInTheDocument();
+    });
+    expect(screen.getAllByText(/^Overdue task \d$/)).toHaveLength(4);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show 2 more' }));
+
+    expect(screen.getAllByText(/^Overdue task \d$/)).toHaveLength(6);
+    expect(screen.getByRole('button', { name: 'Show fewer' })).toBeInTheDocument();
   });
 
   it('allows creating a manual task from an empty calendar day', async () => {
@@ -112,6 +153,7 @@ describe('AdminTasksCard calendar', () => {
 
     expect(screen.queryByText(HELPER_COPY)).not.toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole('button', { name: 'Show calendar' }));
     fireEvent.click(screen.getByRole('button', { name: String(emptyDay) }));
 
     await waitFor(() => {

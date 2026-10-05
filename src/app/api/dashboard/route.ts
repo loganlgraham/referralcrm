@@ -76,16 +76,16 @@ import {
   type TimeframeInfo,
   type TrendPoint
 } from '@/lib/server/dashboard/timeframe';
+import { parseNetworkList, serializeNetworkList } from '@/utils/network-filter';
 
 export const dynamic = 'force-dynamic';
-
-type NetworkFilter = 'ALL' | 'AHA' | 'AHA_OOS';
 
 interface DashboardRequestContext {
   referralMatch: Record<string, unknown>;
   paymentMatch: Record<string, unknown>;
   timeframe: TimeframeInfo;
-  networkFilter: NetworkFilter;
+  /** Selected networks; null means all referrals, including undesignated ones. */
+  networkFilter: Set<NetworkDesignation> | null;
 }
 
 interface AggregatedPayment {
@@ -598,17 +598,13 @@ function createDashboardContext(request: NextRequest): DashboardRequestContext {
     request.nextUrl.searchParams.get('end')
   );
   const referralMatch: Record<string, unknown> = { deletedAt: null };
-  const networkParam = request.nextUrl.searchParams.get('network');
-  const normalizedNetwork =
-    networkParam === 'AHA' || networkParam === 'AHA_OOS' || networkParam === 'ALL'
-      ? (networkParam as NetworkFilter)
-      : 'ALL';
+  const networks = parseNetworkList(request.nextUrl.searchParams.get('network'));
 
   return {
     referralMatch,
     paymentMatch: {},
     timeframe,
-    networkFilter: normalizedNetwork
+    networkFilter: networks.length > 0 ? new Set(networks) : null
   };
 }
 
@@ -912,17 +908,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         missingAttributionReferrals: [],
         stalePipelineCount: 0,
         stalePipelineList: []
-      },
-      agit: {
-        agitReferrals: 0,
-        agitPercentage: 0,
-        usedAfcCount: 0,
-        usedAfcRate: 0,
-        lostReferrals: 0,
-        closeRate: 0,
-        dealsClosed: 0,
-        referralRows: [],
-        dealRows: []
       }
     });
     missingProfileResponse.headers.set('server-timing', `dashboard;dur=${missingProfileDurationMs}`);
@@ -1134,26 +1119,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const isAgentIncludedInLeaderboards = (id: string) => !excludedAgentIds.has(id);
 
   const lenderNameMap = new Map<string, string>();
-  const lenderEmailMap = new Map<string, string | null>();
-  const lenderPhoneMap = new Map<string, string | null>();
   const lenderNpsMap = new Map<string, number | null>();
   lenders.forEach((lender) => {
     const id = lender._id.toString();
     lenderNameMap.set(id, lender.name || 'Unnamed MC');
-    lenderEmailMap.set(id, lender.email ?? null);
-    lenderPhoneMap.set(id, lender.phone ?? null);
     lenderNpsMap.set(id, (lender as { npsScore?: number | null }).npsScore ?? null);
   });
 
   const agentNameMap = new Map<string, string>();
-  const agentEmailMap = new Map<string, string | null>();
-  const agentPhoneMap = new Map<string, string | null>();
   const agentUserIdToAgentIdMap = new Map<string, string>();
   agents.forEach((agent) => {
     const id = agent._id.toString();
     agentNameMap.set(id, agent.name || 'Unnamed Agent');
-    agentEmailMap.set(id, agent.email ?? null);
-    agentPhoneMap.set(id, agent.phone ?? null);
     const userId = (agent as { userId?: Types.ObjectId | null }).userId;
     if (userId) {
       agentUserIdToAgentIdMap.set(userId.toString(), id);
@@ -1174,18 +1151,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const getReferralDesignation = (referral: DashboardReferral): NetworkDesignation | null =>
     sharedGetReferralDesignation(referral, agentDesignationMap);
 
-  const matchesNetwork = (designation: 'AHA' | 'AHA_OOS' | 'AGIT' | null) => {
-    if (context.networkFilter === 'ALL') return true;
-    return designation === context.networkFilter;
+  const selectedNetworks = context.networkFilter;
+  const matchesNetwork = (designation: NetworkDesignation | null) => {
+    if (selectedNetworks === null) return true;
+    return designation !== null && selectedNetworks.has(designation);
   };
 
   const paymentsByNetwork =
-    context.networkFilter === 'ALL'
+    context.networkFilter === null
       ? paymentsWithMetric
       : paymentsWithMetric.filter((payment) => matchesNetwork(getAgentDesignation(payment)));
 
   const filteredPaymentsByNetwork =
-    context.networkFilter === 'ALL'
+    context.networkFilter === null
       ? filteredPayments
       : filteredPayments.filter((payment) => matchesNetwork(getAgentDesignation(payment)));
 
@@ -1197,7 +1175,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     isWithinTimeframe(resolvePaymentReceivedDate(payment));
 
   const referralsByNetwork =
-    context.networkFilter === 'ALL'
+    context.networkFilter === null
       ? referrals
       : referrals.filter((referral) => matchesNetwork(getReferralDesignation(referral)));
 
@@ -1209,11 +1187,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   });
 
   const terminatedWithinNetwork =
-    context.networkFilter === 'ALL'
+    context.networkFilter === null
       ? terminatedWithinTimeframe
       : terminatedWithinTimeframe.filter((payment) => matchesNetwork(getAgentDesignation(payment)));
   const terminatedByNetwork =
-    context.networkFilter === 'ALL'
+    context.networkFilter === null
       ? terminatedWithMetric
       : terminatedWithMetric.filter((payment) => matchesNetwork(getAgentDesignation(payment)));
 
@@ -2200,7 +2178,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       : null;
 
     return {
-      networkFilter: context.networkFilter,
+      networkFilter: serializeNetworkList(Array.from(context.networkFilter ?? [])),
       timeframe: {
         start: timeframeStart?.toISOString() ?? null,
         end: timeframeEnd?.toISOString() ?? null
@@ -4346,113 +4324,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       updatedAt: entry.preApprovalsUpdatedAt
     }));
 
-  // AGIT Dashboard Metrics: Filter referrals by agent designation === 'AGIT'
-  const agitReferrals = filteredReferrals.filter(
-    (referral) => getReferralDesignation(referral) === 'AGIT'
-  );
-  const agitReferralIds = new Set(agitReferrals.map((r) => r._id.toString()));
-  const agitPercentage = safePercent(agitReferrals.length, filteredReferrals.length);
-
-  const agitFilteredPayments = filteredPaymentsByNetwork.filter((payment) =>
-    agitReferralIds.has(payment.referral._id.toString())
-  );
-
-  // Lost referrals (status === 'Lost')
-  const agitLostReferrals = agitReferrals.filter(
-    (referral) => normalizeStatusKey(referral.status ?? '') === 'lost'
-  ).length;
-
-  // C-6: mirror Main dashboard's isClosedDealEligible (which additionally
-  // requires usedAssignedAgent === true).
-  // Cohort semantics: the numerator must count AGIT referrals from the cohort
-  // that ever closed (like dealsClosedForCloseRate), not payments whose
-  // metricDate happens to fall in the window — and dedupe by referral so a
-  // Both referral with two closed payments counts once.
-  const agitClosedReferralIds = new Set(
-    paymentsByNetwork
-      .filter(
-        (payment) =>
-          isClosedDealEligible(payment) &&
-          agitReferralIds.has(payment.referral._id.toString())
-      )
-      .map((payment) => payment.referral._id.toString())
-  );
-  const agitDealsClosed = agitClosedReferralIds.size;
-
-  const agitCloseRate = computeCohortCloseRate(agitDealsClosed, agitReferrals.length);
-
-  // Used AFC / AFC Attach Rate
-  const agitClosedOrPaidPayments = agitFilteredPayments.filter(
-    (payment) =>
-      payment.agentAttribution !== 'OUTSIDE_AGENT' &&
-      payment.usedAssignedAgent !== false &&
-      CLOSED_DEAL_STATUSES.has(payment.status) &&
-      resolveDealSideForMetrics(
-        payment.side,
-        payment.referral?.dealSide,
-        payment.referral?.clientType ?? null
-      ) === 'buy'
-  );
-
-  const agitUsedAfcCount = agitClosedOrPaidPayments.filter((payment) => payment.usedAfc).length;
-  const agitUsedAfcRate =
-    agitClosedOrPaidPayments.length === 0
-      ? 0
-      : (agitUsedAfcCount / agitClosedOrPaidPayments.length) * 100;
-
-  // Build AGIT referral rows for table display
-  const agitReferralRows = agitReferrals.map((referral) => {
-    const agentId = referral.assignedAgent?.toString() ?? null;
-    const mcId = referral.lender?.toString() ?? null;
-    return {
-      id: referral._id.toString(),
-      borrowerName: referral.borrower?.name ?? 'Unknown',
-      loanFileNumber: referral.loanFileNumber ?? null,
-      status: referral.status ?? 'New Lead',
-      agentId,
-      agentName: agentId ? agentNameMap.get(agentId) ?? null : null,
-      agentEmail: agentId ? agentEmailMap.get(agentId) ?? null : null,
-      agentPhone: agentId ? agentPhoneMap.get(agentId) ?? null : null,
-      mcId,
-      mcName: mcId ? lenderNameMap.get(mcId) ?? null : null,
-      mcEmail: mcId ? lenderEmailMap.get(mcId) ?? null : null,
-      mcPhone: mcId ? lenderPhoneMap.get(mcId) ?? null : null,
-      createdAt: referral.createdAt.toISOString(),
-      updatedAt: referral.updatedAt?.toISOString() ?? referral.createdAt.toISOString()
-    };
-  });
-
-  // Create a map of referral IDs to borrower names for deal rows
-  const agitReferralBorrowerMap = new Map<string, string>();
-  agitReferrals.forEach((referral) => {
-    agitReferralBorrowerMap.set(referral._id.toString(), referral.borrower?.name ?? 'Unknown');
-  });
-
-  // Build AGIT deal rows for table display
-  const agitDealRows = agitFilteredPayments.map((payment) => {
-    const agentId = payment.agentId?.toString() ?? payment.referral?.assignedAgent?.toString() ?? null;
-    const mcId = payment.referral?.lender?.toString() ?? null;
-    return {
-      id: payment._id.toString(),
-      referralId: payment.referral._id.toString(),
-      borrowerName: agitReferralBorrowerMap.get(payment.referral._id.toString()) ?? 'Unknown',
-      status: payment.status,
-      expectedAmountCents: payment.expectedAmountCents ?? 0,
-      receivedAmountCents: payment.receivedAmountCents ?? 0,
-      agentId,
-      agentName: agentId ? agentNameMap.get(agentId) ?? null : null,
-      mcId,
-      mcName: mcId ? lenderNameMap.get(mcId) ?? null : null,
-      mcEmail: mcId ? lenderEmailMap.get(mcId) ?? null : null,
-      mcPhone: mcId ? lenderPhoneMap.get(mcId) ?? null : null,
-      closingDate: payment.closingDate?.toISOString() ?? null,
-      usedAfc: payment.usedAfc ?? null,
-      referralStatus: payment.referral?.status ?? null,
-      usedAssignedAgent: payment.usedAssignedAgent ?? null,
-      agentAttribution: payment.agentAttribution ?? null
-    };
-  });
-
   // Period-over-period: compare against prior matching period per timeframe.
   let periodOverPeriod: {
     previous: { totalReferrals: number; dealsClosed: number; realizedRevenueCents: number; closeRate: number };
@@ -4691,17 +4562,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       missingAttributionReferrals,
       stalePipelineCount: staleReferrals.length,
       stalePipelineList
-    },
-    agit: {
-      agitReferrals: agitReferrals.length,
-      agitPercentage,
-      usedAfcCount: agitUsedAfcCount,
-      usedAfcRate: agitUsedAfcRate,
-      lostReferrals: agitLostReferrals,
-      closeRate: agitCloseRate,
-      dealsClosed: agitDealsClosed,
-      referralRows: agitReferralRows,
-      dealRows: agitDealRows
     }
   };
 
@@ -4710,7 +4570,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   response.headers.set('server-timing', `dashboard;dur=${durationMs}`);
   if (durationMs > 5_000) {
     console.warn(
-      `[dashboard] slow response: ${durationMs}ms role=${role ?? 'unknown'} timeframe=${timeframe.key} network=${context.networkFilter}`
+      `[dashboard] slow response: ${durationMs}ms role=${role ?? 'unknown'} timeframe=${timeframe.key} network=${serializeNetworkList(Array.from(context.networkFilter ?? []))}`
     );
   }
   return response;

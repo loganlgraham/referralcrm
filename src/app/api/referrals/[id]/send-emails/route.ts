@@ -544,6 +544,30 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     });
   }
 
+  const agentEmailSent = result.sent.some((label) => label.startsWith('agent'));
+  if (notes && agentEmailSent) {
+    const sentAt = new Date();
+    const authorName =
+      typeof session.user.name === 'string' && session.user.name.trim() ? session.user.name.trim() : 'Admin';
+    await Referral.updateOne(
+      { _id: referral._id },
+      {
+        $push: {
+          notes: {
+            author: session.user.id,
+            authorName,
+            authorRole: session.user.role,
+            content: notes,
+            createdAt: sentAt,
+            emailedTargets: ['agent'],
+            pinned: true,
+            pinnedAt: sentAt,
+          },
+        },
+      }
+    );
+  }
+
   return NextResponse.json({
     ...result,
     agentCcRecipients: agentCcExtras,

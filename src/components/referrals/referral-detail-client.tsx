@@ -30,13 +30,13 @@ import type { DealStatus } from '@/constants/deals';
 import { getReferralDealsVisibility } from '@/components/referrals/deal-visibility';
 import { getLatestDealReferralStatuses } from '@/lib/latest-deal-referral-status';
 import type { ReferralPayment } from '@/types/referral-payment';
-import { formatCurrency, formatDateMST } from '@/utils/formatters';
-import Link from 'next/link';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { formatDateMST } from '@/utils/formatters';
 import { cn } from '@/lib/cn';
-import { Button, buttonClasses } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Modal } from '@/components/ui/modal';
 import { inputFieldClasses } from '@/components/ui/input';
+import { RailCard, RailFactList, railTextButtonClasses } from '@/components/referrals/referral-rail';
+import { PreApprovalField } from '@/components/referrals/pre-approval-field';
 import { collectIntakeDetails } from '@/components/referrals/intake-details-toast';
 import {
   formatCurrencyInputDisplay,
@@ -66,6 +66,8 @@ interface ReferralDetailNote {
   hiddenFromAgent?: boolean;
   hiddenFromMc?: boolean;
   emailedTargets?: ('agent' | 'mc' | 'admin')[];
+  pinned?: boolean;
+  pinnedAt?: string | null;
 }
 
 interface ReferralDetail {
@@ -166,8 +168,6 @@ const DETAIL_FIELD_KEYS: (keyof DetailDraft)[] = [
   'timeline',
   'referralDate',
 ];
-
-const detailLabelClasses = 'text-xs font-medium text-foreground-subtle';
 
 const ensureString = (value: unknown) => (typeof value === 'string' ? value : '');
 
@@ -1474,40 +1474,12 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
 
   const isAgentLayout = viewerRole === 'agent';
   const agentTimelineLabel =
-    REFERRAL_TIMELINE_OPTIONS.find((option) => option.value === referral.timeline)?.label ?? null;
+    referral.timeline === 'not_specified'
+      ? null
+      : REFERRAL_TIMELINE_OPTIONS.find((option) => option.value === referral.timeline)?.label ?? null;
 
   return (
     <div className="space-y-6">
-      {showNav && (
-        <nav className="flex items-center justify-end gap-1" aria-label="Referral navigation">
-          {prevReferralId ? (
-            <Link
-              href={buildNavHref(prevReferralId)}
-              className={buttonClasses({ variant: 'secondary', size: 'icon' })}
-              aria-label="Previous referral"
-            >
-              <ChevronLeft className="h-4 w-4" aria-hidden />
-            </Link>
-          ) : (
-            <Button variant="secondary" size="icon" disabled aria-label="Previous referral">
-              <ChevronLeft className="h-4 w-4" aria-hidden />
-            </Button>
-          )}
-          {nextReferralId ? (
-            <Link
-              href={buildNavHref(nextReferralId)}
-              className={buttonClasses({ variant: 'secondary', size: 'icon' })}
-              aria-label="Next referral"
-            >
-              <ChevronRight className="h-4 w-4" aria-hidden />
-            </Link>
-          ) : (
-            <Button variant="secondary" size="icon" disabled aria-label="Next referral">
-              <ChevronRight className="h-4 w-4" aria-hidden />
-            </Button>
-          )}
-        </nav>
-      )}
       {isAgentLayout ? (
         <>
           <AgentDetailHeader
@@ -1613,345 +1585,321 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
           onBuySideAgentContactChange={handleBuySideAgentContactChange}
           onSellSideAgentContactChange={handleSellSideAgentContactChange}
           onMcContactChange={handleMcContactChange}
-        />
+          backHref={listParams ? `/referrals?${listParams}` : '/referrals'}
+          showNav={Boolean(showNav)}
+          prevHref={prevReferralId ? buildNavHref(prevReferralId) : null}
+          nextHref={nextReferralId ? buildNavHref(nextReferralId) : null}
+          canDelete={canDelete}
+          deleting={deleting}
+          onDelete={handleDeleteReferral}
+          railSlot={
+            <RailCard
+              title="Intake details"
+              description="Key context provided at intake."
+              action={
+                canEditDetails ? (
+                  <button type="button" onClick={startEditingDetails} className={railTextButtonClasses}>
+                    Edit
+                  </button>
+                ) : null
+              }
+            >
+              <RailFactList
+                leading={
+                  <PreApprovalField
+                    variant="fact"
+                    referralId={referralId}
+                    amountCents={financials.preApprovalAmountCents}
+                    onSaved={(details) =>
+                      handleFinancialsChange({
+                        status: financials.status,
+                        preApprovalAmountCents: details.preApprovalAmountCents,
+                        referralFeeDueCents: details.referralFeeDueCents
+                      })
+                    }
+                  />
+                }
+                facts={[
+                  { label: 'Loan type', value: referral.loanType?.trim() || null },
+                  { label: 'Client type', value: referral.clientType ?? null },
+                  ...(canViewSourceAndEndorser
+                    ? [
+                        { label: 'Source', value: referral.source ?? null },
+                        { label: 'Endorser', value: referral.endorser?.trim() || null }
+                      ]
+                    : []),
+                  { label: 'Looking in', value: lookingInZipDisplay || null, numeric: true },
+                  { label: 'Stage on transfer', value: referral.stageOnTransfer?.trim() || null },
+                  { label: 'Timeline', value: agentTimelineLabel },
+                  { label: 'Entered CRM', value: formatDateMST(referral.createdAt), numeric: true },
+                  ...(viewerRole === 'admin'
+                    ? [
+                        {
+                          label: 'Referral date (historical)',
+                          value: referral.referralDate ? formatDateMST(referral.referralDate) : null,
+                          numeric: true
+                        }
+                      ]
+                    : []),
+                  {
+                    label: 'Current address',
+                    value: referral.borrowerCurrentAddress?.trim() || null,
+                    className: 'col-span-2'
+                  }
+                ]}
+              />
+            </RailCard>
+          }
+        >
+          <ReferralNotes
+            key={referralId}
+            referralId={referralId}
+            initialNotes={notes}
+            viewerRole={viewerRole}
+            agentContact={{
+              name: primaryAgentContact?.name ?? null,
+              email: primaryAgentContact?.email ?? null
+            }}
+            mcContact={{
+              name: mcContact?.name ?? null,
+              email: mcContact?.email ?? null
+            }}
+            adminContacts={referral.adminContacts ?? []}
+            hasAnyPayments={noteEmailDefaultSummary.hasAnyPayments}
+            hasAnyUsedAfcTrue={noteEmailDefaultSummary.hasAnyUsedAfcTrue}
+          />
+          <ReferralDeals
+            referralId={referralId}
+            deals={visibleReferralDeals}
+            onDealCreated={handleDealCreated}
+            onDealUpdated={handleDealUpdated}
+            onDealDeleted={handleDealDeleted}
+            viewerRole={viewerRole}
+            viewerAssignedSide={referral.viewerAssignedSide ?? null}
+            referralOrigin={referral.origin}
+            feeBreakdownAutoSendEnabled={referral.feeBreakdownAutoSendEnabled as boolean | undefined}
+            hiddenOutsideAgentCount={hiddenOutsideAgentCount}
+            assignedAgentDesignation={referral.assignedAgent?.ahaDesignation}
+            defaultSide={referral.viewerAssignedSide === 'sell' ? 'sell' : 'buy'}
+            borrowerName={referral.borrower.name}
+          />
+          <ReferralTimeline referralId={referralId} />
+        </ReferralHeader>
       )}
       {!isAgentLayout ? (
-      <Card>
-        <CardHeader className="flex-row flex-wrap items-start justify-between gap-3 space-y-0">
-          <div className="space-y-1">
-            <CardTitle>Referral details</CardTitle>
-            <p className="text-sm text-foreground-muted">Key context provided at intake.</p>
-          </div>
-          {canEditDetails && !isEditingDetails && (
-            <Button type="button" variant="secondary" size="sm" onClick={startEditingDetails}>
-              Edit details
-            </Button>
-          )}
-        </CardHeader>
-        <CardContent>
-        {isEditingDetails ? (
-          <form onSubmit={handleDetailsSubmit} className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {canEditBorrowerContact && (
-                <>
-                  <label className="space-y-1 text-xs font-medium text-foreground-muted">
-                    <span>Borrower First Name</span>
-                    <input
-                      name="borrowerFirstName"
-                      value={detailsDraft.borrowerFirstName}
-                      onChange={handleDetailInputChange('borrowerFirstName')}
-                      required
-                      disabled={savingDetails}
-                      className={cn(inputFieldClasses, 'mt-1')}
-                    />
-                  </label>
-                  <label className="space-y-1 text-xs font-medium text-foreground-muted">
-                    <span>Borrower Last Name</span>
-                    <input
-                      name="borrowerLastName"
-                      value={detailsDraft.borrowerLastName}
-                      onChange={handleDetailInputChange('borrowerLastName')}
-                      required
-                      disabled={savingDetails}
-                      className={cn(inputFieldClasses, 'mt-1')}
-                    />
-                  </label>
-                  <label className="space-y-1 text-xs font-medium text-foreground-muted">
-                    <span>Borrower Email</span>
-                    <input
-                      type="email"
-                      name="borrowerEmail"
-                      value={detailsDraft.borrowerEmail}
-                      onChange={handleDetailInputChange('borrowerEmail')}
-                      required
-                      disabled={savingDetails}
-                      className={cn(inputFieldClasses, 'mt-1')}
-                    />
-                  </label>
-                  <label className="space-y-1 text-xs font-medium text-foreground-muted">
-                    <span>Borrower Phone</span>
-                    <input
-                      type="tel"
-                      name="borrowerPhone"
-                      value={detailsDraft.borrowerPhone}
-                      onChange={handleDetailInputChange('borrowerPhone')}
-                      required
-                      disabled={savingDetails}
-                      className={cn(inputFieldClasses, 'mt-1')}
-                    />
-                  </label>
-                </>
-              )}
-              <label className="space-y-1 text-xs font-medium text-foreground-muted">
-                <span>Loan File #</span>
-                <input
-                  name="loanFileNumber"
-                  value={detailsDraft.loanFileNumber}
-                  onChange={handleDetailInputChange('loanFileNumber')}
-                  required
-                  disabled={savingDetails}
-                  className={cn(inputFieldClasses, 'mt-1')}
-                />
-              </label>
-              <label className="space-y-1 text-xs font-medium text-foreground-muted">
-                <span>Loan Type</span>
-                <input
-                  name="loanType"
-                  value={detailsDraft.loanType}
-                  onChange={handleDetailInputChange('loanType')}
-                  disabled={savingDetails}
-                  className={cn(inputFieldClasses, 'mt-1')}
-                />
-              </label>
-              <label className="space-y-1 text-xs font-medium text-foreground-muted">
-                <span>Pre-approval Amount</span>
-                <div className="relative">
-                  <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-foreground-subtle">
-                    $
-                  </span>
-                  <input
-                    name="preApprovalAmount"
-                    value={formatCurrencyInputDisplay(detailsDraft.preApprovalAmount)}
-                    onChange={handlePreApprovalChange}
-                    disabled={savingDetails}
-                    className={cn(inputFieldClasses, 'mt-1 pl-7 tabular-nums')}
-                    inputMode="decimal"
-                    placeholder="300,000"
-                  />
-                </div>
-              </label>
-              {canViewSourceAndEndorser && (
-                <>
-                  <label className="space-y-1 text-xs font-medium text-foreground-muted">
-                    <span>Source</span>
-                    <input
-                      name="source"
-                      value={detailsDraft.source}
-                      onChange={handleDetailInputChange('source')}
-                      disabled={savingDetails || !canEditSourceAndEndorser}
-                      className={cn(inputFieldClasses, 'mt-1')}
-                    />
-                  </label>
-                  <label className="space-y-1 text-xs font-medium text-foreground-muted">
-                    <span>Endorser</span>
-                    <input
-                      name="endorser"
-                      value={detailsDraft.endorser}
-                      onChange={handleDetailInputChange('endorser')}
-                      disabled={savingDetails || !canEditSourceAndEndorser}
-                      className={cn(inputFieldClasses, 'mt-1')}
-                    />
-                  </label>
-                </>
-              )}
-              <label className="space-y-1 text-xs font-medium text-foreground-muted">
-                <span>Client Type</span>
-                <select
-                  name="clientType"
-                  value={detailsDraft.clientType}
-                  onChange={handleDetailInputChange('clientType')}
-                  disabled={savingDetails}
-                  className={cn(inputFieldClasses, 'mt-1')}
-                >
-                  <option value="Buyer">Buyer</option>
-                  <option value="Seller">Seller</option>
-                  <option value="Both">Both</option>
-                </select>
-              </label>
-              <label className="space-y-1 text-xs font-medium text-foreground-muted">
-                <span>Looking In (Zip)</span>
-                <input
-                  name="lookingInZip"
-                  value={detailsDraft.lookingInZip}
-                  onChange={handleDetailInputChange('lookingInZip')}
-                  required
-                  disabled={savingDetails}
-                  className={cn(inputFieldClasses, 'mt-1')}
-                />
-              </label>
-              <label className="space-y-1 text-xs font-medium text-foreground-muted">
-                <span>Stage on Transfer</span>
-                <select
-                  name="stageOnTransfer"
-                  value={detailsDraft.stageOnTransfer}
-                  onChange={handleDetailInputChange('stageOnTransfer')}
-                  disabled={savingDetails}
-                  className={cn(inputFieldClasses, 'mt-1')}
-                >
-                  <option value="Pre-approval TBD">Pre-approval TBD</option>
-                  <option value="Pre-approved">Pre-approved</option>
-                </select>
-              </label>
-              <label className="space-y-1 text-xs font-medium text-foreground-muted">
-                <span>Timeline</span>
-                <select
-                  name="timeline"
-                  value={detailsDraft.timeline}
-                  onChange={handleDetailInputChange('timeline')}
-                  disabled={savingDetails}
-                  className={cn(inputFieldClasses, 'mt-1')}
-                >
-                  {REFERRAL_TIMELINE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {viewerRole === 'admin' && (
-                <label className="space-y-1 text-xs font-medium text-foreground-muted">
-                  <span>Referral date (historical)</span>
-                  <input
-                    type="datetime-local"
-                    name="referralDate"
-                    value={detailsDraft.referralDate}
-                    onChange={handleDetailInputChange('referralDate')}
-                    disabled={savingDetails}
-                    className={cn(inputFieldClasses, 'mt-1')}
-                  />
-                </label>
-              )}
-              <label className="space-y-1 text-xs font-medium text-foreground-muted sm:col-span-2 lg:col-span-3">
-                <span>Borrower Current Address</span>
-                <input
-                  name="borrowerCurrentAddress"
-                  value={detailsDraft.borrowerCurrentAddress}
-                  onChange={handleDetailInputChange('borrowerCurrentAddress')}
-                  required
-                  disabled={savingDetails}
-                  className={cn(inputFieldClasses, 'mt-1')}
-                />
-              </label>
-            </div>
-            <div className="flex justify-end gap-3">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={cancelEditingDetails}
-                disabled={savingDetails}
-              >
+        <Modal
+          isOpen={isEditingDetails}
+          onClose={cancelEditingDetails}
+          title="Edit intake details"
+          description="Update the context captured when this referral came in."
+          size="md"
+          footer={
+            <>
+              <Button type="button" variant="secondary" onClick={cancelEditingDetails} disabled={savingDetails}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={!detailsChanged} loading={savingDetails}>
+              <Button type="submit" form="referral-details-form" disabled={!detailsChanged} loading={savingDetails}>
                 {savingDetails ? 'Saving…' : 'Save changes'}
               </Button>
+            </>
+          }
+        >
+          <form id="referral-details-form" onSubmit={handleDetailsSubmit} className="space-y-4 px-5 py-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          {canEditBorrowerContact && (
+            <>
+              <label className="space-y-1 text-xs font-medium text-foreground-muted">
+                <span>Borrower First Name</span>
+                <input
+                  name="borrowerFirstName"
+                  value={detailsDraft.borrowerFirstName}
+                  onChange={handleDetailInputChange('borrowerFirstName')}
+                  required
+                  disabled={savingDetails}
+                  className={cn(inputFieldClasses, 'mt-1')}
+                />
+              </label>
+              <label className="space-y-1 text-xs font-medium text-foreground-muted">
+                <span>Borrower Last Name</span>
+                <input
+                  name="borrowerLastName"
+                  value={detailsDraft.borrowerLastName}
+                  onChange={handleDetailInputChange('borrowerLastName')}
+                  required
+                  disabled={savingDetails}
+                  className={cn(inputFieldClasses, 'mt-1')}
+                />
+              </label>
+              <label className="space-y-1 text-xs font-medium text-foreground-muted">
+                <span>Borrower Email</span>
+                <input
+                  type="email"
+                  name="borrowerEmail"
+                  value={detailsDraft.borrowerEmail}
+                  onChange={handleDetailInputChange('borrowerEmail')}
+                  required
+                  disabled={savingDetails}
+                  className={cn(inputFieldClasses, 'mt-1')}
+                />
+              </label>
+              <label className="space-y-1 text-xs font-medium text-foreground-muted">
+                <span>Borrower Phone</span>
+                <input
+                  type="tel"
+                  name="borrowerPhone"
+                  value={detailsDraft.borrowerPhone}
+                  onChange={handleDetailInputChange('borrowerPhone')}
+                  required
+                  disabled={savingDetails}
+                  className={cn(inputFieldClasses, 'mt-1')}
+                />
+              </label>
+            </>
+          )}
+          <label className="space-y-1 text-xs font-medium text-foreground-muted">
+            <span>Loan File #</span>
+            <input
+              name="loanFileNumber"
+              value={detailsDraft.loanFileNumber}
+              onChange={handleDetailInputChange('loanFileNumber')}
+              required
+              disabled={savingDetails}
+              className={cn(inputFieldClasses, 'mt-1')}
+            />
+          </label>
+          <label className="space-y-1 text-xs font-medium text-foreground-muted">
+            <span>Loan Type</span>
+            <input
+              name="loanType"
+              value={detailsDraft.loanType}
+              onChange={handleDetailInputChange('loanType')}
+              disabled={savingDetails}
+              className={cn(inputFieldClasses, 'mt-1')}
+            />
+          </label>
+          <label className="space-y-1 text-xs font-medium text-foreground-muted">
+            <span>Pre-approval Amount</span>
+            <div className="relative">
+              <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-foreground-subtle">
+                $
+              </span>
+              <input
+                name="preApprovalAmount"
+                value={formatCurrencyInputDisplay(detailsDraft.preApprovalAmount)}
+                onChange={handlePreApprovalChange}
+                disabled={savingDetails}
+                className={cn(inputFieldClasses, 'mt-1 pl-7 tabular-nums')}
+                inputMode="decimal"
+                placeholder="300,000"
+              />
             </div>
-          </form>
-        ) : (
-          <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="space-y-1">
-              <dt className={detailLabelClasses}>Loan File #</dt>
-              <dd className="text-sm font-semibold tabular-nums text-foreground">{referral.loanFileNumber || '—'}</dd>
-            </div>
-            <div className="space-y-1">
-              <dt className={detailLabelClasses}>Loan Type</dt>
-              <dd className="text-sm text-foreground-muted">{referral.loanType?.trim() ? referral.loanType : '—'}</dd>
-            </div>
-            <div className="space-y-1">
-              <dt className={detailLabelClasses}>Pre-approval Amount</dt>
-              <dd className="text-sm tabular-nums text-foreground-muted">
-                {referral.preApprovalAmountCents ? formatCurrency(referral.preApprovalAmountCents) : '—'}
-              </dd>
-            </div>
-            {canViewSourceAndEndorser && (
-              <>
-                <div className="space-y-1">
-                  <dt className={detailLabelClasses}>Source</dt>
-                  <dd className="text-sm text-foreground-muted">{referral.source ?? '—'}</dd>
-                </div>
-                <div className="space-y-1">
-                  <dt className={detailLabelClasses}>Endorser</dt>
-                  <dd className="text-sm text-foreground-muted">{referral.endorser?.trim() ? referral.endorser : '—'}</dd>
-                </div>
-              </>
-            )}
-            <div className="space-y-1">
-              <dt className={detailLabelClasses}>Client Type</dt>
-              <dd className="text-sm text-foreground-muted">{referral.clientType ?? '—'}</dd>
-            </div>
-            <div className="space-y-1">
-              <dt className={detailLabelClasses}>Looking In (Zip)</dt>
-              <dd className="text-sm tabular-nums text-foreground-muted">{lookingInZipDisplay ? lookingInZipDisplay : '—'}</dd>
-            </div>
-            <div className="space-y-1">
-              <dt className={detailLabelClasses}>Stage on Transfer</dt>
-              <dd className="text-sm text-foreground-muted">{referral.stageOnTransfer?.trim() ? referral.stageOnTransfer : '—'}</dd>
-            </div>
-            <div className="space-y-1">
-              <dt className={detailLabelClasses}>Timeline</dt>
-              <dd className="text-sm text-foreground-muted">
-                {referral.timeline && REFERRAL_TIMELINE_OPTIONS.find((opt) => opt.value === referral.timeline)
-                  ? REFERRAL_TIMELINE_OPTIONS.find((opt) => opt.value === referral.timeline)?.label
-                  : '—'}
-              </dd>
-            </div>
-            <div className="space-y-1">
-              <dt className={detailLabelClasses}>Entered into CRM</dt>
-              <dd className="text-sm tabular-nums text-foreground-muted">{formatDateMST(referral.createdAt)}</dd>
-            </div>
-            {viewerRole === 'admin' && (
-              <div className="space-y-1">
-                <dt className={detailLabelClasses}>Referral date (historical)</dt>
-                <dd className="text-sm tabular-nums text-foreground-muted">
-                  {referral.referralDate ? formatDateMST(referral.referralDate) : '—'}
-                </dd>
-              </div>
-            )}
-            <div className="space-y-1 sm:col-span-2 lg:col-span-3">
-              <dt className={detailLabelClasses}>Borrower Current Address</dt>
-              <dd className="text-sm text-foreground-muted">
-                {referral.borrowerCurrentAddress?.trim() ? referral.borrowerCurrentAddress : '—'}
-              </dd>
-            </div>
-          </dl>
-        )}
-        </CardContent>
-      </Card>
-      ) : null}
-      {isAgentLayout ? null : (
-        <ReferralNotes
-          key={referralId}
-          referralId={referralId}
-          initialNotes={notes}
-          viewerRole={viewerRole}
-          agentContact={{
-            name: primaryAgentContact?.name ?? null,
-            email: primaryAgentContact?.email ?? null
-          }}
-          mcContact={{
-            name: mcContact?.name ?? null,
-            email: mcContact?.email ?? null
-          }}
-          adminContacts={referral.adminContacts ?? []}
-          hasAnyPayments={noteEmailDefaultSummary.hasAnyPayments}
-          hasAnyUsedAfcTrue={noteEmailDefaultSummary.hasAnyUsedAfcTrue}
-        />
-      )}
-      {isAgentLayout ? null : (
-        <ReferralDeals
-          referralId={referralId}
-          deals={visibleReferralDeals}
-          onDealCreated={handleDealCreated}
-          onDealUpdated={handleDealUpdated}
-          onDealDeleted={handleDealDeleted}
-          viewerRole={viewerRole}
-          viewerAssignedSide={referral.viewerAssignedSide ?? null}
-          referralOrigin={referral.origin}
-          feeBreakdownAutoSendEnabled={referral.feeBreakdownAutoSendEnabled as boolean | undefined}
-          hiddenOutsideAgentCount={hiddenOutsideAgentCount}
-          assignedAgentDesignation={referral.assignedAgent?.ahaDesignation}
-          defaultSide={referral.viewerAssignedSide === 'sell' ? 'sell' : 'buy'}
-          borrowerName={referral.borrower.name}
-        />
-      )}
-      {viewerRole !== 'agent' ? <ReferralTimeline referralId={referralId} /> : null}
-      {canDelete && (
-        <div className="flex justify-end">
-          <Button type="button" variant="danger" onClick={handleDeleteReferral} loading={deleting}>
-            {deleting ? 'Deleting…' : 'Delete referral'}
-          </Button>
+          </label>
+          {canViewSourceAndEndorser && (
+            <>
+              <label className="space-y-1 text-xs font-medium text-foreground-muted">
+                <span>Source</span>
+                <input
+                  name="source"
+                  value={detailsDraft.source}
+                  onChange={handleDetailInputChange('source')}
+                  disabled={savingDetails || !canEditSourceAndEndorser}
+                  className={cn(inputFieldClasses, 'mt-1')}
+                />
+              </label>
+              <label className="space-y-1 text-xs font-medium text-foreground-muted">
+                <span>Endorser</span>
+                <input
+                  name="endorser"
+                  value={detailsDraft.endorser}
+                  onChange={handleDetailInputChange('endorser')}
+                  disabled={savingDetails || !canEditSourceAndEndorser}
+                  className={cn(inputFieldClasses, 'mt-1')}
+                />
+              </label>
+            </>
+          )}
+          <label className="space-y-1 text-xs font-medium text-foreground-muted">
+            <span>Client Type</span>
+            <select
+              name="clientType"
+              value={detailsDraft.clientType}
+              onChange={handleDetailInputChange('clientType')}
+              disabled={savingDetails}
+              className={cn(inputFieldClasses, 'mt-1')}
+            >
+              <option value="Buyer">Buyer</option>
+              <option value="Seller">Seller</option>
+              <option value="Both">Both</option>
+            </select>
+          </label>
+          <label className="space-y-1 text-xs font-medium text-foreground-muted">
+            <span>Looking In (Zip)</span>
+            <input
+              name="lookingInZip"
+              value={detailsDraft.lookingInZip}
+              onChange={handleDetailInputChange('lookingInZip')}
+              required
+              disabled={savingDetails}
+              className={cn(inputFieldClasses, 'mt-1')}
+            />
+          </label>
+          <label className="space-y-1 text-xs font-medium text-foreground-muted">
+            <span>Stage on Transfer</span>
+            <select
+              name="stageOnTransfer"
+              value={detailsDraft.stageOnTransfer}
+              onChange={handleDetailInputChange('stageOnTransfer')}
+              disabled={savingDetails}
+              className={cn(inputFieldClasses, 'mt-1')}
+            >
+              <option value="Pre-approval TBD">Pre-approval TBD</option>
+              <option value="Pre-approved">Pre-approved</option>
+            </select>
+          </label>
+          <label className="space-y-1 text-xs font-medium text-foreground-muted">
+            <span>Timeline</span>
+            <select
+              name="timeline"
+              value={detailsDraft.timeline}
+              onChange={handleDetailInputChange('timeline')}
+              disabled={savingDetails}
+              className={cn(inputFieldClasses, 'mt-1')}
+            >
+              {REFERRAL_TIMELINE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {viewerRole === 'admin' && (
+            <label className="space-y-1 text-xs font-medium text-foreground-muted">
+              <span>Referral date (historical)</span>
+              <input
+                type="datetime-local"
+                name="referralDate"
+                value={detailsDraft.referralDate}
+                onChange={handleDetailInputChange('referralDate')}
+                disabled={savingDetails}
+                className={cn(inputFieldClasses, 'mt-1')}
+              />
+            </label>
+          )}
+          <label className="space-y-1 text-xs font-medium text-foreground-muted sm:col-span-2">
+            <span>Borrower Current Address</span>
+            <input
+              name="borrowerCurrentAddress"
+              value={detailsDraft.borrowerCurrentAddress}
+              onChange={handleDetailInputChange('borrowerCurrentAddress')}
+              required
+              disabled={savingDetails}
+              className={cn(inputFieldClasses, 'mt-1')}
+            />
+          </label>
         </div>
-      )}
+      </form>
+        </Modal>
+      ) : null}
     </div>
   );
 }

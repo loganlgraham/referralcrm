@@ -79,7 +79,6 @@ export default async function AdminTasksPage() {
         eyebrow="Operations"
         title="Admin tasks"
         description="Shared tasks across all referrals. Every admin sees the same task state."
-        attention={overdueCount > 0}
       />
       <Suspense fallback={<BoardFallback />}>
         <AdminTaskBoard

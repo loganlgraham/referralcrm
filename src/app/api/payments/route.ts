@@ -298,7 +298,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       .lean<{ _id: Types.ObjectId }[]>();
     const designationAgentIds = agentsWithDesignation.map((a) => a._id);
     if (designationAgentIds.length > 0) {
-      filter.agentId = { $in: designationAgentIds };
+      const referralsWithDesignatedAgent = await Referral.find({
+        assignedAgent: { $in: designationAgentIds },
+      })
+        .select('_id')
+        .lean<{ _id: Types.ObjectId }[]>();
+
+      filter.$or = [
+        { agentId: { $in: designationAgentIds } },
+        {
+          agentId: null,
+          referralId: { $in: referralsWithDesignatedAgent.map((referral) => referral._id) },
+        },
+      ];
     } else {
       // No agents match the designation -> no payments
       return NextResponse.json({

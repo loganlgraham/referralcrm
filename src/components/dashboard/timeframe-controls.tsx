@@ -27,6 +27,7 @@ import {
 } from 'react';
 
 import { cn } from '@/lib/cn';
+import { buttonClasses } from '@/components/ui/button';
 
 type SelectionPhase = 'start' | 'end';
 
@@ -189,7 +190,7 @@ function PresetList({
             type="button"
             onClick={() => onSelect(option.value)}
             className={cn(
-              'rounded-pill px-2.5 py-1.5 text-left text-[13px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-surface-raised',
+              'rounded-md px-2.5 py-1.5 text-left text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
               isActive
                 ? 'bg-primary text-white'
                 : 'text-foreground-muted hover:bg-surface-muted hover:text-foreground'
@@ -330,7 +331,7 @@ export function TimeframeDropdown({
         aria-label={`Timeframe: ${rangeLabel}`}
         aria-haspopup="dialog"
         aria-expanded={isOpen}
-        className="inline-flex h-9 items-center gap-2 rounded-pill border border-border bg-surface-raised px-3.5 text-sm font-medium text-foreground shadow-card transition hover:border-border-strong hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-surface"
+        className={buttonClasses({ variant: 'secondary', size: 'md' })}
       >
         <CalendarDays aria-hidden className="h-4 w-4 text-foreground-subtle" />
         <span>{rangeLabel}</span>
@@ -353,7 +354,11 @@ export function TimeframeDropdown({
                   type="button"
                   onClick={() => setVisibleMonth((prev) => addMonths(prev, -1))}
                   aria-label="Previous month"
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full text-foreground-muted transition hover:bg-surface-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className={buttonClasses({
+                    variant: 'ghost',
+                    size: 'icon',
+                    className: 'h-8 w-8 text-foreground-muted'
+                  })}
                 >
                   <ChevronLeft aria-hidden className="h-4 w-4" />
                 </button>
@@ -364,7 +369,11 @@ export function TimeframeDropdown({
                   type="button"
                   onClick={() => setVisibleMonth((prev) => addMonths(prev, 1))}
                   aria-label="Next month"
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full text-foreground-muted transition hover:bg-surface-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-30"
+                  className={buttonClasses({
+                    variant: 'ghost',
+                    size: 'icon',
+                    className: 'h-8 w-8 text-foreground-muted disabled:opacity-30'
+                  })}
                   disabled={!canGoNextMonth}
                 >
                   <ChevronRight aria-hidden className="h-4 w-4" />
@@ -474,9 +483,10 @@ export function TimeframePresetButton({
       type="button"
       onClick={onClick}
       data-value={value}
-      className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-        isActive ? 'border-transparent bg-foreground text-white' : 'border-border bg-surface-raised text-foreground-muted hover:border-border-strong'
-      }`}
+      className={cn(
+        buttonClasses({ variant: 'secondary', size: 'sm' }),
+        isActive && 'bg-foreground text-white shadow-none ring-0 hover:bg-foreground hover:text-white'
+      )}
     >
       {label}
     </button>

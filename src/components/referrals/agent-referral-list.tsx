@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/cn';
 import { getReferralStatusLabel, type ReferralStatus } from '@/constants/referrals';
 import { groupReferralsForAgent } from '@/lib/referral-groups';
-import { Button } from '@/components/ui/button';
+import { Button, buttonClasses } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Pagination } from '@/components/tables/pagination';
 import type { ReferralRow } from '@/components/tables/referral-table';
@@ -346,12 +346,10 @@ export function AgentReferralList({ rows: initialRows, page, pageSize, total }: 
                 aria-pressed={active}
                 onClick={() => setFilterId(filter.id)}
                 className={cn(
-                  'h-[34px] shrink-0 rounded-pill px-3.5 text-[13px] transition lg:h-9',
-                  // The phone toolbar holds three pills plus the search pill.
-                  filter.id === 'under-contract' && 'hidden lg:inline-flex lg:items-center',
-                  active
-                    ? 'bg-primary font-semibold text-white'
-                    : 'border border-border bg-surface font-medium text-foreground-muted hover:bg-surface-muted'
+                  buttonClasses({ variant: active ? 'primary' : 'secondary', size: 'md' }),
+                  'shrink-0',
+                  filter.id === 'under-contract' && 'hidden lg:inline-flex',
+                  active ? 'hover:text-white' : 'text-foreground-muted'
                 )}
               >
                 {filter.label}
@@ -370,19 +368,21 @@ export function AgentReferralList({ rows: initialRows, page, pageSize, total }: 
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search name, email, loan #"
-              className="h-9 w-full rounded-pill border border-border bg-surface pl-[34px] pr-3.5 text-[13px] text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              className="h-9 w-full rounded-lg bg-surface pl-[34px] pr-3.5 text-sm text-foreground shadow-sm ring-1 ring-inset ring-border focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </label>
 
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="icon"
             aria-label="Search referrals"
             aria-expanded={searchOpen}
             onClick={() => setSearchOpen((current) => !current)}
-            className="inline-flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-pill border border-border bg-surface text-foreground-muted transition hover:bg-surface-muted lg:hidden"
+            className="shrink-0 text-foreground-muted lg:hidden"
           >
             <Search className="h-4 w-4" aria-hidden />
-          </button>
+          </Button>
 
           <button
             type="button"
@@ -393,10 +393,9 @@ export function AgentReferralList({ rows: initialRows, page, pageSize, total }: 
               setBulkStatusOpen(false);
             }}
             className={cn(
-              'h-[34px] shrink-0 rounded-pill px-3.5 text-[13px] font-semibold transition lg:h-9',
-              selectMode
-                ? 'bg-primary text-white'
-                : 'border border-border bg-surface text-foreground hover:bg-surface-muted'
+              buttonClasses({ variant: selectMode ? 'primary' : 'secondary', size: 'md' }),
+              'shrink-0',
+              selectMode && 'hover:text-white'
             )}
           >
             {selectMode ? 'Done' : 'Select'}
@@ -413,7 +412,7 @@ export function AgentReferralList({ rows: initialRows, page, pageSize, total }: 
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search name, email, loan #"
-              className="h-10 w-full rounded-pill border border-border bg-surface pl-[34px] pr-3.5 text-[13px] text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              className="h-9 w-full rounded-lg bg-surface pl-[34px] pr-3.5 text-sm text-foreground shadow-sm ring-1 ring-inset ring-border focus:outline-none focus:ring-2 focus:ring-ring"
             />
           </label>
         ) : null}
@@ -537,7 +536,7 @@ export function AgentReferralList({ rows: initialRows, page, pageSize, total }: 
                     type="button"
                     disabled={pendingId !== null}
                     onClick={() => handleBulkStatus(status)}
-                    className="inline-flex h-[34px] items-center rounded-pill border border-border-strong bg-surface px-[13px] text-[13px] font-medium text-foreground transition hover:bg-surface-subtle disabled:opacity-60"
+                    className={buttonClasses({ variant: 'secondary', size: 'md' })}
                   >
                     {getReferralStatusLabel(status)}
                   </button>

@@ -3,6 +3,7 @@
 import { type ReactNode } from 'react';
 import { Info } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import { buttonClasses } from '@/components/ui/button';
 import { Tooltip } from '@/components/ui/tooltip';
 
 /** Single card shell shared by every dashboard widget. */
@@ -19,7 +20,11 @@ export function DashInfoTip({ label, content }: { label: string; content: string
       <button
         type="button"
         aria-label={label}
-        className="inline-flex rounded-full text-foreground-subtle transition-colors hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+        className={buttonClasses({
+          variant: 'ghost',
+          size: 'icon',
+          className: 'h-6 w-6 text-foreground-subtle hover:bg-transparent hover:text-foreground'
+        })}
       >
         <Info className="h-3.5 w-3.5" aria-hidden="true" />
       </button>

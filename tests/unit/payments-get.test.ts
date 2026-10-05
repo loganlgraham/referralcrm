@@ -117,6 +117,7 @@ jest.mock('@/lib/server/notifications', () => ({
 const mockedGetCurrentSession = getCurrentSession as jest.MockedFunction<typeof getCurrentSession>;
 const mockedConnectMongo = connectMongo as jest.MockedFunction<typeof connectMongo>;
 const mockedAgentFindOne = Agent.findOne as jest.Mock;
+const mockedAgentFind = Agent.find as jest.Mock;
 const mockedReferralFind = Referral.find as jest.Mock;
 const mockedPaymentFind = Payment.find as jest.Mock;
 const mockedPaymentCountDocuments = Payment.countDocuments as jest.Mock;
@@ -218,6 +219,39 @@ describe('Payments GET role visibility', () => {
       })
     );
     expect(mockedReferralFind).not.toHaveBeenCalled();
+  });
+
+  it('uses the referral assigned agent designation when a deal has no agent', async () => {
+    mockedGetCurrentSession.mockResolvedValue({
+      user: { id: 'admin-1', role: 'admin', name: 'Admin User' },
+    } as any);
+    mockedAgentFind.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue([{ _id: 'designated-agent-1' }]),
+    });
+    mockedReferralFind.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue([{ _id: 'ref-1' }]),
+    });
+
+    const response = await getHandler(makeRequest('designation=AHA&usedAgent=false'));
+
+    expect(response.status).toBe(200);
+    expect(mockedReferralFind).toHaveBeenCalledWith({
+      assignedAgent: { $in: ['designated-agent-1'] },
+    });
+    expect(mockedPaymentFind).toHaveBeenCalledWith(
+      expect.objectContaining({
+        usedAssignedAgent: false,
+        $or: [
+          { agentId: { $in: ['designated-agent-1'] } },
+          {
+            agentId: null,
+            referralId: { $in: ['ref-1'] },
+          },
+        ],
+      })
+    );
   });
 
   it('returns admin revenue summary fields for expected and received only', async () => {

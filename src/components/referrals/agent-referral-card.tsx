@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { cn } from '@/lib/cn';
 import { getReferralStatusLabel } from '@/constants/referrals';
 import { StatusPill } from '@/components/ui/status-pill';
-import { Button } from '@/components/ui/button';
+import { Button, buttonClasses } from '@/components/ui/button';
 import { buildGmailComposeUrl } from '@/utils/gmail';
 import {
   formatRelativeDays,
@@ -194,12 +194,12 @@ function CardPanel({
                 aria-current={isCurrent}
                 onClick={() => onApplyStatus(row, status)}
                 className={cn(
-                  'inline-flex h-[34px] items-center rounded-pill px-[13px] text-[13px] transition disabled:cursor-default',
+                  buttonClasses({ variant: 'secondary', size: 'md' }),
                   isCurrent
-                    ? 'bg-info-soft font-semibold text-info shadow-[inset_0_0_0_1px_hsl(var(--info)/0.25)]'
+                    ? 'bg-info-soft font-semibold text-info shadow-[inset_0_0_0_1px_hsl(var(--info)/0.25)] ring-0 hover:bg-info-soft'
                     : isQuietStatusChoice(status)
-                      ? 'border border-border bg-surface font-medium text-foreground-subtle'
-                      : 'border border-border-strong bg-surface font-medium text-foreground'
+                      ? 'text-foreground-subtle'
+                      : undefined
                 )}
               >
                 {getReferralStatusLabel(status)}

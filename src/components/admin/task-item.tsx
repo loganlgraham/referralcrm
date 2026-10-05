@@ -51,6 +51,8 @@ function formatDueDate(value: string | null | undefined): string {
 interface TaskItemProps {
   task: TaskItemData;
   showAsCompleted?: boolean;
+  /** Tints the due date so past-due work stands out from today's. */
+  overdue?: boolean;
   onComplete: (taskId: string) => void | Promise<void>;
   onDismiss: (taskId: string) => void | Promise<void>;
   onSnooze: (taskId: string, until: Date) => void | Promise<void>;
@@ -78,6 +80,7 @@ function toDateTimeLocalValue(value: string | null | undefined): string {
 export function TaskItem({
   task,
   showAsCompleted = false,
+  overdue = false,
   onComplete,
   onDismiss,
   onSnooze,
@@ -159,7 +162,7 @@ export function TaskItem({
       )}
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-foreground">{task.title}</p>
-        <p className="text-xs text-foreground-subtle">
+        <p className={cn('text-xs', overdue ? 'font-medium text-danger' : 'text-foreground-subtle')}>
           {formatDueDate(task.effectiveDueAt ?? task.dueAt)}
           {isSnoozed && <span className="ml-1 text-warning">(snoozed)</span>}
         </p>

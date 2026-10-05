@@ -12,6 +12,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 import { buttonClasses } from '@/components/ui/button';
 import { AgentReferralList } from '@/components/referrals/agent-referral-list';
+import { parseNetworkList } from '@/utils/network-filter';
 
 export const metadata: Metadata = {
   title: 'Referrals | Referral CRM'
@@ -47,7 +48,7 @@ export default async function ReferralsPage({
     agent: searchParams.agent?.toString(),
     zip: searchParams.zip?.toString(),
     search: searchParams.search?.toString() ?? null,
-    ahaBucket: ahaBucketParam === 'AHA' || ahaBucketParam === 'AHA_OOS' || ahaBucketParam === 'AGIT' ? ahaBucketParam : null,
+    ahaBucket: parseNetworkList(ahaBucketParam).join(',') || null,
     agentReferrals: role === 'admin' && agentReferrals !== 'all' ? agentReferrals : null,
     timeline: searchParams.timeline?.toString() ?? null,
     sortBy,
@@ -98,7 +99,6 @@ export default async function ReferralsPage({
             ? 'Keep tabs on the borrowers you have handed off and collaborate with partnered agents.'
             : 'Track every lead from intake through close.'
         }
-        attention={tableMode === 'admin' ? false : undefined}
         actions={
           role === 'admin' ? (
             <Link href="/referrals/new" className={buttonClasses()}>

@@ -1020,7 +1020,6 @@ export function DealsTable() {
             ? `${data.total} ${hasActiveFilters ? 'filtered ' : ''}deal${data.total !== 1 ? 's' : ''}`
             : 'Loading...'
         }${timeframe !== 'all' && isAdminView ? ` · ${timeframeLabel}` : ''}`}
-        attention={isAdminView ? false : undefined}
         actions={
           isAdminView ? (
             <TimeframeDropdown

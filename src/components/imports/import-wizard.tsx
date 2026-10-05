@@ -258,7 +258,6 @@ export function ImportWizard() {
         eyebrow="Data"
         title="Import wizard"
         description="Upload a CSV, XLSX, or ZIP file and map its columns to CRM fields."
-        attention={false}
       />
 
       <StepRail activeIndex={activeStepIndex} />

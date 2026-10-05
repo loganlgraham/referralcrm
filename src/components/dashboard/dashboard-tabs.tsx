@@ -15,15 +15,15 @@ import Link from 'next/link';
 import useSWR from 'swr';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency, formatDate, formatNumber } from '@/utils/formatters';
-import { buildGmailComposeUrl } from '@/utils/gmail';
 import { Info, Trash2 } from 'lucide-react';
 import { dashCardClasses } from '@/components/dashboard/dashboard-ui';
 import { Modal } from '@/components/ui/modal';
 import { PageHeader } from '@/components/ui/page-header';
 import { sectionLabelClasses } from '@/components/ui/section-label';
 import { PillTabs, type PillTabDefinition } from '@/components/ui/pill-tabs';
-import { SegmentedPills } from '@/components/ui/segmented-pills';
+import { MultiSegmentedPills } from '@/components/ui/segmented-pills';
 import { cn } from '@/lib/cn';
+import { buttonClasses } from '@/components/ui/button';
 import {
   Select,
   SelectContent,
@@ -44,8 +44,7 @@ import {
   type TimeframeKey,
   type TimeframePreset
 } from '@/components/dashboard/timeframe-controls';
-
-type NetworkFilter = 'ALL' | 'AHA' | 'AHA_OOS';
+import { parseNetworkList, serializeNetworkList, type NetworkOption } from '@/utils/network-filter';
 
 interface TrendPoint {
   key: string;
@@ -455,54 +454,6 @@ interface DashboardResponse {
     stalePipelineCount: number;
     stalePipelineList: StaleReferralEntry[];
   };
-  agit: {
-    agitReferrals: number;
-    agitPercentage: number;
-    usedAfcCount: number;
-    usedAfcRate: number;
-    lostReferrals: number;
-    closeRate: number;
-    dealsClosed: number;
-    referralRows: AgitReferralRow[];
-    dealRows: AgitDealRow[];
-  };
-}
-
-interface AgitReferralRow {
-  id: string;
-  borrowerName: string;
-  loanFileNumber: string | null;
-  status: string;
-  agentId: string | null;
-  agentName: string | null;
-  agentEmail: string | null;
-  agentPhone: string | null;
-  mcId: string | null;
-  mcName: string | null;
-  mcEmail: string | null;
-  mcPhone: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface AgitDealRow {
-  id: string;
-  referralId: string;
-  borrowerName: string;
-  status: string;
-  expectedAmountCents: number;
-  receivedAmountCents: number;
-  agentId: string | null;
-  agentName: string | null;
-  mcId: string | null;
-  mcName: string | null;
-  mcEmail: string | null;
-  mcPhone: string | null;
-  closingDate: string | null;
-  usedAfc: boolean | null;
-  referralStatus: string | null;
-  usedAssignedAgent: boolean | null;
-  agentAttribution: 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT' | null;
 }
 
 interface StaleReferralEntry {
@@ -531,25 +482,36 @@ const TAB_OPTIONS = [
   { label: 'Main', value: 'main' },
   { label: 'MC', value: 'mc' },
   { label: 'Agent', value: 'agent' },
-  { label: 'Admin', value: 'admin' },
-  { label: 'AGIT', value: 'agit' }
+  { label: 'Admin', value: 'admin' }
 ] as const;
 
 type TabValue = (typeof TAB_OPTIONS)[number]['value'];
 
-const NETWORK_FILTER_OPTIONS: { label: string; value: NetworkFilter }[] = [
-  { label: 'All', value: 'ALL' },
+const NETWORK_FILTER_OPTIONS: { label: string; value: NetworkOption }[] = [
   { label: 'AHA', value: 'AHA' },
-  { label: 'AHA OOS', value: 'AHA_OOS' }
+  { label: 'AHA OOS', value: 'AHA_OOS' },
+  { label: 'AGIT', value: 'AGIT' }
 ];
 
-const DEFAULT_NETWORK_FILTER: Record<TabValue, NetworkFilter> = {
-  main: 'ALL',
-  mc: 'ALL',
-  agent: 'ALL',
-  admin: 'AHA_OOS',
-  agit: 'ALL'
-};
+const DEFAULT_NETWORKS: NetworkOption[] = ['AHA', 'AHA_OOS'];
+const NETWORK_STORAGE_KEY = 'dashboard:network:v1';
+
+function loadStoredNetworks(): NetworkOption[] | null {
+  try {
+    const stored = localStorage.getItem(NETWORK_STORAGE_KEY);
+    return stored === null ? null : parseNetworkList(stored);
+  } catch {
+    return null;
+  }
+}
+
+function saveStoredNetworks(networks: NetworkOption[]) {
+  try {
+    localStorage.setItem(NETWORK_STORAGE_KEY, serializeNetworkList(networks));
+  } catch {
+    // Storage is unavailable in some private-browsing modes; the filter still works for this visit.
+  }
+}
 
 const CHART_WIDTH = 320;
 const CHART_HEIGHT = 180;
@@ -1233,11 +1195,11 @@ function ConversionFunnelCard({
 }: {
   stages: FunnelStage[];
   terminal: FunnelTerminalTotals;
-  networkFilter: NetworkFilter;
+  networkFilter: NetworkOption[];
 }) {
   const withNetworkParam = (params: URLSearchParams) => {
-    if (networkFilter === 'AHA' || networkFilter === 'AHA_OOS') {
-      params.set('ahaBucket', networkFilter);
+    if (networkFilter.length > 0) {
+      params.set('ahaBucket', serializeNetworkList(networkFilter));
     }
     return params;
   };
@@ -1392,11 +1354,12 @@ function RankedListTabs({ views }: { views: RankedListView[] }) {
               key={view.id}
               type="button"
               onClick={() => setActiveId(view.id)}
-              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+              className={cn(
+                buttonClasses({ variant: 'secondary', size: 'sm' }),
                 isActive
-                  ? 'border-transparent bg-primary text-white shadow-sm'
-                  : 'border-border bg-surface text-foreground-muted hover:border-border-strong hover:bg-surface-muted'
-              }`}
+                  ? 'bg-primary text-white shadow-none ring-0 hover:bg-primary hover:text-white'
+                  : 'text-foreground-muted'
+              )}
             >
               {view.label}
             </button>
@@ -1514,11 +1477,12 @@ function AgentLeaderboardCard({ views }: { views: AgentLeaderboardView[] }) {
               key={view.id}
               type="button"
               onClick={() => setActiveId(view.id)}
-              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+              className={cn(
+                buttonClasses({ variant: 'secondary', size: 'sm' }),
                 isActive
-                  ? 'border-transparent bg-primary text-white shadow-sm'
-                  : 'border-border bg-surface text-foreground-muted hover:border-border-strong hover:bg-surface-muted'
-              }`}
+                  ? 'bg-primary text-white shadow-none ring-0 hover:bg-primary hover:text-white'
+                  : 'text-foreground-muted'
+              )}
             >
               {view.label}
             </button>
@@ -2160,7 +2124,7 @@ function MainDashboard({
   data: DashboardResponse['main'];
   canEditPreApprovals: boolean;
   onPreApprovalSaved: () => void;
-  networkFilter: NetworkFilter;
+  networkFilter: NetworkOption[];
 }) {
   const [dealsLostModal, setDealsLostModal] = useState<'afc' | 'aha' | 'ahaOos' | null>(null);
   const [pendingClosingsModal, setPendingClosingsModal] = useState<'all' | 'thisMonth' | 'nextMonth' | null>(null);
@@ -2273,7 +2237,7 @@ function MainDashboard({
       ],
       drillDownHref: (() => {
         const params = new URLSearchParams();
-        if (networkFilter === 'AHA' || networkFilter === 'AHA_OOS') params.set('ahaBucket', networkFilter);
+        if (networkFilter.length > 0) params.set('ahaBucket', serializeNetworkList(networkFilter));
         return params.toString() ? `/referrals?${params.toString()}` : '/referrals';
       })()
     },
@@ -2294,7 +2258,7 @@ function MainDashboard({
       drillDownHref: (() => {
         const params = new URLSearchParams();
         params.set('status', 'Closed');
-        if (networkFilter === 'AHA' || networkFilter === 'AHA_OOS') params.set('ahaBucket', networkFilter);
+        if (networkFilter.length > 0) params.set('ahaBucket', serializeNetworkList(networkFilter));
         return `/referrals?${params.toString()}`;
       })()
     }
@@ -2741,7 +2705,11 @@ function McRankedList({ title, entries }: { title: string; entries: McRankedEntr
           <button
             type="button"
             aria-label={`${title} details`}
-            className="inline-flex rounded-full text-foreground-subtle transition-colors hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            className={buttonClasses({
+              variant: 'ghost',
+              size: 'icon',
+              className: 'h-6 w-6 text-foreground-subtle hover:bg-transparent hover:text-foreground'
+            })}
           >
             <Info className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
@@ -3325,11 +3293,12 @@ function LostAttributionCard({ data }: { data: LostAttributionSummary }) {
               key={key}
               type="button"
               onClick={() => setActiveId(key)}
-              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+              className={cn(
+                buttonClasses({ variant: 'secondary', size: 'sm' }),
                 isActive
-                  ? 'border-transparent bg-primary text-white shadow-sm'
-                  : 'border-border bg-surface text-foreground-muted hover:border-border-strong hover:bg-surface-muted'
-              }`}
+                  ? 'bg-primary text-white shadow-none ring-0 hover:bg-primary hover:text-white'
+                  : 'text-foreground-muted'
+              )}
             >
               {breakdowns[key].label}
             </button>
@@ -3665,309 +3634,56 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
   );
 }
 
-function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
-  return (
-    <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard
-          title="AGIT Percentage"
-          value={`${data.agitPercentage.toFixed(1)}%`}
-          helper={`${formatNumber(data.agitReferrals)} of referrals in timeframe have AGIT agent`}
-        />
-        <SummaryCard
-          title="Closed Deals"
-          value={formatNumber(data.dealsClosed)}
-        />
-        <SummaryCard
-          title="Used AFC (Buy-side Attach Rate)"
-          value={`${data.usedAfcRate.toFixed(1)}%`}
-          helper={`${formatNumber(data.usedAfcCount)} used AFC`}
-        />
-        <SummaryCard
-          title="Lost Referrals"
-          value={formatNumber(data.lostReferrals)}
-        />
-        <SummaryCard
-          title="Close Rate"
-          value={`${data.closeRate.toFixed(1)}%`}
-        />
-      </div>
-
-      {/* AGIT Referrals Table */}
-      <div>
-        <h3 className="text-eyebrow mb-3 text-foreground-subtle">AGIT referrals</h3>
-        {data.referralRows.length === 0 ? (
-          <p className="text-sm text-foreground-subtle">No AGIT referrals in this timeframe.</p>
-        ) : (
-          <div className="overflow-hidden rounded-card border border-border bg-surface-raised shadow-card">
-            <table className="min-w-full divide-y divide-border">
-              <thead className="bg-surface-muted">
-                <tr>
-                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">Borrower</th>
-                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">Status</th>
-                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">Agent</th>
-                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">MC</th>
-                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">Created</th>
-                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">Last Updated</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {data.referralRows.map((row) => (
-                  <tr key={row.id} className="hover:bg-surface-muted">
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
-                      <div className="flex flex-col">
-                        <Link
-                          prefetch={false}
-                          href={`/referrals/${row.id}`}
-                          className="font-medium text-primary transition hover:text-primary-hover hover:underline"
-                        >
-                          {row.borrowerName}
-                        </Link>
-                        {row.loanFileNumber && (
-                          <span className="text-xs text-foreground-subtle">Loan # {row.loanFileNumber}</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">{row.status}</td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
-                      {row.agentId ? (
-                        <div className="flex flex-col">
-                          <Link
-                            prefetch={false}
-                            href={`/agents/${row.agentId}`}
-                            className="font-medium text-primary transition hover:text-primary-hover hover:underline"
-                          >
-                            {row.agentName || 'Agent'}
-                          </Link>
-                          {row.agentEmail && (
-                            <a
-                              href={buildGmailComposeUrl(row.agentEmail)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="block text-xs text-primary hover:underline"
-                            >
-                              {row.agentEmail}
-                            </a>
-                          )}
-                          {row.agentPhone && (
-                            <a
-                              href={`tel:${row.agentPhone.replace(/[^0-9+]/g, '')}`}
-                              className="block text-xs text-primary hover:underline"
-                            >
-                              {row.agentPhone}
-                            </a>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-foreground-subtle">Unassigned</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
-                      {row.mcId ? (
-                        <div className="flex flex-col">
-                          <Link
-                            prefetch={false}
-                            href={`/lenders/${row.mcId}`}
-                            className="font-medium text-primary transition hover:text-primary-hover hover:underline"
-                          >
-                            {row.mcName || 'MC'}
-                          </Link>
-                          {row.mcEmail && (
-                            <a
-                              href={buildGmailComposeUrl(row.mcEmail)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="block text-xs text-primary hover:underline"
-                            >
-                              {row.mcEmail}
-                            </a>
-                          )}
-                          {row.mcPhone && (
-                            <a
-                              href={`tel:${row.mcPhone.replace(/[^0-9+]/g, '')}`}
-                              className="block text-xs text-primary hover:underline"
-                            >
-                              {row.mcPhone}
-                            </a>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-foreground-subtle">Unassigned</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
-                      {formatDate(row.createdAt)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
-                      {formatDate(row.updatedAt)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* AGIT Deals Table */}
-      <div>
-        <h3 className="text-eyebrow mb-3 text-foreground-subtle">
-          AGIT deals
-          {data.dealRows.length > 0 && (
-            <span className="ml-2 text-sm font-normal text-foreground-subtle">
-              {
-                data.dealRows.filter(
-                  (row) =>
-                    ['closed', 'payment_sent', 'paid'].includes(row.status) &&
-                    row.usedAssignedAgent !== false &&
-                    row.agentAttribution !== 'OUTSIDE_AGENT'
-                ).length
-              }{' '}
-              closed of {data.dealRows.length} total
-            </span>
-          )}
-        </h3>
-        {data.dealRows.length === 0 ? (
-          <p className="text-sm text-foreground-subtle">No deals for AGIT referrals in this timeframe.</p>
-        ) : (
-          <div className="overflow-hidden rounded-card border border-border bg-surface-raised shadow-card">
-            <table className="min-w-full divide-y divide-border">
-              <thead className="bg-surface-muted">
-                <tr>
-                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">Referral</th>
-                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">Status</th>
-                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">Expected</th>
-                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">Received</th>
-                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">Agent</th>
-                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">MC</th>
-                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">Closing Date</th>
-                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">Agent Used</th>
-                  <th className="text-eyebrow px-4 py-2.5 text-left text-foreground-subtle">Used AFC</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {data.dealRows.map((row) => (
-                  <tr key={row.id} className="hover:bg-surface-muted">
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
-                      <Link
-                        prefetch={false}
-                        href={`/referrals/${row.referralId}`}
-                        className="font-medium text-primary transition hover:text-primary-hover hover:underline"
-                      >
-                        {row.borrowerName}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted capitalize">{row.status.replace(/_/g, ' ')}</td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">{formatCurrency(row.expectedAmountCents)}</td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">{formatCurrency(row.receivedAmountCents)}</td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
-                      <div className="flex flex-col gap-1">
-                        {row.agentId ? (
-                          <Link
-                            prefetch={false}
-                            href={`/agents/${row.agentId}`}
-                            className="font-medium text-primary transition hover:text-primary-hover hover:underline"
-                          >
-                            {row.agentName || 'Agent'}
-                          </Link>
-                        ) : (
-                          <span className="text-foreground-subtle">Unassigned</span>
-                        )}
-                        {(row.referralStatus === 'Lost' || row.usedAssignedAgent === false) && (
-                          <span className="inline-flex w-fit items-center justify-center whitespace-nowrap rounded-full bg-danger-soft px-2.5 py-0.5 text-center text-xs font-medium text-danger">
-                            Agent not used
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
-                      {row.mcId ? (
-                        <div className="flex flex-col">
-                          <Link
-                            prefetch={false}
-                            href={`/lenders/${row.mcId}`}
-                            className="font-medium text-primary transition hover:text-primary-hover hover:underline"
-                          >
-                            {row.mcName || 'MC'}
-                          </Link>
-                          {row.mcEmail && (
-                            <a
-                              href={buildGmailComposeUrl(row.mcEmail)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="block text-xs text-primary hover:underline"
-                            >
-                              {row.mcEmail}
-                            </a>
-                          )}
-                          {row.mcPhone && (
-                            <a
-                              href={`tel:${row.mcPhone.replace(/[^0-9+]/g, '')}`}
-                              className="block text-xs text-primary hover:underline"
-                            >
-                              {row.mcPhone}
-                            </a>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-foreground-subtle">Unassigned</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
-                      {row.closingDate ? formatDate(row.closingDate) : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
-                      {row.usedAssignedAgent === null ? '—' : row.usedAssignedAgent ? 'Yes' : 'No'}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
-                      {row.usedAfc === null ? '—' : row.usedAfc ? 'Yes' : 'No'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export function DashboardTabs() {
   const [activeTab, setActiveTab] = useState<(typeof TAB_OPTIONS)[number]['value']>('main');
   const [timeframe, setTimeframe] = useState<TimeframeKey>('month');
   const [customRange, setCustomRange] = useState<DateRange>(() => getPresetRange('month'));
-  const [networkFilters, setNetworkFilters] = useState<Record<TabValue, NetworkFilter>>(() => ({
-    ...DEFAULT_NETWORK_FILTER
-  }));
+  const [selectedNetworks, setSelectedNetworks] = useState<NetworkOption[]>(DEFAULT_NETWORKS);
+  // Stored selection is read after mount so server and client render the same
+  // chips; the dashboard fetch waits for it to avoid loading the default first.
+  const [networksLoaded, setNetworksLoaded] = useState(false);
   const { data: session } = useSession();
 
-  const activeNetworkFilter = networkFilters[activeTab] ?? 'ALL';
+  useEffect(() => {
+    const stored = loadStoredNetworks();
+    if (stored) {
+      setSelectedNetworks(stored);
+    }
+    setNetworksLoaded(true);
+  }, []);
+
+  const networkParam = serializeNetworkList(selectedNetworks);
   const { start: customStart, end: customEnd } = customRange;
+  const isRangeReady =
+    timeframe !== 'custom' || (Boolean(customStart) && Boolean(customEnd) && customStart <= customEnd);
 
   const swrKey = useMemo<string | null>(() => {
-    const params = new URLSearchParams({ timeframe, network: activeNetworkFilter });
+    if (!isRangeReady || !networksLoaded) {
+      return null;
+    }
+    const params = new URLSearchParams({ timeframe, network: networkParam });
     if (timeframe === 'custom') {
-      if (!customStart || !customEnd || customStart > customEnd) {
-        return null;
-      }
       params.set('start', customStart);
       params.set('end', customEnd);
     }
     return `/api/dashboard?${params.toString()}`;
-  }, [timeframe, activeNetworkFilter, customStart, customEnd]);
+  }, [isRangeReady, networksLoaded, timeframe, networkParam, customStart, customEnd]);
 
   const { data, error, isLoading, mutate } = useSWR<DashboardResponse>(swrKey, fetcher, {
     refreshInterval: 60_000
   });
 
-  const handleNetworkFilterChange = (tab: TabValue, value: NetworkFilter) => {
-    setNetworkFilters((prev) => {
-      if (prev[tab] === value) {
-        return prev;
-      }
-      return { ...prev, [tab]: value };
-    });
+  const updateNetworks = (next: NetworkOption[]) => {
+    setSelectedNetworks(next);
+    saveStoredNetworks(next);
+  };
+
+  const toggleNetwork = (network: NetworkOption) => {
+    updateNetworks(
+      selectedNetworks.includes(network)
+        ? selectedNetworks.filter((value) => value !== network)
+        : [...selectedNetworks, network]
+    );
   };
 
   useEffect(() => {
@@ -3982,7 +3698,7 @@ export function DashboardTabs() {
 
   const visibleTabs = useMemo(() => {
     return TAB_OPTIONS.filter((tab) => {
-      if (tab.value === 'main' || tab.value === 'admin' || tab.value === 'agit') {
+      if (tab.value === 'main' || tab.value === 'admin') {
         return canViewGlobal;
       }
       if (tab.value === 'mc') {
@@ -4014,7 +3730,7 @@ export function DashboardTabs() {
   };
 
   const maxSelectableDate = formatDateInput(new Date());
-  const showSkeleton = Boolean(swrKey) && (isLoading || !data);
+  const showSkeleton = isRangeReady && (isLoading || !data);
 
   const handlePresetSelect = (preset: TimeframePreset) => {
     setTimeframe(preset);
@@ -4053,7 +3769,6 @@ export function DashboardTabs() {
         eyebrow="Analytics"
         title="Performance dashboards"
         description={headerRangeLabel}
-        attention={false}
       />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -4076,11 +3791,13 @@ export function DashboardTabs() {
           />
           <div className="flex items-center gap-2">
             <span className={sectionLabelClasses}>Network</span>
-            <SegmentedPills
+            <MultiSegmentedPills
               ariaLabel="Network filter"
               options={NETWORK_FILTER_OPTIONS}
-              value={activeNetworkFilter}
-              onChange={(value) => handleNetworkFilterChange(activeTab, value)}
+              values={selectedNetworks}
+              onToggle={toggleNetwork}
+              allLabel="All"
+              onSelectAll={() => updateNetworks([])}
             />
           </div>
         </div>
@@ -4088,10 +3805,8 @@ export function DashboardTabs() {
 
       {showSkeleton ? (
         <div className="space-y-4">
-          <div
-            className={`grid gap-4 md:grid-cols-2 ${activeTab === 'agit' ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}
-          >
-            {Array.from({ length: activeTab === 'agit' ? 5 : 4 }).map((_, index) => (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, index) => (
               <div key={index} className="h-28 animate-pulse rounded-card border border-border bg-surface-muted" />
             ))}
           </div>
@@ -4107,7 +3822,7 @@ export function DashboardTabs() {
         </div>
       ) : null}
 
-      {!swrKey ? (
+      {!isRangeReady ? (
         <div className="rounded-card border border-warning/30 bg-warning-soft p-4 text-sm text-warning shadow-card">
           Select a start and end date to load dashboard metrics.
         </div>
@@ -4118,14 +3833,12 @@ export function DashboardTabs() {
               data={data.main}
               canEditPreApprovals={canViewGlobal}
               onPreApprovalSaved={handlePreApprovalSaved}
-              networkFilter={activeNetworkFilter}
+              networkFilter={selectedNetworks}
             />
           ) : null}
           {activeTab === 'mc' ? <McDashboard data={data.mc} /> : null}
           {activeTab === 'agent' ? <AgentDashboard data={data.agent} /> : null}
-          {activeTab === 'admin' ? <AdminDashboard data={data.admin} /> : null}
-          {activeTab === 'agit' ? <AgitDashboard data={data.agit} /> : null}
-        </div>
+          {activeTab === 'admin' ? <AdminDashboard data={data.admin} /> : null}        </div>
       ) : null}
     </div>
   );

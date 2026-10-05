@@ -222,6 +222,8 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       hiddenFromAgent: saved.hiddenFromAgent,
       hiddenFromMc: saved.hiddenFromMc,
       emailedTargets,
+      pinned: false,
+      pinnedAt: null,
       deliveryFailed,
       deliveryFailureReason
     },
