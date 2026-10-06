@@ -117,10 +117,41 @@ export function AgentDetailHeader({
   );
 }
 
+function RailPersonContact({
+  name,
+  email,
+  phone
+}: {
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+}) {
+  return (
+    <>
+      <p className="mt-1.5 text-[15px] font-bold text-foreground">{name}</p>
+      <RailContactStack className="mt-[3px]" email={email} phone={phone} />
+      {email || phone ? (
+        <div className="mt-2.5 flex gap-2">
+          {email ? (
+            <a href={`mailto:${email}`} className={railActionClasses}>
+              Email
+            </a>
+          ) : null}
+          {phone ? (
+            <a href={`tel:${phone.replace(/[^\d+]/g, '')}`} className={railActionClasses}>
+              Call
+            </a>
+          ) : null}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 interface AgentContextRailProps {
   mc?: AgentDetailContact | null;
-  agentSideLabel: string;
-  agent?: AgentDetailContact | null;
+  otherAgentLabel: string;
+  otherAgent?: AgentDetailContact | null;
   clientType: string;
   loanType?: string | null;
   preApprovalAmountCents?: number | null;
@@ -136,8 +167,8 @@ interface AgentContextRailProps {
 
 export function AgentContextRail({
   mc,
-  agentSideLabel,
-  agent,
+  otherAgentLabel,
+  otherAgent,
   clientType,
   loanType,
   preApprovalAmountCents,
@@ -157,36 +188,15 @@ export function AgentContextRail({
           <div>
             <p className="text-eyebrow text-foreground-subtle">Mortgage consultant</p>
             {mc?.name ? (
-              <>
-                <p className="mt-1.5 text-[15px] font-bold text-foreground">{mc.name}</p>
-                <RailContactStack className="mt-[3px]" email={mc.email} phone={mc.phone} />
-                {mc.email || mc.phone ? (
-                  <div className="mt-2.5 flex gap-2">
-                    {mc.email ? (
-                      <a href={`mailto:${mc.email}`} className={railActionClasses}>
-                        Email
-                      </a>
-                    ) : null}
-                    {mc.phone ? (
-                      <a href={`tel:${mc.phone.replace(/[^\d+]/g, '')}`} className={railActionClasses}>
-                        Call
-                      </a>
-                    ) : null}
-                  </div>
-                ) : null}
-              </>
+              <RailPersonContact name={mc.name} email={mc.email} phone={mc.phone} />
             ) : (
               <p className="mt-1.5 text-sm text-foreground-subtle">Not paired yet.</p>
             )}
           </div>
-          {agent?.name ? (
+          {otherAgent?.name ? (
             <div className="border-t border-border pt-3.5">
-              <p className="text-eyebrow text-foreground-subtle">{agentSideLabel}</p>
-              <p className="mt-1.5 text-[15px] font-bold text-foreground">
-                {agent.name}
-                <span className="ml-1 text-xs font-medium text-foreground-subtle">· you</span>
-              </p>
-              <RailContactStack className="mt-[3px]" email={agent.email} phone={agent.phone} />
+              <p className="text-eyebrow text-foreground-subtle">{otherAgentLabel}</p>
+              <RailPersonContact name={otherAgent.name} email={otherAgent.email} phone={otherAgent.phone} />
             </div>
           ) : null}
         </div>

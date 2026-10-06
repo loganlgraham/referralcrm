@@ -543,6 +543,31 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     referral.sellSideAgent,
     sellSideAgentContact,
   ]);
+  const viewerSide: 'buy' | 'sell' = referral.viewerAssignedSide ?? primarySide;
+  const otherSide: 'buy' | 'sell' = viewerSide === 'sell' ? 'buy' : 'sell';
+  const otherSideAgentContact = useMemo(() => {
+    if (referral.clientType !== 'Both') {
+      return null;
+    }
+    const buyContact = buySideAgentContact ?? mapReferralContact(referral.buySideAgent);
+    const sellContact = sellSideAgentContact ?? mapReferralContact(referral.sellSideAgent);
+    const otherContact = otherSide === 'sell' ? sellContact : buyContact;
+    const viewerContact = otherSide === 'sell' ? buyContact : sellContact;
+    if (!otherContact) {
+      return null;
+    }
+    if (otherContact.id && viewerContact?.id && otherContact.id === viewerContact.id) {
+      return null;
+    }
+    return otherContact;
+  }, [
+    buySideAgentContact,
+    otherSide,
+    referral.buySideAgent,
+    referral.clientType,
+    referral.sellSideAgent,
+    sellSideAgentContact,
+  ]);
   const handleDealCreated = useCallback((deal: ReferralPayment) => {
     if (!deal?._id) {
       return;
@@ -1555,8 +1580,8 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
             </div>
             <AgentContextRail
               mc={mcContact}
-              agentSideLabel={primarySide === 'sell' ? 'Sell-side agent' : 'Buy-side agent'}
-              agent={primaryAgentContact}
+              otherAgentLabel={otherSide === 'sell' ? 'Sell-side agent' : 'Buy-side agent'}
+              otherAgent={otherSideAgentContact}
               clientType={referral.clientType ?? 'Buyer'}
               loanType={referral.loanType}
               preApprovalAmountCents={financials.preApprovalAmountCents}

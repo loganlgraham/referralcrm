@@ -522,6 +522,15 @@ const MULTI_LINE_CHART_PLOT_LEFT = 72;
 const MULTI_LINE_CHART_PLOT_RIGHT = 296;
 const MULTI_LINE_CHART_Y_TICKS = [0, 0.5, 1];
 
+type SummaryCardHelperTone = 'positive' | 'negative' | 'neutral';
+type SummaryCardHelper = { text: string; tone: SummaryCardHelperTone };
+
+const SUMMARY_HELPER_TONE_CLASSES: Record<SummaryCardHelperTone, string> = {
+  positive: 'text-success',
+  negative: 'text-danger',
+  neutral: 'text-foreground-subtle'
+};
+
 function SummaryCard({
   title,
   value,
@@ -532,17 +541,26 @@ function SummaryCard({
 }: {
   title: string;
   value: string;
-  helper?: string;
+  helper?: string | SummaryCardHelper;
   extraStats?: { label: string; value: string; onClick?: () => void }[];
   drillDownHref?: string;
   onClick?: () => void;
 }) {
   const isHeaderInteractive = Boolean(drillDownHref ?? onClick);
+  const resolvedHelper: SummaryCardHelper | null =
+    typeof helper === 'string' ? { text: helper, tone: 'neutral' } : helper ?? null;
   const headerContent = (
     <>
       <p className="text-eyebrow text-foreground-subtle">{title}</p>
       <p className="text-numeric mt-2 text-2xl font-semibold tracking-[-0.02em] text-foreground">{value}</p>
-      {helper ? <p className="mt-1 text-xs text-foreground-subtle">{helper}</p> : null}
+      <p
+        className={cn(
+          'mt-1 min-h-[1rem] text-xs',
+          SUMMARY_HELPER_TONE_CLASSES[resolvedHelper?.tone ?? 'neutral']
+        )}
+      >
+        {resolvedHelper?.text ?? ''}
+      </p>
     </>
   );
   const headerInteractiveClass =
@@ -2107,24 +2125,77 @@ function PreApprovalConversionSection({
   );
 }
 
-function periodOverPeriodDelta(current: number, previous: number): string | null {
-  if (previous === 0) return current > 0 ? '+100%' : null;
-  const pct = ((current - previous) / previous) * 100;
-  if (pct === 0) return '0%';
-  const sign = pct > 0 ? '+' : '';
-  return `${sign}${pct.toFixed(1)}%`;
+function getComparisonLabel(timeframe: TimeframeKey): string | null {
+  switch (timeframe) {
+    case 'day':
+      return 'vs yesterday';
+    case 'week':
+      return 'vs last week';
+    case 'month':
+      return 'vs last month';
+    case 'last_week':
+      return 'vs the week before';
+    case 'last_month':
+      return 'vs the month before';
+    case 'next_week':
+    case 'next_month':
+    case 'year':
+    case 'ytd':
+    case 'custom':
+      return 'vs prior period';
+    case 'all':
+      return null;
+    default: {
+      const exhaustive: never = timeframe;
+      throw new Error(`Unhandled timeframe: ${exhaustive}`);
+    }
+  }
+}
+
+function describePeriodChange({
+  current,
+  previous,
+  comparisonLabel,
+  mode,
+  zeroLabel
+}: {
+  current: number;
+  previous: number | null;
+  comparisonLabel: string | null;
+  mode: 'percent' | 'points';
+  zeroLabel: string;
+}): SummaryCardHelper {
+  if (comparisonLabel === null) return { text: 'All-time total', tone: 'neutral' };
+  if (previous === null) return { text: 'No prior period to compare', tone: 'neutral' };
+  const noChange: SummaryCardHelper = { text: `No change ${comparisonLabel}`, tone: 'neutral' };
+  const toneFor = (delta: number): SummaryCardHelperTone => (delta > 0 ? 'positive' : 'negative');
+
+  if (mode === 'points') {
+    const diff = Number((current - previous).toFixed(1));
+    if (diff === 0) return noChange;
+    return { text: `${diff > 0 ? '+' : ''}${diff.toFixed(1)} pts ${comparisonLabel}`, tone: toneFor(diff) };
+  }
+
+  if (previous === 0) {
+    return current > 0 ? { text: `Up from ${zeroLabel} ${comparisonLabel}`, tone: 'positive' } : noChange;
+  }
+  const pct = Number((((current - previous) / previous) * 100).toFixed(1));
+  if (pct === 0) return noChange;
+  return { text: `${pct > 0 ? '+' : ''}${pct.toFixed(1)}% ${comparisonLabel}`, tone: toneFor(pct) };
 }
 
 function MainDashboard({
   data,
   canEditPreApprovals,
   onPreApprovalSaved,
-  networkFilter
+  networkFilter,
+  timeframe
 }: {
   data: DashboardResponse['main'];
   canEditPreApprovals: boolean;
   onPreApprovalSaved: () => void;
   networkFilter: NetworkOption[];
+  timeframe: TimeframeKey;
 }) {
   const [dealsLostModal, setDealsLostModal] = useState<'afc' | 'aha' | 'ahaOos' | null>(null);
   const [pendingClosingsModal, setPendingClosingsModal] = useState<'all' | 'thisMonth' | 'nextMonth' | null>(null);
@@ -2148,14 +2219,33 @@ function MainDashboard({
     summary.closedNotPaidPercentOfExpected ??
     (expectedRevenueCents > 0 ? (closedNotPaidCents / expectedRevenueCents) * 100 : null);
 
-  const revenueVsPrev = pop ? periodOverPeriodDelta(realizedRevenueCents, pop.previous.realizedRevenueCents) : null;
-  const referralsVsPrev = pop ? periodOverPeriodDelta(summary.totalReferrals, pop.previous.totalReferrals) : null;
-  const closeRateVsPrev = pop ? periodOverPeriodDelta(summary.closeRate, pop.previous.closeRate) : null;
+  const comparisonLabel = getComparisonLabel(timeframe);
+  const revenueVsPrev = describePeriodChange({
+    current: realizedRevenueCents,
+    previous: pop ? pop.previous.realizedRevenueCents : null,
+    comparisonLabel,
+    mode: 'percent',
+    zeroLabel: formatCurrency(0)
+  });
+  const referralsVsPrev = describePeriodChange({
+    current: summary.totalReferrals,
+    previous: pop ? pop.previous.totalReferrals : null,
+    comparisonLabel,
+    mode: 'percent',
+    zeroLabel: '0'
+  });
+  const closeRateVsPrev = describePeriodChange({
+    current: summary.closeRate,
+    previous: pop ? pop.previous.closeRate : null,
+    comparisonLabel,
+    mode: 'points',
+    zeroLabel: '0%'
+  });
 
   const highlights: {
     title: string;
     value: string;
-    helper?: string;
+    helper?: SummaryCardHelper;
     extraStats: { label: string; value: string; onClick?: () => void }[];
     drillDownHref?: string;
     onClick?: () => void;
@@ -2163,7 +2253,7 @@ function MainDashboard({
     {
       title: 'Revenue received',
       value: formatCurrency(summary.realizedRevenueCents),
-      helper: revenueVsPrev != null ? `vs previous period: ${revenueVsPrev}` : undefined,
+      helper: revenueVsPrev,
       extraStats: [
         {
           label: 'Generated (closed)',
@@ -2186,10 +2276,10 @@ function MainDashboard({
     {
       title: 'Total Future Closings',
       value: formatNumber(summary.pendingClosings),
-      helper:
-        summary.pendingClosings > 0
-          ? `${formatCurrency(summary.expectedRevenueFromPendingClosingsCents)} expected`
-          : undefined,
+      helper: {
+        text: `${formatCurrency(summary.pendingClosings > 0 ? summary.expectedRevenueFromPendingClosingsCents : 0)} expected`,
+        tone: 'neutral'
+      },
       onClick:
         summary.pendingClosings > 0
           ? () => setPendingClosingsModal('all')
@@ -2216,7 +2306,7 @@ function MainDashboard({
     {
       title: 'Total referrals',
       value: formatNumber(summary.totalReferrals),
-      helper: referralsVsPrev != null ? `vs previous period: ${referralsVsPrev}` : undefined,
+      helper: referralsVsPrev,
       extraStats: [
         {
           label: 'Contracts',
@@ -2244,7 +2334,7 @@ function MainDashboard({
     {
       title: 'Close rate',
       value: `${summary.closeRate.toFixed(1)}%`,
-      helper: closeRateVsPrev != null ? `vs previous period: ${closeRateVsPrev}` : undefined,
+      helper: closeRateVsPrev,
       extraStats: [
         {
           label: 'Avg. days closed → paid',
@@ -3834,6 +3924,7 @@ export function DashboardTabs() {
               canEditPreApprovals={canViewGlobal}
               onPreApprovalSaved={handlePreApprovalSaved}
               networkFilter={selectedNetworks}
+              timeframe={timeframe}
             />
           ) : null}
           {activeTab === 'mc' ? <McDashboard data={data.mc} /> : null}

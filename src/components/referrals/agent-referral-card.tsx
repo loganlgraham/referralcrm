@@ -123,12 +123,10 @@ export function AgentReferralCard({
         )}
       </div>
 
-      <div className={cn('grid gap-2 px-4 pb-3.5', needsUpdate ? 'grid-cols-2' : 'grid-cols-1')}>
-        {needsUpdate ? (
-          <Button className="h-11" onClick={() => onToggleExpanded(row._id)} aria-expanded={expanded}>
-            Update status
-          </Button>
-        ) : null}
+      <div className="grid grid-cols-2 gap-2 px-4 pb-3.5">
+        <Button className="h-11" onClick={() => onToggleExpanded(row._id)} aria-expanded={expanded}>
+          Update status
+        </Button>
         <Button
           variant="secondary"
           className="h-11"

@@ -146,16 +146,14 @@ export function AgentReferralRow({
         </div>
 
         <div className="flex justify-end gap-2">
-          {needsUpdate ? (
-            <Button
-              size="lg"
-              className="h-10"
-              aria-expanded={expanded}
-              onClick={() => onToggleExpanded(row._id)}
-            >
-              Update status
-            </Button>
-          ) : null}
+          <Button
+            size="lg"
+            className="h-10"
+            aria-expanded={expanded}
+            onClick={() => onToggleExpanded(row._id)}
+          >
+            Update status
+          </Button>
           <Button
             variant="secondary"
             size="lg"
