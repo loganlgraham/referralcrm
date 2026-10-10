@@ -584,7 +584,10 @@ function SummaryCard({
   const extraStatsNode = extraStats?.length ? (
     <dl className="mt-3 grid grid-cols-2 gap-2">
       {extraStats.map((stat) => {
-        const tileBase = 'rounded-lg bg-surface-muted px-2 py-1 text-left transition min-h-[3.6rem] flex flex-col justify-between';
+        const tileBase = cn(
+          'rounded-lg bg-surface-muted px-2 py-1 text-left transition h-[3.75rem] flex flex-col justify-between overflow-hidden',
+          extraStats.length === 1 && 'col-span-2'
+        );
         if (stat.onClick) {
           return (
             <button
@@ -597,14 +600,14 @@ function SummaryCard({
               }}
               className={`${tileBase} cursor-pointer hover:bg-surface-subtle hover:ring-1 hover:ring-info/30`}
             >
-              <dt className="text-eyebrow text-foreground-subtle leading-tight min-h-[1.8rem]">{stat.label}</dt>
+              <dt className="text-eyebrow text-foreground-subtle leading-tight min-h-[1.8rem] line-clamp-2">{stat.label}</dt>
               <dd className="text-sm font-semibold text-foreground">{stat.value}</dd>
             </button>
           );
         }
         return (
           <div key={`${title}-${stat.label}`} className={tileBase}>
-            <dt className="text-eyebrow text-foreground-subtle leading-tight min-h-[1.8rem]">{stat.label}</dt>
+            <dt className="text-eyebrow text-foreground-subtle leading-tight min-h-[1.8rem] line-clamp-2">{stat.label}</dt>
             <dd className="text-sm font-semibold text-foreground">{stat.value}</dd>
           </div>
         );
