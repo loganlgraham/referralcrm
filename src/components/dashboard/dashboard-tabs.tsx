@@ -3428,15 +3428,15 @@ function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
     data.averageCommissionPercent > 0 ? `${data.averageCommissionPercent.toFixed(2)}%` : '—';
   const commissionHelper =
     data.commissionSampleSize > 0
-      ? `Unweighted mean across ${formatNumber(data.commissionSampleSize)} closed/paid deals`
-      : 'No closed or paid deals this period';
+      ? `Unweighted mean across ${formatNumber(data.commissionSampleSize)} deals that closed this period`
+      : 'No deals closed this period';
 
   const averageReferralFeeDisplay =
     data.averageReferralFeePercent > 0 ? `${data.averageReferralFeePercent.toFixed(2)}%` : '—';
   const referralFeeHelper =
     data.referralFeeSampleSize > 0
-      ? `Unweighted mean across ${formatNumber(data.referralFeeSampleSize)} closed/paid deals`
-      : 'No closed or paid deals this period';
+      ? `Unweighted mean across ${formatNumber(data.referralFeeSampleSize)} deals that closed this period`
+      : 'No deals closed this period';
 
   return (
     <div className="space-y-6">

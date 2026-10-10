@@ -56,8 +56,11 @@ import { buildConversionFunnel, type FunnelReferralInput } from '@/lib/server/co
 import {
   computeCohortCloseRate,
   isClosingInNonTerminatedMonth,
+  isDealClosedInWindow,
   isTotalFutureClosingStatus,
-  safePercent
+  resolveDealClosingDate,
+  safePercent,
+  type DealClosingDateInput
 } from '@/lib/server/dashboard-math';
 import { SLA_THRESHOLDS } from '@/utils/sla-insights';
 import {
@@ -583,12 +586,67 @@ function resolvePaymentReceivedDate(payment: AggregatedPayment): Date | null {
   return payment.updatedAt ?? null;
 }
 
-/** Closing date for bucketing "generated" revenue (when the deal closed). */
+function dealClosingDateInput(payment: AggregatedPayment): DealClosingDateInput {
+  return {
+    closingDate: payment.closingDate,
+    lastClosedAt: payment.referral?.sla?.lastClosedAt ?? null,
+    status: payment.status,
+    paidDate: payment.paidDate,
+    invoiceDate: payment.invoiceDate,
+    updatedAt: payment.updatedAt
+  };
+}
+
+/** Closing date for closed-deal counts and generated revenue. */
 function resolveClosingDate(payment: AggregatedPayment): Date | null {
-  if (payment.closingDate) return payment.closingDate;
-  const lastClosedAt = payment.referral?.sla?.lastClosedAt;
-  if (lastClosedAt) return typeof lastClosedAt === 'string' ? new Date(lastClosedAt) : lastClosedAt;
-  return resolveMetricDate(payment);
+  return resolveDealClosingDate(dealClosingDateInput(payment));
+}
+
+function resolveClosedDealCommercials(payment: AggregatedPayment): {
+  contractPriceCents: number;
+  referralFeeCents: number;
+  referralFeePercent: number | null;
+  commissionPercent: number;
+  commissionCents: number;
+} {
+  const contractPriceCents =
+    payment.contractPriceCents ??
+    payment.referral?.closedPriceCents ??
+    payment.referral?.estPurchasePriceCents ??
+    0;
+  const referralFeeCents = payment.referral?.referralFeeDueCents ?? 0;
+  let referralFeePercent: number | null =
+    typeof payment.referral?.referralFeeBasisPoints === 'number'
+      ? (payment.referral.referralFeeBasisPoints ?? 0) / 100
+      : null;
+  if ((!referralFeePercent || referralFeePercent <= 0) && contractPriceCents > 0 && referralFeeCents > 0) {
+    referralFeePercent = (referralFeeCents / contractPriceCents) * 100;
+  }
+  // Flat fee wins because deals entered in dollar mode store the dollar amount
+  // and clear the basis points, while the referral still carries the default 3%.
+  const flatFeeCents = payment.commissionFlatFeeCents ?? 0;
+  if (flatFeeCents > 0) {
+    return {
+      contractPriceCents,
+      referralFeeCents,
+      referralFeePercent,
+      commissionCents: flatFeeCents,
+      commissionPercent: contractPriceCents > 0 ? (flatFeeCents / contractPriceCents) * 100 : 0
+    };
+  }
+  const resolvedCommissionBasisPoints =
+    (payment.commissionBasisPoints ?? 0) > 0
+      ? payment.commissionBasisPoints!
+      : (payment.referral?.commissionBasisPoints ?? 0) > 0
+        ? payment.referral!.commissionBasisPoints!
+        : DEFAULT_AGENT_COMMISSION_BPS;
+  return {
+    contractPriceCents,
+    referralFeeCents,
+    referralFeePercent,
+    commissionPercent: resolvedCommissionBasisPoints / 100,
+    commissionCents: (contractPriceCents * resolvedCommissionBasisPoints) / 10000
+  };
 }
 
 function createDashboardContext(request: NextRequest): DashboardRequestContext {
@@ -1233,28 +1291,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       filteredReferralIds.has(payment.referral._id.toString())
   );
 
-  // Deals closed in timeframe: matches "Deals closed" graph logic (closed | payment_sent | paid)
-  // Use paymentsByNetwork (same as graph) and filter by metricDate being within timeframe
-  const dealsClosedInTimeframe = paymentsByNetwork.filter((payment) => {
-    const metricDate = payment.metricDate ?? resolveMetricDate(payment);
-    if (!metricDate) return false;
-    if (timeframeStart && metricDate < timeframeStart) return false;
-    if (timeframeEnd && metricDate > timeframeEnd) return false;
-    if (!isClosedDealEligible(payment)) return false;
-    return true;
-  });
+  // Deals closed in the selected period: closing date, not the day the deal
+  // was marked paid or invoiced. Payment Received still counts — the status
+  // moved past Closed — but it counts in the month it closed.
+  const dealsClosedInTimeframe = paymentsByNetwork.filter(
+    (payment) =>
+      isClosedDealEligible(payment) &&
+      isDealClosedInWindow(dealClosingDateInput(payment), timeframeStart, timeframeEnd)
+  );
   const allClosedDealsInNetwork = paymentsByNetwork.filter((payment) => CLOSED_DEAL_STATUSES.has(payment.status));
-  // MC closed-deal leaderboards (close rate, outside-lender loss, KPI ranking) must
-  // count deals that actually *closed* within the timeframe, so bucket by the real
-  // closing date rather than metricDate (paid/invoice/updatedAt). resolveClosingDate
-  // falls back to metricDate only when a payment has no closingDate/lastClosedAt.
-  const allClosedDealsInTimeframe = allClosedDealsInNetwork.filter((payment) => {
-    const closingDate = resolveClosingDate(payment);
-    if (closingDate === null || Number.isNaN(closingDate.getTime())) return false;
-    if (timeframeStart && closingDate < timeframeStart) return false;
-    if (timeframeEnd && closingDate > timeframeEnd) return false;
-    return true;
-  });
+  // MC closed-deal leaderboards use the same closing-date window. The fallback
+  // inside resolveDealClosingDate applies only when a payment has no closing
+  // date and no last-closed time.
+  const allClosedDealsInTimeframe = allClosedDealsInNetwork.filter((payment) =>
+    isDealClosedInWindow(dealClosingDateInput(payment), timeframeStart, timeframeEnd)
+  );
   // Pushback metrics must count any non-terminated deal whose closing date was moved,
   // not just already-closed deals. Include events where the pushback timestamp falls in
   // the timeframe even if the payment itself hasn't been updated since. Entries without
@@ -1549,10 +1600,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       .filter((value): value is number => value != null && value >= 0)
   );
 
-  const revenueContributingClosedDeals = revenueEligiblePayments.filter(
-    (payment) => isClosedDealEligible(payment)
-  );
-  const closedDealPrices = revenueContributingClosedDeals
+  const closedDealPrices = dealsClosedInTimeframe
     .map((payment) =>
       payment.contractPriceCents ??
       payment.referral?.closedPriceCents ??
@@ -1780,26 +1828,22 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const dealTimeframeMap = new Map<string, { dealsClosed: number; revenueReceivedCents: number }>();
   const generatedByTimeframe = new Map<string, { dealsClosed: number; revenueGeneratedCents: number }>();
-  filteredPaymentsByNetwork.forEach((payment) => {
-    const metricDate = payment.metricDate ?? resolveMetricDate(payment);
+  // Both closed-deal series use the closing-date list so a deal paid this
+  // period but closed earlier cannot land in this period's bucket.
+  dealsClosedInTimeframe.forEach((payment) => {
     const closingDate = resolveClosingDate(payment);
-    if (!isClosedDealEligible(payment)) return;
-
+    if (!closingDate) return;
+    const key = getTimeframeBucketKey(closingDate, context.timeframe);
     const expectedCents = Math.max(payment.expectedAmountCents ?? 0, 0);
 
-    if (metricDate) {
-      const key = getTimeframeBucketKey(new Date(metricDate), context.timeframe);
-      const current = dealTimeframeMap.get(key) ?? { dealsClosed: 0, revenueReceivedCents: 0 };
-      current.dealsClosed += 1;
-      dealTimeframeMap.set(key, current);
-    }
-    if (closingDate) {
-      const key = getTimeframeBucketKey(closingDate, context.timeframe);
-      const current = generatedByTimeframe.get(key) ?? { dealsClosed: 0, revenueGeneratedCents: 0 };
-      current.dealsClosed += 1;
-      current.revenueGeneratedCents += expectedCents;
-      generatedByTimeframe.set(key, current);
-    }
+    const closed = dealTimeframeMap.get(key) ?? { dealsClosed: 0, revenueReceivedCents: 0 };
+    closed.dealsClosed += 1;
+    dealTimeframeMap.set(key, closed);
+
+    const generated = generatedByTimeframe.get(key) ?? { dealsClosed: 0, revenueGeneratedCents: 0 };
+    generated.dealsClosed += 1;
+    generated.revenueGeneratedCents += expectedCents;
+    generatedByTimeframe.set(key, generated);
   });
   paidRevenueEligiblePaymentsInTimeframe.forEach((payment) => {
     const receivedDate = resolvePaymentReceivedDate(payment);
@@ -1902,38 +1946,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     };
   });
 
-  // C-5: generatedRevenueList must mirror the KPI (payments bucketed by
-  // resolveClosingDate), not the dealsClosedInTimeframe (metricDate) list.
-  const dealsGeneratedInTimeframe = paymentsByNetwork.filter((payment) => {
-    if (!isClosedDealEligible(payment)) return false;
-    const closingDate = resolveClosingDate(payment);
-    if (!closingDate) return false;
-    if (timeframeStart && closingDate < timeframeStart) return false;
-    if (timeframeEnd && closingDate > timeframeEnd) return false;
-    return true;
-  });
+  // Generated (closed) is the same closing-date population as Deals closed,
+  // so the dollar amount, the popup, and the card cannot diverge.
+  const dealsGeneratedInTimeframe = dealsClosedInTimeframe;
 
-  // Card deals closed: per-deal closing-date filter so partial-month and
-  // week/custom timeframes count correctly (month buckets would over/undercount).
-  const dealsClosedForSummary = dealsGeneratedInTimeframe.length;
+  const dealsClosedForSummary = dealsClosedInTimeframe.length;
 
-  // Generated revenue in timeframe (by closing date)
-  const generatedRevenueCentsForSummary = (() => {
-    let sum = 0;
-    for (const bucket of timeframeBuckets) {
-      const stats = generatedByTimeframe.get(bucket.key);
-      if (stats) sum += stats.revenueGeneratedCents;
-    }
-    return sum;
-  })();
+  const generatedRevenueCentsForSummary = dealsClosedInTimeframe.reduce(
+    (sum, payment) => sum + Math.max(payment.expectedAmountCents ?? 0, 0),
+    0
+  );
 
-  const closedInTimeframe = (payment: AggregatedPayment) => {
-    const closingDate = resolveClosingDate(payment);
-    if (!closingDate) return false;
-    if (timeframeStart && closingDate < timeframeStart) return false;
-    if (timeframeEnd && closingDate > timeframeEnd) return false;
-    return true;
-  };
+  const closedInTimeframe = (payment: AggregatedPayment) =>
+    isDealClosedInWindow(dealClosingDateInput(payment), timeframeStart, timeframeEnd);
 
   // Pipeline-health attach rates honor the dashboard network filter (ALL / AHA /
   // AHA_OOS) by sourcing from paymentsByNetwork rather than the network-agnostic
@@ -3289,8 +3314,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     target.set(key, (target.get(key) ?? 0) + 1);
   });
 
-  // Aggregate agent metrics from payments
-  // Excludes terminated deals and tracks outside agent attribution separately
+  // Cash stays on the paid/invoice date. Closed-deal size, commission, and
+  // referral-fee averages use the closing date so a payment received this
+  // period does not count as a close this period.
   filteredPaymentsByNetwork.forEach((payment) => {
     if (payment.status === 'terminated') {
       return;
@@ -3308,73 +3334,60 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       closedVolumeCents: 0
     };
     const isOutsideAgentDeal = payment.agentAttribution === 'OUTSIDE_AGENT';
-    const contractPriceCents =
-      payment.contractPriceCents ?? payment.referral?.closedPriceCents ?? payment.referral?.estPurchasePriceCents ?? 0;
 
     // M-20: Agent "Revenue Paid" leaderboard must only sum actually-paid payments.
     // Any non-'paid' status with a receivedAmount value should not contribute.
     if (!isOutsideAgentDeal && payment.status === 'paid') {
       current.revenue += payment.receivedAmountCents ?? 0;
+      const { commissionCents, referralFeeCents } = resolveClosedDealCommercials(payment);
+      if (commissionCents > 0) {
+        const paidReferralFeeCents = payment.receivedAmountCents ?? referralFeeCents;
+        current.netCommissionCents += commissionCents - paidReferralFeeCents;
+      }
     }
     if (!isOutsideAgentDeal) {
       current.expected += calculateOutstandingExpected(payment);
     }
+    current.totalReferrals = agentReferralCount.get(key) ?? current.totalReferrals;
+    agentRevenueMap.set(key, current);
+  });
 
-    if (CLOSED_DEAL_STATUSES.has(payment.status)) {
-      if (!isOutsideAgentDeal) {
-        current.closed += 1;
-        if (contractPriceCents > 0) {
-          current.closedVolumeCents += contractPriceCents;
-        }
-        
-        // Calculate commission and referral fee percentages for averages
-        const referralFeeCents = payment.referral?.referralFeeDueCents ?? 0;
-        let referralFeePercent: number | null =
-          typeof payment.referral?.referralFeeBasisPoints === 'number'
-            ? (payment.referral.referralFeeBasisPoints ?? 0) / 100
-            : null;
-        if ((!referralFeePercent || referralFeePercent <= 0) && contractPriceCents > 0 && referralFeeCents > 0) {
-          referralFeePercent = (referralFeeCents / contractPriceCents) * 100;
-        }
-        // Resolve each closed deal's agent commission as a percentage so flat-fee
-        // (dollar) deals are converted to a percent and averaged in alongside
-        // percent-based deals. Flat fee wins because deals entered in "$" mode
-        // store the dollar amount and clear the basis points, while the referral
-        // still carries the default 3% — so checking basis points first would
-        // wrongly treat dollar deals as the default percentage.
-        const flatFeeCents = payment.commissionFlatFeeCents ?? 0;
-        let commissionPercent: number;
-        let commissionCents: number;
-        if (flatFeeCents > 0) {
-          commissionCents = flatFeeCents;
-          commissionPercent = contractPriceCents > 0 ? (flatFeeCents / contractPriceCents) * 100 : 0;
-        } else {
-          const resolvedCommissionBasisPoints =
-            (payment.commissionBasisPoints ?? 0) > 0
-              ? payment.commissionBasisPoints!
-              : (payment.referral?.commissionBasisPoints ?? 0) > 0
-                ? payment.referral!.commissionBasisPoints!
-                : DEFAULT_AGENT_COMMISSION_BPS;
-          commissionPercent = resolvedCommissionBasisPoints / 100;
-          commissionCents = (contractPriceCents * resolvedCommissionBasisPoints) / 10000;
-        }
+  paymentsByNetwork.forEach((payment) => {
+    if (!CLOSED_DEAL_STATUSES.has(payment.status)) return;
+    if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
+    if (!isDealClosedInWindow(dealClosingDateInput(payment), timeframeStart, timeframeEnd)) return;
 
-        if (commissionPercent > 0) {
-          current.commissionPercentages.push(commissionPercent);
-        }
-        if (commissionCents > 0) {
-          current.commissionCents.push(commissionCents);
-        }
-        if (referralFeePercent && referralFeePercent > 0) {
-          current.referralFeePercentages.push(referralFeePercent);
-        }
+    const key = payment.referral?.assignedAgent ? payment.referral.assignedAgent.toString() : 'unassigned';
+    const current = agentRevenueMap.get(key) ?? {
+      revenue: 0,
+      expected: 0,
+      closed: 0,
+      totalReferrals: agentReferralCount.get(key) ?? 0,
+      commissionCents: [],
+      commissionPercentages: [],
+      referralFeePercentages: [],
+      netCommissionCents: 0,
+      closedVolumeCents: 0
+    };
+    const {
+      contractPriceCents,
+      referralFeePercent,
+      commissionPercent,
+      commissionCents
+    } = resolveClosedDealCommercials(payment);
 
-        // Net commission = commission earned - referral fee paid (only for paid deals)
-        if (payment.status === 'paid' && commissionCents > 0) {
-          const paidReferralFeeCents = payment.receivedAmountCents ?? referralFeeCents;
-          current.netCommissionCents += commissionCents - paidReferralFeeCents;
-        }
-      }
+    current.closed += 1;
+    if (contractPriceCents > 0) {
+      current.closedVolumeCents += contractPriceCents;
+    }
+    if (commissionPercent > 0) {
+      current.commissionPercentages.push(commissionPercent);
+    }
+    if (commissionCents > 0) {
+      current.commissionCents.push(commissionCents);
+    }
+    if (referralFeePercent && referralFeePercent > 0) {
+      current.referralFeePercentages.push(referralFeePercent);
     }
     current.totalReferrals = agentReferralCount.get(key) ?? current.totalReferrals;
     agentRevenueMap.set(key, current);
@@ -3796,32 +3809,48 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       const isOutside = payment.agentAttribution === 'OUTSIDE_AGENT';
       if (!isOutside) {
         current.revenue += payment.receivedAmountCents ?? 0;
-        if (CLOSED_DEAL_STATUSES.has(payment.status)) {
-          current.closed += 1;
+        if (payment.status === 'paid') {
           const contractPriceCents =
             payment.contractPriceCents ?? payment.referral?.closedPriceCents ?? payment.referral?.estPurchasePriceCents ?? 0;
-          if (contractPriceCents > 0) current.closedVolumeCents += contractPriceCents;
-          const dealSide = resolveDealSideForMetrics(
-            payment.side,
-            payment.referral?.dealSide,
-            payment.referral?.clientType ?? null
-          );
-          if (dealSide === 'buy') {
-            current.afcEligibleDeals += 1;
-            if (payment.usedAfc) current.afcAttachedDeals += 1;
-          }
-          if (payment.status === 'paid') {
-            const commissionBps = payment.referral?.commissionBasisPoints ?? 0;
-            const flatFee = payment.commissionFlatFeeCents ?? 0;
-            const commissionCents = flatFee > 0
-              ? flatFee
-              : contractPriceCents > 0 ? (contractPriceCents * commissionBps) / 10000 : 0;
-            if (commissionCents > 0) {
-              const referralFeePaid = payment.receivedAmountCents ?? payment.referral?.referralFeeDueCents ?? 0;
-              current.netCommissionCents += commissionCents - referralFeePaid;
-            }
+          const commissionBps = payment.referral?.commissionBasisPoints ?? 0;
+          const flatFee = payment.commissionFlatFeeCents ?? 0;
+          const commissionCents = flatFee > 0
+            ? flatFee
+            : contractPriceCents > 0 ? (contractPriceCents * commissionBps) / 10000 : 0;
+          if (commissionCents > 0) {
+            const referralFeePaid = payment.receivedAmountCents ?? payment.referral?.referralFeeDueCents ?? 0;
+            current.netCommissionCents += commissionCents - referralFeePaid;
           }
         }
+      }
+      agentPerfMap.set(key, current);
+    });
+
+    bucketAllNetworkPayments.forEach((payment) => {
+      if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
+      if (!CLOSED_DEAL_STATUSES.has(payment.status)) return;
+      if (!isDealClosedInWindow(dealClosingDateInput(payment), timeframeStart, timeframeEnd)) return;
+      const key = payment.referral?.assignedAgent?.toString() ?? 'unassigned';
+      const current = agentPerfMap.get(key) ?? {
+        revenue: 0,
+        closed: 0,
+        afcAttachedDeals: 0,
+        afcEligibleDeals: 0,
+        closedVolumeCents: 0,
+        netCommissionCents: 0
+      };
+      current.closed += 1;
+      const contractPriceCents =
+        payment.contractPriceCents ?? payment.referral?.closedPriceCents ?? payment.referral?.estPurchasePriceCents ?? 0;
+      if (contractPriceCents > 0) current.closedVolumeCents += contractPriceCents;
+      const dealSide = resolveDealSideForMetrics(
+        payment.side,
+        payment.referral?.dealSide,
+        payment.referral?.clientType ?? null
+      );
+      if (dealSide === 'buy') {
+        current.afcEligibleDeals += 1;
+        if (payment.usedAfc) current.afcAttachedDeals += 1;
       }
       agentPerfMap.set(key, current);
     });
@@ -4345,14 +4374,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       if (!isClosedDealEligible(payment)) return false;
       return prevReferralIdSet.has(payment.referral._id.toString());
     });
-    // Previous-period deals closed must use the same definition as the current
-    // period's dealsClosedForSummary (closing date in window), not metricDate.
-    const prevDealsClosedByClosingDate = paymentsByNetwork.filter((payment) => {
-      if (!isClosedDealEligible(payment)) return false;
-      const closingDate = resolveClosingDate(payment);
-      if (closingDate === null || Number.isNaN(closingDate.getTime())) return false;
-      return closingDate >= previousStart && closingDate <= previousEnd;
-    });
+    // Previous-period deals closed use the same closing-date window as the card.
+    const prevDealsClosedByClosingDate = paymentsByNetwork.filter(
+      (payment) =>
+        isClosedDealEligible(payment) &&
+        isDealClosedInWindow(dealClosingDateInput(payment), previousStart, previousEnd)
+    );
     const prevRealized = paymentsByNetwork.reduce((sum, payment) => {
       const receivedDate = resolvePaymentReceivedDate(payment);
       if (!receivedDate) return sum;
