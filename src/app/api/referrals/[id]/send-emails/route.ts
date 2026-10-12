@@ -214,10 +214,18 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   let notes: string | null = null;
   let agentCcExtras: string[] = [];
   let mcCcExtras: string[] = [];
+  let sendToAgent = true;
+  let sendToMc = true;
   try {
     const body = await request.json();
     if (typeof body?.notes === 'string' && body.notes.trim()) {
       notes = body.notes.trim();
+    }
+
+    sendToAgent = body?.sendToAgent !== false;
+    sendToMc = body?.sendToMc !== false;
+    if (!sendToAgent && !sendToMc) {
+      return NextResponse.json({ error: 'Select at least one recipient.' }, { status: 400 });
     }
 
     const agentCc = parseCcRecipients(body?.agentCcRecipients);
@@ -230,8 +238,8 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       );
     }
 
-    agentCcExtras = agentCc.emails;
-    mcCcExtras = mcCc.emails;
+    agentCcExtras = sendToAgent ? agentCc.emails : [];
+    mcCcExtras = sendToMc ? mcCc.emails : [];
   } catch {
     // Body is empty or not JSON, which is fine
   }
@@ -290,7 +298,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   const agentEmailCC = buildCcList(defaultIntroEmailCC, agentCcExtras);
   const mcEmailCC = buildCcList(defaultIntroEmailCC, mcCcExtras);
 
-  const shouldEmailAgent = referral.origin !== 'agent';
+  const shouldEmailAgent = referral.origin !== 'agent' && sendToAgent;
   const isSellerOnly = referral.clientType === 'Seller';
   const agentEmailSubject =
     session.user.role === 'admin' ? 'American Home Agents - New Referral!' : `New referral for ${borrowerName}`;
@@ -421,7 +429,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   });
 
   // Skip MC email for seller-only referrals (no mortgage consultant needed)
-  if (referral.clientType !== 'Seller') {
+  if (referral.clientType !== 'Seller' && sendToMc) {
     await trySendEmail(
       lenderContact?.email ?? null,
       `Agent helping ${borrowerName}`,

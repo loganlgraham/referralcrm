@@ -11,7 +11,9 @@ type NotificationType =
   | 'update_request_response'
   | 'nps_survey_completed'
   | 'checkin_no_response_24h'
-  | 'referral_created';
+  | 'referral_created'
+  | 'fee_breakdown_confirmed'
+  | 'fee_breakdown_disputed';
 
 interface CreateNotificationParams {
   type: NotificationType;

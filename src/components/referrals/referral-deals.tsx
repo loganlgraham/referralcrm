@@ -41,6 +41,10 @@ import { StageTrack } from '@/components/referrals/stage-track';
 import { inputFieldClasses } from '@/components/ui/input';
 import { sectionLabelClasses } from '@/components/ui/section-label';
 import { EmptyState } from '@/components/ui/empty-state';
+import {
+  describeFeeVerificationStatus,
+  type FeeVerificationStatusTone,
+} from '@/components/referrals/fee-verification-status';
 
 interface ReferralDealsProps {
   referralId: string;
@@ -624,7 +628,7 @@ function DealCard({
   const canMarkPaymentSent = viewerRole === 'agent';
   const canSendFeeBreakdown = viewerRole === 'admin';
   const feeBreakdownDisabled = saving || !deal.closingDate || !deal.agentId;
-  const feeBreakdownStatus: { tone: 'muted' | 'warning'; text: string }[] = [];
+  const feeBreakdownStatus: { tone: FeeVerificationStatusTone; text: string }[] = [];
   if (canSendFeeBreakdown) {
     if (!deal.closingDate) {
       feeBreakdownStatus.push({ tone: 'warning', text: 'Add a closing date to send the fee breakdown email.' });
@@ -641,6 +645,13 @@ function DealCard({
                 deal.feeBreakdownEmailSentByUser?.name ?? deal.feeBreakdownEmailSentByUser?.email ?? 'admin'
               } (auto-send off)`,
       });
+      const verification = describeFeeVerificationStatus(
+        deal.feeBreakdownVerificationStatus,
+        deal.feeBreakdownVerifiedAt
+      );
+      if (verification) {
+        feeBreakdownStatus.push(verification);
+      }
     } else if (feeBreakdownAutoSendEnabled !== false) {
       feeBreakdownStatus.push({ tone: 'muted', text: 'Fee breakdown auto-sends 7 days before closing' });
     }
@@ -751,7 +762,16 @@ function DealCard({
         ))}
         {canManage
           ? feeBreakdownStatus.map((item) => (
-              <span key={item.text} className={item.tone === 'warning' ? 'font-medium text-warning' : undefined}>
+              <span
+                key={item.text}
+                className={
+                  item.tone === 'warning'
+                    ? 'font-medium text-warning'
+                    : item.tone === 'success'
+                      ? 'text-success'
+                      : undefined
+                }
+              >
                 {item.text}
               </span>
             ))

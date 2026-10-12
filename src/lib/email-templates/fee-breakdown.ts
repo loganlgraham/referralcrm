@@ -11,7 +11,7 @@ import {
   emailMetaRows,
   emailParagraph,
 } from '@/lib/email-templates/primitives';
-import { EMAIL_COLORS, EMAIL_FONT_STACK } from '@/lib/email-templates/tokens';
+import { EMAIL_COLORS, EMAIL_FONT_STACK, EMAIL_RADIUS } from '@/lib/email-templates/tokens';
 
 export interface FeeBreakdownEmailData {
   agent: {
@@ -35,14 +35,19 @@ export interface FeeBreakdownEmailData {
     usedAfc: boolean;
   };
   platformUrl: string;
+  isFirstSend?: boolean;
+  verification?: {
+    confirmUrl: string;
+    reportUrl: string;
+  } | null;
 }
 
-const COORDINATOR = {
+export const COORDINATOR = {
   name: 'Kristen Truong',
   email: 'kristen.truong@americanhomeagents.com',
 };
 
-const MAILING_ADDRESS = ['American Home Agents', '3045 S Parker Rd #200', 'Aurora, CO 80014'];
+const MAILING_ADDRESS = ['American Home Agents', '3190 S Vaughn Way Suite 550', 'Aurora, CO 80014'];
 
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -132,9 +137,30 @@ function extractLastName(borrowerName: string): string {
   return nameParts[nameParts.length - 1] || borrowerName;
 }
 
-export function generateFeeBreakdownSubject(borrowerName: string): string {
+export function generateFeeBreakdownSubject(
+  borrowerName: string,
+  options?: { isFirstSend?: boolean }
+): string {
+  if (options?.isFirstSend) {
+    const firstName = extractFirstName(borrowerName);
+    return firstName && firstName !== 'Unknown'
+      ? `Congrats on getting ${firstName} under contract!`
+      : 'Congrats on getting your client under contract!';
+  }
   const lastName = extractLastName(borrowerName);
   return `American Home Agents Referral Fee - ${lastName}`;
+}
+
+function verificationButtonsHtml(confirmUrl: string, reportUrl: string): string {
+  const button = (href: string, label: string, background: string, color: string, border: string) =>
+    `<td style="padding:0 8px 8px 0;"><a href="${escapeHtml(href)}" style="display:inline-block;box-sizing:border-box;padding:11px 20px;font-family:${EMAIL_FONT_STACK};font-size:14px;font-weight:600;line-height:20px;color:${color};background-color:${background};border:1px solid ${border};text-decoration:none;border-radius:${EMAIL_RADIUS.sm};">${escapeHtml(label)}</a></td>`;
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>${button(
+    confirmUrl,
+    'Yes, looks correct',
+    EMAIL_COLORS.primary,
+    EMAIL_COLORS.primaryForeground,
+    EMAIL_COLORS.primary
+  )}${button(reportUrl, 'Something looks off', EMAIL_COLORS.surface, EMAIL_COLORS.foreground, EMAIL_COLORS.borderStrong)}</tr></table>`;
 }
 
 export function generateFeeBreakdownEmailHTML(data: FeeBreakdownEmailData): { html: string; text: string } {
@@ -165,8 +191,20 @@ export function generateFeeBreakdownEmailHTML(data: FeeBreakdownEmailData): { ht
     (line) => escapeHtml(line)
   ).join('<br>')}</p>`;
 
+  const borrowerFirstName = extractFirstName(data.referral.borrowerName);
+  const clientReference =
+    borrowerFirstName && borrowerFirstName !== 'Unknown' ? borrowerFirstName : 'your client';
+  const greeting = agentFirstName ? `Hi ${agentFirstName}, congratulations` : 'Congratulations';
+  const congratsText = `${greeting} on getting ${clientReference} under contract! We appreciate you taking great care of them. Below is the referral fee breakdown so everything is lined up well before closing.`;
+
   const bodyHtml = [
-    emailParagraph(
+    data.isFirstSend
+      ? emailParagraph(
+          `${escapeHtml(greeting)} on getting <strong>${escapeHtml(
+            clientReference
+          )}</strong> under contract! We appreciate you taking great care of them. Below is the referral fee breakdown so everything is lined up well before closing.`
+        )
+      : emailParagraph(
       `${agentFirstName ? `Hi ${escapeHtml(agentFirstName)}, congratulations` : 'Congratulations'} on the upcoming closing for <strong>${escapeHtml(
         data.referral.borrowerName
       )}</strong>${countdown ? ` — closing ${escapeHtml(countdown)}` : ''}. Here is the referral fee breakdown for your records.`
@@ -208,6 +246,18 @@ export function generateFeeBreakdownEmailHTML(data: FeeBreakdownEmailData): { ht
         },
       ])
     ),
+    data.verification
+      ? emailCard(
+          'Do these numbers look right?',
+          [
+            emailParagraph(
+              'Take a quick look at the figures above. One click lets us know they match, or tell us what needs fixing. No login needed.',
+              { muted: true, size: 13 }
+            ),
+            verificationButtonsHtml(data.verification.confirmUrl, data.verification.reportUrl),
+          ].join('')
+        )
+      : '',
     emailCard('Referral Details', emailMetaRows(referralRows)),
     emailCard(
       'Where to Send the Referral Fee',
@@ -247,7 +297,11 @@ export function generateFeeBreakdownEmailHTML(data: FeeBreakdownEmailData): { ht
   const text = renderEmailText(`REFERRAL FEE BREAKDOWN
 ${dealSideLabel} referral${countdown ? ` · Closing ${countdown}` : ''}
 
-${agentFirstName ? `Hi ${agentFirstName}, congratulations` : 'Congratulations'} on the upcoming closing for ${data.referral.borrowerName}. Here is the referral fee breakdown for your records.
+${
+    data.isFirstSend
+      ? congratsText
+      : `${greeting} on the upcoming closing for ${data.referral.borrowerName}. Here is the referral fee breakdown for your records.`
+  }
 
 ACTION REQUIRED: Review the figures below and confirm they match your settlement statement.
 
@@ -260,7 +314,16 @@ Contract price: ${amounts.contractPrice}
 Agent commission (${amounts.commissionLabel} of contract price): ${amounts.commissionAmount}
 Referral fee (${amounts.referralFeePercent} of agent commission): -${amounts.referralFeeAmount}
 Net commission to agent: ${amounts.netCommission}
+${
+    data.verification
+      ? `
+DO THESE NUMBERS LOOK RIGHT?
 
+Yes, looks correct: ${data.verification.confirmUrl}
+Something looks off: ${data.verification.reportUrl}
+`
+      : ''
+  }
 REFERRAL DETAILS
 
 Borrower: ${data.referral.borrowerName}

@@ -16,6 +16,8 @@ import {
   confirmPaidStatusDate,
 } from '@/components/referrals/status-date-confirmation-toast';
 import { confirmReferralTermination } from '@/components/referrals/terminate-confirmation-toast';
+import { FeeVerificationStatusLine } from '@/components/referrals/fee-verification-status';
+import type { FeeBreakdownVerificationStatus } from '@/lib/fee-verification';
 export type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
 export type AgentSelectValue = '' | 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT';
 
@@ -50,6 +52,8 @@ export interface DealRecord {
   feeBreakdownEmailSentAt?: string | null;
   feeBreakdownEmailSentBy?: string | null;
   feeBreakdownEmailSentByUser?: { id: string; name: string | null; email: string | null } | null;
+  feeBreakdownVerificationStatus?: FeeBreakdownVerificationStatus | null;
+  feeBreakdownVerifiedAt?: string | null;
 }
 
 export interface DealOverrides {
@@ -183,6 +187,8 @@ const normalizeDeals = (deals: DealRecord[] | null | undefined): DealRecord[] =>
         feeBreakdownEmailSentAt: deal.feeBreakdownEmailSentAt ?? null,
         feeBreakdownEmailSentBy: deal.feeBreakdownEmailSentBy ?? null,
         feeBreakdownEmailSentByUser: deal.feeBreakdownEmailSentByUser ?? null,
+        feeBreakdownVerificationStatus: deal.feeBreakdownVerificationStatus ?? null,
+        feeBreakdownVerifiedAt: deal.feeBreakdownVerifiedAt ?? null,
       };
     })
     .sort((a, b) => {
@@ -1722,6 +1728,12 @@ export function DealCard({
                         '⏰ Auto-sends 7 days before closing.'
                       ) : null}
                     </p>
+                    {deal.feeBreakdownEmailSentAt && (
+                      <FeeVerificationStatusLine
+                        status={deal.feeBreakdownVerificationStatus}
+                        verifiedAt={deal.feeBreakdownVerifiedAt}
+                      />
+                    )}
                     {deal.feeBreakdownEmailSentAt &&
                       deal.feeBreakdownEmailSentBy !== 'cron' && (
                         <p className="text-xs text-warning">

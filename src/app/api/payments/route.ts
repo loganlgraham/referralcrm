@@ -39,6 +39,7 @@ import { dealStatusToDisplay } from '@/lib/format-notification-content';
 import { createAdminNotifications } from '@/lib/server/notifications';
 import { mapDealStatusToReferralStatus } from '@/lib/server/referral-deal-status-mapper';
 import { type DealStatus } from '@/constants/deals';
+import { type FeeBreakdownVerificationStatus } from '@/lib/fee-verification';
 import {
   deriveReferralStatusFromSides,
   getAgentIdForSide,
@@ -106,6 +107,8 @@ type PaymentWithReferral = {
   agentDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
   feeBreakdownEmailSentAt?: Date | null;
   feeBreakdownEmailSentBy?: string | null;
+  feeBreakdownVerificationStatus?: FeeBreakdownVerificationStatus | null;
+  feeBreakdownVerifiedAt?: Date | null;
   closingDatePushbackCount?: number | null;
   closingDatePushbacks?: Array<{
     previousClosingDate?: Date | null;
@@ -721,6 +724,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         if (!s || s === 'cron' || s === 'system') return null;
         return sentByUserMap.get(s) ?? null;
       })(),
+      feeBreakdownVerificationStatus: payment.feeBreakdownVerificationStatus ?? null,
+      feeBreakdownVerifiedAt: payment.feeBreakdownVerifiedAt ? payment.feeBreakdownVerifiedAt.toISOString() : null,
       agent: agentId
         ? {
             id: agentId,

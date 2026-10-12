@@ -16,7 +16,9 @@ export interface Notification {
     | 'update_request_response'
     | 'nps_survey_completed'
     | 'checkin_no_response_24h'
-    | 'referral_created';
+    | 'referral_created'
+    | 'fee_breakdown_confirmed'
+    | 'fee_breakdown_disputed';
   referralId: string;
   borrowerName: string;
   actorRole: string;
@@ -197,6 +199,10 @@ export function NotificationDropdown({
         return '⚠️';
       case 'referral_created':
         return '🔔';
+      case 'fee_breakdown_confirmed':
+        return '💵';
+      case 'fee_breakdown_disputed':
+        return '🚩';
     }
 
     const exhaustiveCheck: never = type;

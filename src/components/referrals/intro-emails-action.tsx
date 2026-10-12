@@ -71,6 +71,44 @@ function CcRecipientFields({
   );
 }
 
+const describeContact = (contact: Contact | null): string | null => {
+  if (!contact) return null;
+  const name = contact.name?.trim();
+  const email = contact.email?.trim();
+  if (name && email) return `${name} (${email})`;
+  return name || email || null;
+};
+
+function RecipientToggle({
+  label,
+  detail,
+  checked,
+  onCheckedChange,
+  disabled = false,
+}: {
+  label: string;
+  detail: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <label className="flex items-start gap-2 text-sm text-foreground">
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onCheckedChange(event.target.checked)}
+        className="mt-0.5 h-4 w-4 rounded border-border-strong text-primary focus:ring-ring"
+      />
+      <span>
+        <span className="font-medium">{label}</span>
+        <span className="text-foreground-muted"> — {detail}</span>
+      </span>
+    </label>
+  );
+}
+
 const extractFirstName = (name?: string | null, fallback = ''): string => {
   if (typeof name !== 'string') return fallback;
   const trimmed = name.trim();
@@ -180,6 +218,8 @@ export function IntroEmailsAction({
   const [cleanedNotes, setCleanedNotes] = useState('');
   const [agentCcInputs, setAgentCcInputs] = useState<string[]>(['']);
   const [mcCcInputs, setMcCcInputs] = useState<string[]>(['']);
+  const [sendToAgent, setSendToAgent] = useState(true);
+  const [sendToMc, setSendToMc] = useState(true);
   const [showPreview, setShowPreview] = useState(false);
   const [cleaningNotes, setCleaningNotes] = useState(false);
   const [introEmailStatus, setIntroEmailStatus] = useState<{
@@ -188,6 +228,24 @@ export function IntroEmailsAction({
   } | null>(null);
 
   const busy = sendingIntroductions || cleaningNotes;
+  const agentSelected = showAgentCcField && sendToAgent;
+  const mcSelected = showMcCcField && sendToMc;
+  const hasAnyRecipientOption = showAgentCcField || showMcCcField;
+  const noRecipientSelected = hasAnyRecipientOption && !agentSelected && !mcSelected;
+  const agentRecipientDetail =
+    [buyingAgent, sellingAgent]
+      .map(describeContact)
+      .filter((value): value is string => Boolean(value))
+      .filter((value, index, all) => all.indexOf(value) === index)
+      .join(', ') || 'No agent assigned';
+  const mcRecipientDetail = describeContact(mcContact) ?? 'No mortgage consultant assigned';
+
+  const resetRecipientSelections = () => {
+    setAgentCcInputs(['']);
+    setMcCcInputs(['']);
+    setSendToAgent(true);
+    setSendToMc(true);
+  };
 
   const handlePreviewIntroductions = async () => {
     if (!introNotes.trim()) {
@@ -221,8 +279,12 @@ export function IntroEmailsAction({
   };
 
   const handleConfirmSend = async () => {
-    const agentCcRecipients = showAgentCcField ? normalizeCcInputs(agentCcInputs) : [];
-    const mcCcRecipients = showMcCcField ? normalizeCcInputs(mcCcInputs) : [];
+    if (noRecipientSelected) {
+      toast.error('Select at least one recipient.');
+      return;
+    }
+    const agentCcRecipients = agentSelected ? normalizeCcInputs(agentCcInputs) : [];
+    const mcCcRecipients = mcSelected ? normalizeCcInputs(mcCcInputs) : [];
     const invalidCc = [...agentCcRecipients, ...mcCcRecipients].find(
       (email) => !EMAIL_REGEX.test(email)
     );
@@ -237,7 +299,13 @@ export function IntroEmailsAction({
       const response = await fetch(`/api/referrals/${referral._id}/send-emails`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notes: cleanedNotes, agentCcRecipients, mcCcRecipients }),
+        body: JSON.stringify({
+          notes: cleanedNotes,
+          agentCcRecipients,
+          mcCcRecipients,
+          sendToAgent,
+          sendToMc,
+        }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -295,8 +363,7 @@ export function IntroEmailsAction({
       setIntroNotes('');
       setCleanedNotes('');
       setShowNoteField(false);
-      setAgentCcInputs(['']);
-      setMcCcInputs(['']);
+      resetRecipientSelections();
     } catch (error) {
       console.error('Failed to send intro emails', error);
       toast.error(error instanceof Error ? error.message : 'Unable to send intro emails right now.');
@@ -308,8 +375,7 @@ export function IntroEmailsAction({
   const handleCancelPreview = () => {
     setShowPreview(false);
     setCleanedNotes('');
-    setAgentCcInputs(['']);
-    setMcCcInputs(['']);
+    resetRecipientSelections();
   };
 
   const handleRecopyIntroEmail = async () => {
@@ -409,26 +475,59 @@ export function IntroEmailsAction({
                 <p className="text-sm text-foreground-muted">No notes will be included in the email.</p>
               </div>
             )}
-            {(showAgentCcField || showMcCcField) && (
+            {hasAnyRecipientOption && (
+              <div className={cn('mt-4 space-y-3', nestedPanelClasses)}>
+                <p className="text-xs font-medium text-foreground-subtle">Send to</p>
+                {showAgentCcField && (
+                  <RecipientToggle
+                    label="Agent"
+                    detail={agentRecipientDetail}
+                    checked={sendToAgent}
+                    onCheckedChange={setSendToAgent}
+                    disabled={sendingIntroductions}
+                  />
+                )}
+                {showMcCcField && (
+                  <RecipientToggle
+                    label="Mortgage consultant"
+                    detail={mcRecipientDetail}
+                    checked={sendToMc}
+                    onCheckedChange={setSendToMc}
+                    disabled={sendingIntroductions}
+                  />
+                )}
+                {showAgentCcField && !sendToAgent && cleanedNotes.trim() ? (
+                  <p className="text-xs text-foreground-muted">Notes are only included in the agent email.</p>
+                ) : null}
+                {noRecipientSelected ? (
+                  <p className="text-xs text-foreground-muted">Select at least one recipient to send.</p>
+                ) : null}
+              </div>
+            )}
+            {hasAnyRecipientOption && (
               <div className={cn('mt-4 space-y-4', nestedPanelClasses)}>
                 <p className="text-sm text-foreground-muted">
                   Copy other people on these emails. The referral coordinator is always copied.
                 </p>
                 {showAgentCcField && (
-                  <CcRecipientFields
-                    label="CC on the agent email (optional)"
-                    values={agentCcInputs}
-                    onValuesChange={setAgentCcInputs}
-                    disabled={sendingIntroductions}
-                  />
+                  <div className={cn(!sendToAgent && 'opacity-50')}>
+                    <CcRecipientFields
+                      label="CC on the agent email (optional)"
+                      values={agentCcInputs}
+                      onValuesChange={setAgentCcInputs}
+                      disabled={sendingIntroductions || !sendToAgent}
+                    />
+                  </div>
                 )}
                 {showMcCcField && (
-                  <CcRecipientFields
-                    label="CC on the mortgage consultant email (optional)"
-                    values={mcCcInputs}
-                    onValuesChange={setMcCcInputs}
-                    disabled={sendingIntroductions}
-                  />
+                  <div className={cn(!sendToMc && 'opacity-50')}>
+                    <CcRecipientFields
+                      label="CC on the mortgage consultant email (optional)"
+                      values={mcCcInputs}
+                      onValuesChange={setMcCcInputs}
+                      disabled={sendingIntroductions || !sendToMc}
+                    />
+                  </div>
                 )}
               </div>
             )}
@@ -436,7 +535,12 @@ export function IntroEmailsAction({
               <Button type="button" variant="secondary" onClick={handleCancelPreview}>
                 Cancel
               </Button>
-              <Button type="button" onClick={handleConfirmSend} loading={sendingIntroductions}>
+              <Button
+                type="button"
+                onClick={handleConfirmSend}
+                loading={sendingIntroductions}
+                disabled={noRecipientSelected}
+              >
                 {sendingIntroductions ? 'Sending…' : 'Confirm & Send'}
               </Button>
             </div>

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Types } from 'mongoose';
 import fs from 'fs';
 import path from 'path';
+import { randomBytes } from 'crypto';
+import { addDays } from 'date-fns';
 
 import { connectMongo } from '@/lib/mongoose';
 import { Payment } from '@/models/payment';
@@ -10,7 +12,9 @@ import { Agent } from '@/models/agent';
 import { getCurrentSession } from '@/lib/auth';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
 import { generateFeeBreakdownEmailHTML, generateFeeBreakdownSubject } from '@/lib/email-templates/fee-breakdown';
-import { buildReferralLink } from '@/lib/referral-links';
+import { buildReferralLink, getReferralAppBaseUrl } from '@/lib/referral-links';
+import { FEE_VERIFICATION_TTL_DAYS } from '@/lib/fee-verification';
+import { FeeBreakdownVerification } from '@/models/fee-breakdown-verification';
 import { buildCcList, getReferralNotificationRecipients } from '@/lib/server/cc-recipients';
 import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
@@ -164,6 +168,11 @@ export async function POST(
 
     // Get borrower name for subject line
     const borrowerName = referral.borrower?.name || 'Unknown';
+    const isFirstSend = !payment.feeBreakdownEmailSentAt;
+    const propertyAddress = payment.propertyAddress || referral.propertyAddress || 'Address not available';
+
+    const verificationToken = randomBytes(32).toString('hex');
+    const verifyBaseUrl = `${getReferralAppBaseUrl()}/verify-fee?token=${verificationToken}`;
 
     // Generate email content
     const { html, text } = generateFeeBreakdownEmailHTML({
@@ -173,7 +182,7 @@ export async function POST(
       },
       referral: {
         borrowerName,
-        propertyAddress: payment.propertyAddress || referral.propertyAddress || 'Address not available',
+        propertyAddress,
         propertyCity: payment.propertyCity || referral.propertyCity || null,
         propertyState: payment.propertyState || referral.propertyState || null,
         loanFileNumber: referral.loanFileNumber || null,
@@ -188,10 +197,14 @@ export async function POST(
         usedAfc: Boolean(payment.usedAfc),
       },
       platformUrl,
+      isFirstSend,
+      verification: {
+        confirmUrl: `${verifyBaseUrl}&action=confirm`,
+        reportUrl: `${verifyBaseUrl}&action=report`,
+      },
     });
 
-    // Generate subject line with borrower's last name
-    const subject = generateFeeBreakdownSubject(borrowerName);
+    const subject = generateFeeBreakdownSubject(borrowerName, { isFirstSend });
     const ccRecipients = buildCcList(
       getReferralNotificationRecipients(),
       additionalCcRecipients.filter((email): email is string => Boolean(email)),
@@ -270,7 +283,28 @@ export async function POST(
 
     let emailSent = false;
     let sendError: unknown = null;
+    let verificationId: Types.ObjectId | null = null;
     try {
+      const verification = await FeeBreakdownVerification.create({
+        token: verificationToken,
+        paymentId: payment._id,
+        referralId: referral._id,
+        agentId: agent._id,
+        recipientEmail: agentEmail,
+        recipientName: agent.name || null,
+        borrowerName,
+        propertyAddress,
+        snapshot: {
+          contractPriceCents: payment.contractPriceCents,
+          commissionBasisPoints: payment.commissionBasisPoints ?? null,
+          commissionFlatFeeCents: payment.commissionFlatFeeCents ?? null,
+          referralFeeBasisPoints: payment.referralFeeBasisPoints,
+          closingDate: payment.closingDate,
+        },
+        expiresAt: addDays(claimedAt, FEE_VERIFICATION_TTL_DAYS),
+      });
+      verificationId = verification._id as Types.ObjectId;
+
       emailSent = await sendTransactionalEmail({
         to: [agentEmail],
         cc: ccRecipients,
@@ -284,6 +318,11 @@ export async function POST(
     }
 
     if (!emailSent) {
+      if (verificationId) {
+        await FeeBreakdownVerification.deleteOne({ _id: verificationId }).catch((cleanupErr) => {
+          console.error('[Fee Breakdown] Failed to remove unsent verification token:', cleanupErr);
+        });
+      }
       // Roll back the cron claim so the next run can retry this payment.
       if (isCronRequest) {
         await Payment.updateOne(
@@ -300,12 +339,20 @@ export async function POST(
     }
 
     // Manual sends commit the timestamp only on delivery success.
-    if (!isCronRequest) {
-      await Payment.findByIdAndUpdate(paymentId, {
-        feeBreakdownEmailSentAt: claimedAt,
-        feeBreakdownEmailSentBy: actorId,
-      });
-    }
+    await Payment.findByIdAndUpdate(paymentId, {
+      ...(isCronRequest
+        ? {}
+        : { feeBreakdownEmailSentAt: claimedAt, feeBreakdownEmailSentBy: actorId }),
+      feeBreakdownVerificationStatus: 'pending',
+      feeBreakdownVerifiedAt: null,
+    });
+
+    await FeeBreakdownVerification.updateMany(
+      { paymentId: payment._id, _id: { $ne: verificationId }, status: { $ne: 'superseded' } },
+      { $set: { status: 'superseded' } }
+    ).catch((supersedeErr) => {
+      console.error('[Fee Breakdown] Failed to supersede older verification links:', supersedeErr);
+    });
 
     // Log activity
     try {

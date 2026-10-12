@@ -1142,6 +1142,10 @@ export async function getReferralById(id: string) {
           : null,
         feeBreakdownEmailSentBy: sentByStr,
         feeBreakdownEmailSentByUser: sentByUser,
+        feeBreakdownVerificationStatus: payment.feeBreakdownVerificationStatus ?? null,
+        feeBreakdownVerifiedAt: payment.feeBreakdownVerifiedAt
+          ? payment.feeBreakdownVerifiedAt.toISOString()
+          : null,
       };
       return serializedPayment;
     }),
