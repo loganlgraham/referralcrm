@@ -7,7 +7,6 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
-  useRef,
   useState
 } from 'react';
 import { useSWRConfig } from 'swr';
@@ -202,12 +201,8 @@ export function ReferralHeader({
   const [auditEntries, setAuditEntries] = useState<any[]>(Array.isArray(referral.audit) ? referral.audit : []);
   const [ahaBucket, setAhaBucket] = useState<AhaBucketValue>((referral.ahaBucket as AhaBucketValue) ?? '');
   const [savingBucket, setSavingBucket] = useState(false);
-  const onFinancialsChangeRef = useRef(onFinancialsChange);
-  onFinancialsChangeRef.current = onFinancialsChange;
-
-  // Only status + side pipeline labels: layout sync so local `status` matches `referral.status` before the
-  // useEffect below calls onFinancialsChange (avoids pushing stale status after parent updates from deal PATCH).
-  // Do not layout-sync money/address here — that caused maximum update depth with onFinancialsChange → setFinancials.
+  // Local copies only mirror props; never push them back up via onFinancialsChange from an effect —
+  // the parent rewrites `referral` from that snapshot, which ping-pongs with these sync effects.
   useLayoutEffect(() => {
     const nextStatus = normalizeReferralStatus(referral.status);
     if (nextStatus) {
@@ -274,43 +269,6 @@ export function ReferralHeader({
   useEffect(() => {
     setAhaBucket((referral.ahaBucket as AhaBucketValue) ?? '');
   }, [referral.ahaBucket]);
-
-  useEffect(() => {
-    const normalizedState = propertyState
-      ? propertyState
-      : referral.propertyState
-      ? String(referral.propertyState).toUpperCase()
-      : '';
-    onFinancialsChangeRef.current?.({
-      status,
-      preApprovalAmountCents: preApprovalAmountCents ?? 0,
-      contractPriceCents,
-      referralFeeDueCents: referralFeeDueCents ?? 0,
-      commissionBasisPoints,
-      referralFeeBasisPoints,
-      propertyAddress: propertyAddress ?? referral.propertyAddress ?? undefined,
-      propertyCity: propertyCity ?? referral.propertyCity ?? undefined,
-      propertyState: normalizedState || undefined,
-      propertyPostalCode: propertyPostalCode ?? referral.propertyPostalCode ?? undefined,
-      dealSide,
-    });
-  }, [
-    commissionBasisPoints,
-    contractPriceCents,
-    preApprovalAmountCents,
-    propertyAddress,
-    propertyCity,
-    propertyPostalCode,
-    propertyState,
-    dealSide,
-    referral.propertyAddress,
-    referral.propertyCity,
-    referral.propertyPostalCode,
-    referral.propertyState,
-    referralFeeBasisPoints,
-    referralFeeDueCents,
-    status,
-  ]);
 
   const allowDraftPreview = draftContract.hasUnsavedChanges && status === 'Under Contract';
   const normalizedReferralState = referral.propertyState

@@ -1,6 +1,7 @@
 'use client';
 
 import { type ReactNode, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { useSWRConfig } from 'swr';
 import { formatInTimeZone } from 'date-fns-tz';
@@ -451,8 +452,9 @@ export function IntroEmailsAction({
         </div>
       ) : null}
 
-      {showPreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      {showPreview && typeof document !== 'undefined'
+        ? createPortal(
+        <div className="fixed inset-0 z-50 m-0 flex items-center justify-center bg-black/50">
           <div className="mx-4 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-card border border-border bg-surface-raised p-6 shadow-card">
             <h3 className="font-display text-lg font-semibold tracking-[-0.02em] text-foreground">
               Preview Email Notes
@@ -545,8 +547,10 @@ export function IntroEmailsAction({
               </Button>
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+        document.body
+      )
+        : null}
     </div>
   );
 }

@@ -10,18 +10,18 @@ jest.mock('sonner', () => ({
 }));
 
 const baseProps = {
-  agentSideLabel: 'Buy-side agent',
+  otherAgentLabel: 'Sell-side agent',
   clientType: 'Buyer',
   createdAt: '2026-01-01T00:00:00.000Z'
 };
 
 describe('AgentContextRail contact', () => {
-  it('shows agent phone and copy controls for MC, agent, and client', () => {
+  it('shows phone and copy controls for the MC, the other-side agent, and the client', () => {
     render(
       <AgentContextRail
         {...baseProps}
         mc={{ name: 'Logan MC', email: 'mc@example.com', phone: '2302349342' }}
-        agent={{ name: 'Logan AHA', email: 'agent@example.com', phone: '5551234567' }}
+        otherAgent={{ name: 'Logan AHA', email: 'agent@example.com', phone: '5551234567' }}
         borrowerEmail="client@example.com"
         borrowerPhone="5559876543"
       />
@@ -32,19 +32,25 @@ describe('AgentContextRail contact', () => {
     expect(screen.getByText('555-987-6543')).toBeInTheDocument();
     expect(screen.getAllByLabelText('Copy email')).toHaveLength(3);
     expect(screen.getAllByLabelText('Copy phone')).toHaveLength(3);
-    expect(screen.getByRole('link', { name: 'Email' })).toHaveAttribute('href', 'mailto:mc@example.com');
-    expect(screen.getByRole('link', { name: 'Call' })).toHaveAttribute('href', 'tel:2302349342');
+    const emailLinks = screen.getAllByRole('link', { name: 'Email' });
+    expect(emailLinks.map((link) => link.getAttribute('href'))).toEqual([
+      'mailto:mc@example.com',
+      'mailto:agent@example.com'
+    ]);
+    const callLinks = screen.getAllByRole('link', { name: 'Call' });
+    expect(callLinks.map((link) => link.getAttribute('href'))).toEqual(['tel:2302349342', 'tel:5551234567']);
   });
 
-  it('hides missing agent phone and does not add Email or Call on the agent block', () => {
+  it('hides the phone and Call action when the other-side agent has no phone', () => {
     render(
-      <AgentContextRail {...baseProps} agent={{ name: 'Logan AHA', email: 'agent@example.com' }} />
+      <AgentContextRail {...baseProps} otherAgent={{ name: 'Logan AHA', email: 'agent@example.com' }} />
     );
 
+    expect(screen.getByText('Sell-side agent')).toBeInTheDocument();
     expect(screen.getByText('agent@example.com')).toBeInTheDocument();
     expect(screen.getByLabelText('Copy email')).toBeInTheDocument();
     expect(screen.queryByLabelText('Copy phone')).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Email' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Email' })).toHaveAttribute('href', 'mailto:agent@example.com');
     expect(screen.queryByRole('link', { name: 'Call' })).not.toBeInTheDocument();
   });
 });
