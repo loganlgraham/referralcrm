@@ -9,6 +9,7 @@ import { fetcher } from '@/utils/fetcher';
 import { SLA_TIME_ZONE } from '@/utils/sla-insights';
 import { shouldDefaultEmailMcForAgentNotes } from '@/utils/referral-email-defaults';
 import { Button, buttonClasses } from '@/components/ui/button';
+import { parseStatusActivityLabel } from '@/utils/status-activity';
 
 export interface AgentActivityNote {
   id: string;
@@ -60,9 +61,6 @@ const formatStamp = (value: string, withTime: boolean): string => {
   }
 };
 
-/** Status changes surface as `Status changed to X` on the shared activity feed. */
-const STATUS_CHANGE_PREFIX = /^status\s+(changed|moved|updated)\s+to\s+/i;
-
 export function AgentActivityCard({
   referralId,
   notes,
@@ -111,15 +109,15 @@ export function AgentActivityCard({
     }));
 
     for (const activity of timeline ?? []) {
-      const match = STATUS_CHANGE_PREFIX.exec(activity.content);
-      if (!match) {
+      const label = parseStatusActivityLabel(activity.content);
+      if (!label) {
         continue;
       }
       entries.push({
         id: `status-${activity._id}`,
         kind: 'status',
         body: 'Status moved to ',
-        emphasis: activity.content.slice(match[0].length).trim(),
+        emphasis: label,
         meta: `${activity.actorName?.trim() || activity.actor} · ${formatStamp(activity.createdAt, false)}`,
         at: new Date(activity.createdAt).getTime()
       });

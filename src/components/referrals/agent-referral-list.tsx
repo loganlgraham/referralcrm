@@ -117,6 +117,20 @@ export function AgentReferralList({ rows: initialRows, page, pageSize, total }: 
 
         if (!response.ok) {
           const payload = await response.json().catch(() => null);
+          const landedStatus = payload?.currentStatus;
+          if (payload?.error?.code === 'deal_unassigned' && typeof landedStatus === 'string') {
+            markRowUpdated(row._id, {
+              status: landedStatus as ReferralStatus,
+              statusChangedAt: new Date().toISOString(),
+              daysInStatus: 0,
+            });
+            toast.success(
+              typeof payload.error.message === 'string'
+                ? payload.error.message
+                : `${row.borrowerName} moved to ${getReferralStatusLabel(landedStatus as ReferralStatus)}.`
+            );
+            return true;
+          }
           const message =
             payload?.error?.message ??
             payload?.error?.status?.[0] ??

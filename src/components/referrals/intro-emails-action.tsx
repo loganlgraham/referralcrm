@@ -328,10 +328,10 @@ export function IntroEmailsAction({
       if (errors.length > 0) {
         summaryParts.push(`Failed for ${errors.join(', ')}`);
       }
-      if (agentCcRecipients.length > 0) {
+      if (agentCcRecipients.length > 0 && sent.includes('agent')) {
         summaryParts.push(`Copied on the agent email: ${agentCcRecipients.join(', ')}`);
       }
-      if (mcCcRecipients.length > 0) {
+      if (mcCcRecipients.length > 0 && sent.includes('mc')) {
         summaryParts.push(`Copied on the MC email: ${mcCcRecipients.join(', ')}`);
       }
 

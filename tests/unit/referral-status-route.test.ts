@@ -451,6 +451,50 @@ describe('Referral status route table-driven deal status sync', () => {
     expect(referralDoc.save).toHaveBeenCalled();
   });
 
+  it('keeps the other side active when an unassigned deal only loses one side', async () => {
+    const referralDoc = makeReferralDoc();
+    referralDoc.clientType = 'Both';
+    referralDoc.sellStatus = 'Active Lead';
+    referralDoc.buySideAgent = { _id: 'agent-db-1' };
+    mockedReferralFindById.mockReturnValue(referralDoc);
+
+    const unassignedDeal = {
+      ...makeLatestDealDoc(),
+      usedAssignedAgent: false,
+      agentAttribution: 'OUTSIDE_AGENT',
+    };
+
+    mockedPaymentFindOne.mockImplementation((query: any) => {
+      const responseForAwait =
+        Array.isArray(query?.$or) && query.$or.length > 0 ? unassignedDeal : null;
+      return {
+        sort: jest.fn(() => {
+          const afterSort: Record<string, unknown> = {
+            select: jest.fn(() => ({
+              lean: jest.fn(() => Promise.resolve(null)),
+            })),
+            lean: jest.fn(() => Promise.resolve(null)),
+          };
+          afterSort.then = (onFulfilled: (v: unknown) => unknown) =>
+            Promise.resolve(responseForAwait).then(onFulfilled);
+          afterSort.catch = (onRejected: (e: unknown) => unknown) =>
+            Promise.resolve(responseForAwait).catch(onRejected);
+          return afterSort;
+        }),
+      };
+    });
+
+    const response: any = await postHandler(makeRequest({ status: 'Closed', source: 'referral_table' }), {
+      params: { id: 'ref-1' },
+    });
+
+    expect(response.status).toBe(409);
+    expect(response.body.currentStatus).toBe('Lost');
+    expect(referralDoc.buyStatus).toBe('Lost');
+    expect(referralDoc.sellStatus).toBe('Active Lead');
+    expect(referralDoc.status).toBe('Active Lead');
+  });
+
   it('notifies admins when an agent persists a referral status change', async () => {
     const referralDoc = makeReferralDoc();
     referralDoc.clientType = 'Buyer';

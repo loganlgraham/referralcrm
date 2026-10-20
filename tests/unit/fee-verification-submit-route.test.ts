@@ -246,6 +246,36 @@ describe('POST /api/fee-verification/submit', () => {
     expect(mockedPaymentUpdate).not.toHaveBeenCalled();
   });
 
+  it('lets someone who already confirmed flag a number that looks off', async () => {
+    mockFindOne(makeVerification({ status: 'confirmed' }));
+
+    const response = await postHandler(
+      makeRequest({
+        token: 't1',
+        action: 'report',
+        corrections: [{ field: 'referralFee', correctValue: '2%' }],
+      })
+    );
+
+    expect(response.status).toBe(200);
+    expect(mockedVerificationUpdate).toHaveBeenCalledWith(
+      { _id: 'ver-1', status: { $in: ['pending', 'confirmed'] } },
+      expect.objectContaining({
+        $set: expect.objectContaining({ status: 'disputed' }),
+      })
+    );
+  });
+
+  it('still succeeds when the admin notification fails after the answer is saved', async () => {
+    mockFindOne(makeVerification());
+    mockedCreateAdminNotifications.mockRejectedValue(new Error('notification down'));
+
+    const response = await postHandler(makeRequest({ token: 't1', action: 'confirm' }));
+
+    expect(response.status).toBe(200);
+    expect(mockedPaymentUpdate).toHaveBeenCalled();
+  });
+
   it('returns 404 for unknown tokens', async () => {
     mockFindOne(null);
 

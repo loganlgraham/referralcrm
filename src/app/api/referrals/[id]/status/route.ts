@@ -571,12 +571,17 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       } else {
         referral.buyStatus = 'Lost';
       }
-      if (referral.status !== 'Lost') {
+      const nextAggregate = deriveReferralStatusFromSides(
+        referral.buyStatus,
+        referral.sellStatus,
+        referral.clientType ?? null
+      );
+      if (referral.status !== nextAggregate) {
         const auditEntry: Record<string, unknown> = {
           actorRole: session.user.role,
           field: 'status',
           previousValue: referral.status,
-          newValue: 'Lost',
+          newValue: nextAggregate,
           timestamp: now,
         };
         if (actorId) {
@@ -584,7 +589,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         }
         referral.audit = referral.audit || [];
         referral.audit.push(auditEntry as any);
-        referral.status = 'Lost';
+        referral.status = nextAggregate;
         referral.statusLastUpdated = now;
       }
       shouldPersistReferralStatus = true;
@@ -874,9 +879,15 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     );
   }
 
+  const sideStatus =
+    requestSide === 'sell'
+      ? (referral.sellStatus as ReferralStatus | undefined)
+      : (referral.buyStatus as ReferralStatus | undefined);
+
   return NextResponse.json({
     id: referral._id.toString(),
     status: shouldPersistReferralStatus ? referral.status : previousStatus,
+    sideStatus: sideStatus ?? (shouldPersistReferralStatus ? referral.status : previousStatus),
     contractDetails:
       parsed.data.status === 'Under Contract'
         ? {

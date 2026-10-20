@@ -67,6 +67,17 @@ export const getReferralNotificationRecipients = (): string[] => {
 };
 
 /**
+ * Extra addresses become the To line only when an admin asked to email
+ * themselves and that admin has no address of their own. Agents and MCs
+ * must not be able to turn a CC list into the recipients.
+ */
+export const canPromoteNoteCopy = (
+  role: string,
+  onlyAdminTarget: boolean,
+  recipientCount: number
+): boolean => role === 'admin' && onlyAdminTarget && recipientCount === 0;
+
+/**
  * Splits extra note-email addresses into CC vs To.
  * Addresses already on the To line are dropped. When the note has no To
  * recipients and the caller asks to promote, the extras become To instead.

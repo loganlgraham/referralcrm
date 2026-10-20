@@ -649,17 +649,28 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
         typeof payload?.statusLastUpdated === 'string' ? payload.statusLastUpdated : new Date().toISOString();
       const daysInStatus = typeof payload?.daysInStatus === 'number' ? payload.daysInStatus : 0;
 
-      setFinancials((previous) => (previous.status === next ? previous : { ...previous, status: next }));
-      setReferral((previous) => ({ ...previous, status: next, statusLastUpdated, daysInStatus }));
+      const aggregate =
+        typeof payload?.status === 'string' ? (payload.status as ReferralStatus) : next;
+      setFinancials((previous) =>
+        previous.status === aggregate ? previous : { ...previous, status: aggregate }
+      );
+      setReferral((previous) => ({
+        ...previous,
+        status: aggregate,
+        buyStatus: viewerSide === 'buy' ? next : previous.buyStatus,
+        sellStatus: viewerSide === 'sell' ? next : previous.sellStatus,
+        statusLastUpdated,
+        daysInStatus,
+      }));
       void mutate(activityFeedKey);
     },
-    [activityFeedKey, mutate]
+    [activityFeedKey, mutate, viewerSide]
   );
 
   /** Adding a deal is the same flow as picking Under Contract: collect the deal, then move the status. */
   const handleAgentAddDeal = useCallback(async () => {
     const saved = await collectUnderContractDeal({
-      defaultSide: primarySide === 'sell' ? 'sell' : 'buy',
+      defaultSide: viewerSide === 'sell' ? 'sell' : 'buy',
       isAgentOrigin,
       onSubmit: (result) => submitUnderContractDeal(referralId, result, 'referral_detail')
     });
@@ -669,7 +680,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     handleAgentStatusChanged('Under Contract');
     router.refresh();
     toast.success('Deal saved and referral moved to Under Contract');
-  }, [handleAgentStatusChanged, isAgentOrigin, primarySide, referralId, router]);
+  }, [handleAgentStatusChanged, isAgentOrigin, referralId, router, viewerSide]);
 
   const handleAgentDealStage = useCallback(
     async (
@@ -1475,10 +1486,14 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     () => getLatestDealReferralStatuses(referralDeals),
     [referralDeals]
   );
+  const viewerSideStatus: ReferralStatus =
+    (viewerSide === 'sell' ? referral.sellStatus : referral.buyStatus) ?? financials.status;
   const effectiveHeaderStatus: ReferralStatus =
     viewerRole === 'agent' && hiddenOutsideAgentCount > 0 && visibleReferralDeals.length === 0
       ? 'Lost'
-      : financials.status;
+      : viewerRole === 'agent'
+        ? viewerSideStatus
+        : financials.status;
   const headerReferral = {
     ...referral,
     status: effectiveHeaderStatus,
@@ -1542,10 +1557,11 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
                 <div className="mt-3.5">
                   <StatusChanger
                     referralId={referralId}
-                    status={financials.status}
+                    status={viewerSideStatus}
                     statuses={REFERRAL_STATUSES}
                     isAgentOrigin={isAgentOrigin}
-                    side={primarySide}
+                    side={viewerSide}
+                    preferSideStatus
                     mode="chips"
                     promptMode="toast"
                     borrowerName={referral.borrower.name}

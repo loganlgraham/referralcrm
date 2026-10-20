@@ -29,6 +29,29 @@ export function hasFeeBreakdownFinancialData<
   );
 }
 
+export type FeeVerificationLandingView = 'review' | 'report' | 'confirmed' | 'reported' | 'invalid';
+
+/** Where a fee link should open, including links that were already answered. */
+export function feeVerificationLandingView(
+  status: FeeVerificationStatus,
+  action: string | null
+): FeeVerificationLandingView {
+  switch (status) {
+    case 'confirmed':
+      return 'confirmed';
+    case 'disputed':
+      return 'reported';
+    case 'superseded':
+      return 'invalid';
+    case 'pending':
+      return action === 'report' ? 'report' : 'review';
+    default: {
+      const exhaustive: never = status;
+      return exhaustive;
+    }
+  }
+}
+
 export function feeVerificationFieldLabel(field: FeeVerificationField): string {
   switch (field) {
     case 'contractPrice':

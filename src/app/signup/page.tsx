@@ -3,7 +3,7 @@
 export const dynamic = 'force-dynamic';
 
 import Link from 'next/link';
-import { FormEvent, Suspense, useMemo, useState } from 'react';
+import { FormEvent, Suspense, useEffect, useMemo, useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
 import { AuthBrandLockup } from '@/components/brand/AuthBrandLockup';
@@ -72,6 +72,13 @@ function SignupPageContent() {
   const roleParam = searchParams.get('role');
   const linkedRole = roleOptions.find((option) => option.value === roleParam)?.value;
   const activeRole = linkedRole ?? role;
+
+  useEffect(() => {
+    const emailParam = searchParams.get('email');
+    if (emailParam) {
+      setEmail((previous) => (previous ? previous : emailParam));
+    }
+  }, [searchParams]);
 
   const callbackUrl = useMemo(() => {
     if (activeRole === 'agent') {

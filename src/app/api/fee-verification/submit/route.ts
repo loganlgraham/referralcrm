@@ -64,7 +64,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       { status: 409 }
     );
   }
-  if (verification.status !== 'pending') {
+  const canReportAfterConfirm = verification.status === 'confirmed' && input.action === 'report';
+  if (verification.status !== 'pending' && !canReportAfterConfirm) {
     return NextResponse.json(
       { error: 'This fee breakdown has already been reviewed.' },
       { status: 409 }
@@ -86,7 +87,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const nextStatus = input.action === 'confirm' ? 'confirmed' : 'disputed';
 
   const verificationUpdate = await FeeBreakdownVerification.updateOne(
-    { _id: verification._id, status: 'pending' },
+    {
+      _id: verification._id,
+      status: canReportAfterConfirm ? { $in: ['pending', 'confirmed'] } : 'pending',
+    },
     {
       $set: {
         status: nextStatus,
@@ -131,17 +135,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     console.error('[Fee Verification] Failed to log activity:', activityError);
   }
 
-  await createAdminNotifications({
-    type: nextStatus === 'confirmed' ? 'fee_breakdown_confirmed' : 'fee_breakdown_disputed',
-    referralId: verification.referralId.toString(),
-    borrowerName,
-    actorRole: 'agent',
-    actorName: agentName,
-    content:
-      nextStatus === 'confirmed'
-        ? `${agentName} confirmed the fee breakdown numbers for ${borrowerName}.`
-        : `${agentName} challenged the fee breakdown numbers for ${borrowerName}. Review the deal.`,
-  });
+  try {
+    await createAdminNotifications({
+      type: nextStatus === 'confirmed' ? 'fee_breakdown_confirmed' : 'fee_breakdown_disputed',
+      referralId: verification.referralId.toString(),
+      borrowerName,
+      actorRole: 'agent',
+      actorName: agentName,
+      content:
+        nextStatus === 'confirmed'
+          ? `${agentName} confirmed the fee breakdown numbers for ${borrowerName}.`
+          : `${agentName} challenged the fee breakdown numbers for ${borrowerName}. Review the deal.`,
+    });
+  } catch (notificationError) {
+    console.error('[Fee Verification] Failed to notify admins:', notificationError);
+  }
 
   if (nextStatus === 'disputed' && isTransactionalEmailConfigured()) {
     try {

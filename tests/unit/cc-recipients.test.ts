@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from '@jest/globals';
 import {
   buildCcList,
+  canPromoteNoteCopy,
   getReferralNotificationRecipients,
   parseCcRecipients,
   partitionNoteCopy,
@@ -95,6 +96,19 @@ describe('partitionNoteCopy', () => {
       cc: ['admin@example.com'],
       promotedTo: [],
     });
+  });
+});
+
+describe('canPromoteNoteCopy', () => {
+  it('lets an admin with no recipients promote a lone admin target', () => {
+    expect(canPromoteNoteCopy('admin', true, 0)).toBe(true);
+  });
+
+  it('does not promote CC into To for agents, MCs, or when someone is already addressed', () => {
+    expect(canPromoteNoteCopy('agent', true, 0)).toBe(false);
+    expect(canPromoteNoteCopy('mc', true, 0)).toBe(false);
+    expect(canPromoteNoteCopy('admin', false, 0)).toBe(false);
+    expect(canPromoteNoteCopy('admin', true, 1)).toBe(false);
   });
 });
 

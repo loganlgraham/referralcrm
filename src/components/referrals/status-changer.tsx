@@ -51,6 +51,11 @@ interface Props {
   showStatusControl?: boolean;
   showPreApproval?: boolean;
   preApprovalAmountCents?: number;
+  /**
+   * When set, the control follows `sideStatus` from the API so a two-sided
+   * referral keeps showing this viewer's side instead of the combined status.
+   */
+  preferSideStatus?: boolean;
   onStatusChanged?: (status: ReferralStatus, payload?: Record<string, unknown>) => void;
   onPreApprovalSaved?: (details: { preApprovalAmountCents: number; referralFeeDueCents: number }) => void;
   onUnderContractIntentChange?: (isPreparing: boolean) => void;
@@ -84,6 +89,7 @@ export function StatusChanger({
   showStatusControl = true,
   showPreApproval = true,
   preApprovalAmountCents,
+  preferSideStatus = false,
   onStatusChanged,
   onPreApprovalSaved,
   onUnderContractIntentChange,
@@ -148,7 +154,8 @@ export function StatusChanger({
       }
 
       const body = (await res.json()) as Record<string, unknown>;
-      const resolvedStatus = (body.status as ReferralStatus | undefined) ?? nextStatus;
+      const reportedStatus = preferSideStatus ? body.sideStatus : body.status;
+      const resolvedStatus = (reportedStatus as ReferralStatus | undefined) ?? (body.status as ReferralStatus | undefined) ?? nextStatus;
       setCurrentStatus(resolvedStatus);
       setPersistedStatus(resolvedStatus);
       if (resolvedStatus !== 'Lost') {

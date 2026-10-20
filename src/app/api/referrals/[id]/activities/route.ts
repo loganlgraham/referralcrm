@@ -110,9 +110,6 @@ export async function GET(_: NextRequest, { params }: Params): Promise<NextRespo
   if (!session) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
-  if (session.user.role !== 'admin') {
-    return new NextResponse('Forbidden', { status: 403 });
-  }
   await connectMongo();
   const referral = await Referral.findById(params.id)
     .select('assignedAgent buySideAgent sellSideAgent lender notes org deletedAt')
@@ -137,7 +134,13 @@ export async function GET(_: NextRequest, { params }: Params): Promise<NextRespo
   if (!canViewReferral(session, accessScope)) {
     return new NextResponse('Forbidden', { status: 403 });
   }
-  const activities = await Activity.find({ referralId: params.id })
+  // The full timeline (notes, emails, calls) stays admin-only. Other roles who
+  // can open the referral only receive status moves for their own activity card.
+  const activityFilter =
+    session.user.role === 'admin'
+      ? { referralId: params.id }
+      : { referralId: params.id, channel: 'status' as const };
+  const activities = await Activity.find(activityFilter)
     .sort({ createdAt: -1 })
     .lean<LeanActivity[]>(); // array of LeanActivity
 

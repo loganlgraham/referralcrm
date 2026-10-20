@@ -11,7 +11,7 @@ import { logReferralActivity } from '@/lib/server/activities';
 import { buildReferralLink, getReferralAppBaseUrl } from '@/lib/referral-links';
 import { createAdminNotifications } from '@/lib/server/notifications';
 import { maybeNotifyAdminsOnUpdateRequestResponse } from '@/lib/server/update-request-response';
-import { partitionNoteCopy } from '@/lib/server/cc-recipients';
+import { canPromoteNoteCopy, partitionNoteCopy } from '@/lib/server/cc-recipients';
 
 type DeliveryFailureReason = 'missing_configuration' | 'no_recipients' | 'unknown';
 
@@ -128,7 +128,11 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   const noteCopy = partitionNoteCopy({
     toEmails: recipients.map((recipient) => recipient.email),
     ccInput: parsed.data.ccEmails ?? [],
-    promoteWhenNoRecipients: onlyAdminTarget && recipients.length === 0,
+    promoteWhenNoRecipients: canPromoteNoteCopy(
+      session.user.role,
+      onlyAdminTarget,
+      recipients.length
+    ),
   });
 
   if (noteCopy.promotedTo.length > 0) {

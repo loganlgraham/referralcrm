@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import {
   FEE_VERIFICATION_FIELDS,
   feeVerificationFieldLabel,
+  feeVerificationLandingView,
   type FeeVerificationAmounts,
   type FeeVerificationField,
   type FeeVerificationStatus,
@@ -145,7 +146,13 @@ function VerifyFeeContent() {
           return;
         }
         setDetails(data as VerificationDetails);
-        setView(initialAction === 'report' ? 'report' : 'review');
+        const landing = feeVerificationLandingView(data.status, initialAction);
+        if (!landing || landing === 'invalid') {
+          setError('A newer fee breakdown was emailed for this deal. Please use the links in the most recent email.');
+          setView('invalid');
+          return;
+        }
+        setView(landing);
       })
       .catch(() => {
         setError('We could not load this link. Please try again.');

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getCurrentSession } from '@/lib/auth';
+import { canViewReferral } from '@/lib/rbac';
 import { connectMongo } from '@/lib/mongoose';
 import { Referral } from '@/models/referral';
 import { logReferralActivity } from '@/lib/server/activities';
@@ -246,13 +247,25 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   await connectMongo();
   const referral = await Referral.findOne({ _id: params.id, deletedAt: null })
-    .populate('assignedAgent', 'name email phone ahaDesignation')
-    .populate('buySideAgent', 'name email phone ahaDesignation')
-    .populate('sellSideAgent', 'name email phone ahaDesignation')
-    .populate('lender', 'name email phone');
+    .populate('assignedAgent', 'userId name email phone ahaDesignation')
+    .populate('buySideAgent', 'userId name email phone ahaDesignation')
+    .populate('sellSideAgent', 'userId name email phone ahaDesignation')
+    .populate('lender', 'userId name email phone');
 
   if (!referral) {
     return new NextResponse('Not found', { status: 404 });
+  }
+
+  if (
+    !canViewReferral(session, {
+      assignedAgent: referral.assignedAgent,
+      buySideAgent: referral.buySideAgent,
+      sellSideAgent: referral.sellSideAgent,
+      lender: referral.lender,
+      org: referral.org,
+    })
+  ) {
+    return new NextResponse('Forbidden', { status: 403 });
   }
 
   // Check if any attached agent has AGIT designation - skip all automated emails
