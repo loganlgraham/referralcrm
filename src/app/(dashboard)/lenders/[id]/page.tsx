@@ -30,10 +30,10 @@ export default async function LenderDetailPage({ params }: LenderDetailPageProps
   const isAdmin = session.user.role === 'admin';
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <LenderOverviewCard lender={lender} isAdmin={isAdmin} />
-      <div className="rounded-md bg-surface-raised p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-foreground">Deals</h2>
+      <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+        <h2 className="text-eyebrow text-foreground-subtle">Deals</h2>
         <div className="mt-4">
           <PersonDealsTable deals={lender.deals} context="mc" />
         </div>

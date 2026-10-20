@@ -2,19 +2,52 @@
 
 import { ChangeEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Pencil } from 'lucide-react';
-import { normalizeReferralStatus } from '@/constants/referrals';
+import {
+  getLostReasonOptions,
+  getReferralStatusLabel,
+  LOST_BEFORE_CONTACT_HINT,
+  normalizeReferralStatus,
+  type LostReason
+} from '@/constants/referrals';
 import { ReferralStatus } from '@/models/referral';
 import { toast } from 'sonner';
-import { TERMINATED_REASON_OPTIONS, type TerminatedReason } from '@/constants/deals';
+import { type TerminatedReason } from '@/constants/deals';
+import { cn } from '@/lib/cn';
+import { Button, buttonClasses } from '@/components/ui/button';
+import { selectFieldClasses } from '@/components/ui/field-group';
+import { confirmLostReason } from '@/components/referrals/lost-reason-confirmation-toast';
+import { confirmReferralTermination } from '@/components/referrals/terminate-confirmation-toast';
+import { StageTrack, isOutcomeStatus } from '@/components/referrals/stage-track';
+import { PreApprovalField } from '@/components/referrals/pre-approval-field';
+import {
+  collectUnderContractDeal,
+  submitUnderContractDeal
+} from '@/components/referrals/deal-details-toast';
 
 interface Props {
   referralId: string;
   status: ReferralStatus;
   statuses: readonly ReferralStatus[];
   includeTerminalStatuses?: boolean;
+  /** Agent-created (agent→AFC) referrals use a narrower lost-reason list. */
+  isAgentOrigin?: boolean;
   side?: 'buy' | 'sell';
   statusLabel?: string;
+  /**
+   * `chips` renders the pipeline as a single row of tappable pills instead of a `<select>`;
+   * `track` renders it as a segmented progress bar with Lost/Terminated in a close-out menu.
+   */
+  mode?: 'select' | 'chips' | 'track';
+  /** Shown under the current step in `track` mode. */
+  daysInStatus?: number | null;
+  /** Thinner `track` with no per-step labels, for stacking buy and sell tracks. */
+  compactTrack?: boolean;
+  /** `toast` collects reasons in an overlay card instead of an inline panel under the control. */
+  promptMode?: 'inline' | 'toast';
+  /** Names the client in the toast prompts. */
+  borrowerName?: string;
+  /** `row` places the status control and pre-approval side by side on wider screens. */
+  layout?: 'stack' | 'row';
   showStatusControl?: boolean;
   showPreApproval?: boolean;
   preApprovalAmountCents?: number;
@@ -23,74 +56,31 @@ interface Props {
   onUnderContractIntentChange?: (isPreparing: boolean) => void;
 }
 
-const centsToCurrencyInput = (value?: number | null) => {
-  if (!value) {
-    return '';
-  }
-  const amount = value / 100;
-  return Number.isInteger(amount) ? amount.toString() : amount.toFixed(2);
-};
-
-const sanitizeCurrencyInput = (value: string) => {
-  if (!value) {
-    return '';
-  }
-  const stripped = value.replace(/[^0-9.]/g, '');
-  if (!stripped) {
-    return '';
-  }
-
-  const [integerPart = '', ...decimalParts] = stripped.split('.');
-  const decimalPart = decimalParts.join('').slice(0, 2);
-  const normalizedInteger = integerPart.replace(/^0+(?=\d)/, '');
-  const hasDecimal = decimalParts.length > 0;
-  const safeInteger = normalizedInteger || (integerPart.length > 0 ? '0' : '');
-
-  if (!hasDecimal) {
-    return safeInteger;
-  }
-
-  const integerPortion = safeInteger || '0';
-  return decimalPart.length > 0 ? `${integerPortion}.${decimalPart}` : `${integerPortion}.`;
-};
-
-const formatCurrencyInputDisplay = (value: string) => {
-  if (!value) {
-    return '';
-  }
-
-  const [integerPart = '', decimalPart] = value.split('.');
-  const hasDecimal = decimalPart !== undefined;
-  const sanitizedInteger = integerPart.replace(/[^0-9]/g, '');
-  const integerValue = sanitizedInteger ? Number(sanitizedInteger) : 0;
-  const formattedInteger = sanitizedInteger
-    ? integerValue.toLocaleString('en-US')
-    : hasDecimal
-    ? '0'
-    : '';
-
-  if (!hasDecimal) {
-    return formattedInteger;
-  }
-
-  if (decimalPart === undefined) {
-    return formattedInteger;
-  }
-
-  if (decimalPart.length === 0) {
-    return `${formattedInteger}.`;
-  }
-
-  return `${formattedInteger}.${decimalPart}`;
-};
+/** Fields the prompts collect on top of the status itself. */
+interface StatusSubmitExtras {
+  terminatedReason?: TerminatedReason | null;
+  lostReason?: LostReason | null;
+  terminateDeal?: boolean;
+  closingDate?: string;
+  usedAfc?: boolean;
+  sendClosedEmails?: boolean;
+  sendAgentNpsEmail?: boolean;
+}
 
 export function StatusChanger({
   referralId,
   status,
   statuses,
   includeTerminalStatuses = false,
+  isAgentOrigin = false,
   side,
   statusLabel = 'Pipeline Status',
+  mode = 'select',
+  daysInStatus,
+  compactTrack = false,
+  promptMode = 'inline',
+  borrowerName = 'this referral',
+  layout = 'stack',
   showStatusControl = true,
   showPreApproval = true,
   preApprovalAmountCents,
@@ -103,12 +93,10 @@ export function StatusChanger({
   const [currentStatus, setCurrentStatus] = useState<ReferralStatus>(normalizedStatus);
   const [persistedStatus, setPersistedStatus] = useState<ReferralStatus>(normalizedStatus);
   const [loading, setLoading] = useState(false);
-  const [preApproval, setPreApproval] = useState(() => centsToCurrencyInput(preApprovalAmountCents));
-  const [preApprovalDirty, setPreApprovalDirty] = useState(false);
-  const [preApprovalSaving, setPreApprovalSaving] = useState(false);
-  const [editingPreApproval, setEditingPreApproval] = useState(false);
-  const [pendingTerminatedSelection, setPendingTerminatedSelection] = useState(false);
-  const [terminatedReason, setTerminatedReason] = useState<TerminatedReason | ''>('');
+  const [pendingLostSelection, setPendingLostSelection] = useState(false);
+  const [lostReason, setLostReason] = useState<LostReason | ''>('');
+  /** Keeps the chips inert while a prompt toast is open so prompts cannot stack. */
+  const [prompting, setPrompting] = useState(false);
 
   useEffect(() => {
     setCurrentStatus(normalizedStatus);
@@ -118,11 +106,6 @@ export function StatusChanger({
   useEffect(() => {
     onUnderContractIntentChange?.(currentStatus === 'Under Contract');
   }, [currentStatus, onUnderContractIntentChange]);
-
-  useEffect(() => {
-    setPreApproval(centsToCurrencyInput(preApprovalAmountCents));
-    setPreApprovalDirty(false);
-  }, [preApprovalAmountCents]);
 
   const pipelineOptions = useMemo(() => {
     const filtered = includeTerminalStatuses
@@ -135,11 +118,14 @@ export function StatusChanger({
     return filtered;
   }, [includeTerminalStatuses, statuses, currentStatus]);
 
+  const lostReasonOptions = useMemo(() => getLostReasonOptions({ isAgentOrigin }), [isAgentOrigin]);
+
   const submitStatus = async (
     nextStatus: ReferralStatus,
     previousStatus: ReferralStatus,
-    terminatedReason?: TerminatedReason | null
+    extra: StatusSubmitExtras = {}
   ) => {
+    const { terminatedReason, lostReason, ...passthrough } = extra;
     setLoading(true);
     try {
       const res = await fetch(`/api/referrals/${referralId}/status`, {
@@ -149,7 +135,11 @@ export function StatusChanger({
           status: nextStatus,
           source: 'referral_detail',
           side,
-          terminatedReason: nextStatus === 'Terminated' ? terminatedReason ?? null : null,
+          // A termination can resolve to Active Lead or Lost, so the reason is
+          // sent whenever the prompt collected one rather than keyed off status.
+          terminatedReason: terminatedReason ?? null,
+          lostReason: nextStatus === 'Lost' ? lostReason ?? null : null,
+          ...passthrough,
         }),
       });
 
@@ -161,10 +151,10 @@ export function StatusChanger({
       const resolvedStatus = (body.status as ReferralStatus | undefined) ?? nextStatus;
       setCurrentStatus(resolvedStatus);
       setPersistedStatus(resolvedStatus);
-      if (resolvedStatus !== 'Terminated') {
-        setTerminatedReason('');
+      if (resolvedStatus !== 'Lost') {
+        setLostReason('');
       }
-      setPendingTerminatedSelection(false);
+      setPendingLostSelection(false);
       router.refresh();
 
       onStatusChanged?.(resolvedStatus, { ...body, previousStatus });
@@ -178,132 +168,184 @@ export function StatusChanger({
     }
   };
 
-  const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
-    const nextStatus = event.target.value as ReferralStatus;
+  /** Statuses needing more information collect it first instead of writing straight through. */
+  const selectStatus = async (nextStatus: ReferralStatus) => {
+    // Inline mode reveals the deal form under the control instead, so only the
+    // toast surfaces collect the deal before moving the status.
+    if (nextStatus === 'Under Contract' && promptMode === 'toast') {
+      setPrompting(true);
+      const saved = await collectUnderContractDeal({
+        defaultSide: side === 'sell' ? 'sell' : 'buy',
+        isAgentOrigin,
+        onSubmit: (result) => submitUnderContractDeal(referralId, result, 'referral_detail'),
+      });
+      setPrompting(false);
+      if (!saved) {
+        return;
+      }
+      // `submitUnderContractDeal` already moved the status, so skip `submitStatus`.
+      setCurrentStatus('Under Contract');
+      setPersistedStatus('Under Contract');
+      onUnderContractIntentChange?.(true);
+      onStatusChanged?.('Under Contract', { previousStatus: persistedStatus });
+      router.refresh();
+      toast.success('Deal saved and referral moved to Under Contract');
+      return;
+    }
+
     if (nextStatus === 'Terminated') {
-      setCurrentStatus(nextStatus);
-      setPendingTerminatedSelection(true);
+      setPrompting(true);
+      const confirmation = await confirmReferralTermination({ borrowerName, isAgentOrigin });
+      setPrompting(false);
+      if (!confirmation.confirmed || !confirmation.resolvedStatus || !confirmation.terminatedReason) {
+        return;
+      }
+      await submitStatus(confirmation.resolvedStatus, persistedStatus, {
+        terminatedReason: confirmation.terminatedReason,
+        lostReason: confirmation.lostReason,
+        terminateDeal: true,
+      });
+      return;
+    }
+
+    if (nextStatus === 'Lost') {
+      if (promptMode === 'inline') {
+        setCurrentStatus(nextStatus);
+        setPendingLostSelection(true);
+        return;
+      }
+
+      setPrompting(true);
+      const confirmation = await confirmLostReason({ borrowerName, isAgentOrigin });
+      setPrompting(false);
+      if (!confirmation.confirmed || !confirmation.lostReason) {
+        return;
+      }
+      await submitStatus('Lost', persistedStatus, { lostReason: confirmation.lostReason });
       return;
     }
 
     setCurrentStatus(nextStatus);
     onUnderContractIntentChange?.(nextStatus === 'Under Contract');
-    void submitStatus(nextStatus, persistedStatus, null);
+    await submitStatus(nextStatus, persistedStatus);
   };
 
-  const handlePreApprovalChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const sanitized = sanitizeCurrencyInput(event.target.value);
-    setPreApproval(sanitized);
-    setPreApprovalDirty(true);
+  const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    void selectStatus(event.target.value as ReferralStatus);
   };
 
-  const handlePreApprovalSave = async () => {
-    const amount = Number.parseFloat(preApproval);
-    if (Number.isNaN(amount) || amount < 0) {
-      toast.error('Enter a valid pre-approval amount.');
-      return;
-    }
-    setPreApprovalSaving(true);
-    try {
-      const response = await fetch(`/api/referrals/${referralId}/pre-approval`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount }),
-      });
-      if (!response.ok) {
-        throw new Error('Unable to save pre-approval amount');
-      }
-      const body = (await response.json()) as { preApprovalAmountCents: number; referralFeeDueCents: number };
-      toast.success('Pre-approval updated');
-      setPreApprovalDirty(false);
-      setEditingPreApproval(false);
-      onPreApprovalSaved?.({
-        preApprovalAmountCents: body.preApprovalAmountCents,
-        referralFeeDueCents: body.referralFeeDueCents,
-      });
-      router.refresh();
-    } catch (error) {
-      console.error(error);
-      toast.error(error instanceof Error ? error.message : 'Unable to update pre-approval');
-    } finally {
-      setPreApprovalSaving(false);
-    }
-  };
-
-  const formattedPreApprovalDisplay = preApproval
-    ? `$${formatCurrencyInputDisplay(preApproval)}`
-    : 'No pre-approval';
-
-  const handlePreApprovalCancel = () => {
-    setPreApproval(centsToCurrencyInput(preApprovalAmountCents));
-    setPreApprovalDirty(false);
-    setEditingPreApproval(false);
-  };
-
+  const bothVisible = showStatusControl && showPreApproval;
   return (
     <div className="space-y-4">
-      <div className="space-y-4">
+      <div className={layout === 'row' && bothVisible ? 'grid gap-4 sm:grid-cols-2' : 'space-y-4'}>
         {showStatusControl && (
           <div className="space-y-1">
-            <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{statusLabel}</p>
-            <select
-              value={currentStatus}
-              onChange={handleChange}
-              className="w-full rounded-md border border-border-strong bg-surface-raised px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary-500 focus:outline-none"
-              disabled={loading}
-            >
-              {pipelineOptions.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-            {pendingTerminatedSelection && (
-              <div className="space-y-2 rounded border border-border bg-surface-muted p-2">
-                <label className="block text-xs font-semibold text-foreground-muted">
-                  Termination reason
+            {mode === 'track' ? (
+              <StageTrack
+                options={pipelineOptions}
+                currentStatus={currentStatus}
+                getLabel={(status) => getReferralStatusLabel(status, { isAgentOrigin })}
+                isOutcome={isOutcomeStatus}
+                daysInStatus={daysInStatus}
+                disabled={loading || prompting || pendingLostSelection}
+                compact={compactTrack}
+                ariaLabel={statusLabel}
+                onSelect={(next) => void selectStatus(next)}
+              />
+            ) : mode === 'chips' ? (
+              <div className="flex flex-wrap gap-1.5">
+                {pipelineOptions.map((item) => {
+                  const isCurrent = item === currentStatus;
+                  return (
+                    <button
+                      key={item}
+                      type="button"
+                      disabled={loading || prompting || isCurrent}
+                      aria-current={isCurrent}
+                      onClick={() => void selectStatus(item)}
+                      className={cn(
+                        buttonClasses({ variant: 'secondary', size: 'md' }),
+                        isCurrent
+                          ? 'bg-warning-soft px-3.5 font-bold text-warning shadow-[inset_0_0_0_1px_hsl(var(--warning)/0.35)] ring-0 hover:bg-warning-soft'
+                          : item === 'Lost' || item === 'Terminated'
+                            ? 'text-foreground-subtle'
+                            : 'text-foreground-muted'
+                      )}
+                    >
+                      {getReferralStatusLabel(item, { isAgentOrigin })}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <>
+                <p className="text-xs font-medium text-foreground-subtle">{statusLabel}</p>
+                <select
+                  value={currentStatus}
+                  onChange={handleChange}
+                  className={selectFieldClasses}
+                  disabled={loading || prompting}
+                >
+                  {pipelineOptions.map((item) => (
+                    <option key={item} value={item}>
+                      {getReferralStatusLabel(item, { isAgentOrigin })}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
+            {pendingLostSelection && (
+              <div className="space-y-2 rounded-lg border border-border bg-surface-muted p-3">
+                <label className="block text-xs font-medium text-foreground-muted">
+                  Why was this lost?
                   <select
-                    value={terminatedReason}
-                    onChange={(event) => setTerminatedReason(event.target.value as TerminatedReason | '')}
-                    className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-xs shadow-sm focus:border-primary-500 focus:outline-none"
+                    value={lostReason}
+                    onChange={(event) => setLostReason(event.target.value as LostReason | '')}
+                    className={cn(selectFieldClasses, 'mt-1')}
                     disabled={loading}
                   >
                     <option value="">Select reason</option>
-                    {TERMINATED_REASON_OPTIONS.map((option) => (
+                    {lostReasonOptions.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
                     ))}
                   </select>
                 </label>
+                {!isAgentOrigin && (
+                  <p className="text-xs text-foreground-subtle">
+                    {LOST_BEFORE_CONTACT_HINT}
+                  </p>
+                )}
                 <div className="flex gap-2">
-                  <button
+                  <Button
                     type="button"
-                    className="rounded bg-foreground px-2 py-1 text-xs font-semibold text-white disabled:opacity-60"
+                    size="sm"
                     disabled={loading}
                     onClick={() => {
-                      if (!terminatedReason) {
-                        toast.error('Termination reason is required.');
+                      if (!lostReason) {
+                        toast.error('Please choose why this referral was lost.');
                         return;
                       }
-                      setPendingTerminatedSelection(false);
-                      void submitStatus('Terminated', persistedStatus, terminatedReason);
+                      setPendingLostSelection(false);
+                      void submitStatus('Lost', persistedStatus, { lostReason });
                     }}
                   >
                     Confirm
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
-                    className="rounded border border-border-strong px-2 py-1 text-xs font-semibold text-foreground-muted"
+                    variant="secondary"
+                    size="sm"
                     disabled={loading}
                     onClick={() => {
-                      setPendingTerminatedSelection(false);
-                      setTerminatedReason('');
+                      setPendingLostSelection(false);
+                      setLostReason('');
                       setCurrentStatus(persistedStatus);
                     }}
                   >
                     Cancel
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -311,52 +353,12 @@ export function StatusChanger({
         )}
 
         {showPreApproval && (
-          <div className="space-y-1">
-            <div className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Pre-approval</div>
-            {editingPreApproval ? (
-              <div className="space-y-2">
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={formatCurrencyInputDisplay(preApproval)}
-                  onChange={handlePreApprovalChange}
-                  className="w-full rounded-md border border-border-strong bg-surface-raised px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary-500 focus:outline-none"
-                  placeholder="300,000"
-                  disabled={preApprovalSaving || loading}
-                />
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handlePreApprovalSave}
-                    disabled={preApprovalSaving || !preApprovalDirty}
-                    className="inline-flex flex-1 items-center justify-center rounded bg-foreground px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-70"
-                  >
-                    {preApprovalSaving ? 'Saving…' : 'Save'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handlePreApprovalCancel}
-                    disabled={preApprovalSaving || loading}
-                    className="inline-flex items-center justify-center rounded border border-border px-3 py-2 text-sm font-medium text-foreground-muted transition hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-70"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex items-center justify-between rounded-md border border-border-strong bg-surface-raised px-3 py-2 text-sm font-semibold text-foreground shadow-sm">
-                <span>{formattedPreApprovalDisplay}</span>
-                <button
-                  type="button"
-                  onClick={() => setEditingPreApproval(true)}
-                  className="inline-flex items-center justify-center rounded p-1 text-foreground-subtle transition hover:bg-surface-subtle hover:text-foreground-muted"
-                  aria-label="Edit pre-approval"
-                >
-                  <Pencil className="h-4 w-4" aria-hidden="true" />
-                </button>
-              </div>
-            )}
-          </div>
+          <PreApprovalField
+            referralId={referralId}
+            amountCents={preApprovalAmountCents}
+            onSaved={onPreApprovalSaved}
+            disabled={loading}
+          />
         )}
       </div>
     </div>

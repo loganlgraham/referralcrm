@@ -45,8 +45,8 @@ function ComposeEmailContent() {
         <div className="space-y-4 text-center">
           {copyState === 'copying' && (
             <>
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-100">
-                <svg className="h-6 w-6 animate-spin text-blue-600" fill="none" viewBox="0 0 24 24">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-info-soft">
+                <svg className="h-6 w-6 animate-spin text-primary" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
@@ -58,8 +58,8 @@ function ComposeEmailContent() {
 
           {copyState === 'copied' && (
             <>
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
-                <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-success-soft">
+                <svg className="h-6 w-6 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
@@ -70,7 +70,7 @@ function ComposeEmailContent() {
               <div className="pt-2">
                 <a
                   href={gmailUrl}
-                  className="inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+                  className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-hover"
                 >
                   Open Gmail Compose
                 </a>
@@ -80,8 +80,8 @@ function ComposeEmailContent() {
 
           {copyState === 'failed' && (
             <>
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-amber-100">
-                <svg className="h-6 w-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-warning-soft">
+                <svg className="h-6 w-6 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
@@ -98,7 +98,7 @@ function ComposeEmailContent() {
                 </button>
                 <a
                   href={gmailUrl}
-                  className="inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+                  className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-hover"
                 >
                   Open Gmail Compose
                 </a>

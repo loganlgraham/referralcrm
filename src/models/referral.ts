@@ -3,6 +3,10 @@ import { Schema, model, models, Types } from 'mongoose';
 import {
   DEFAULT_AGENT_COMMISSION_BPS,
   DEFAULT_REFERRAL_FEE_BPS,
+  LOST_REASON_SOURCE_VALUES,
+  LOST_REASON_VALUES,
+  type LostReason,
+  type LostReasonSource,
   REFERRAL_STATUSES,
   REFERRAL_STATUS_VALUES,
   REFERRAL_TIMELINE_VALUES
@@ -53,7 +57,9 @@ const referralNoteSchema = new Schema(
     hiddenFromAgent: { type: Boolean, default: false },
     hiddenFromMc: { type: Boolean, default: false },
     createdAt: { type: Date, default: Date.now },
-    emailedTargets: { type: [String], enum: ['agent', 'mc', 'admin'], default: [] }
+    emailedTargets: { type: [String], enum: ['agent', 'mc', 'admin'], default: [] },
+    pinned: { type: Boolean, default: false },
+    pinnedAt: { type: Date, default: null }
   },
   { _id: true }
 );
@@ -165,6 +171,8 @@ const referralSchema = new Schema(
       default: 'New Lead',
     },
     statusLastUpdated: { type: Date, default: Date.now },
+    lostReason: { type: String, enum: LOST_REASON_VALUES, default: null },
+    lostReasonSource: { type: String, enum: LOST_REASON_SOURCE_VALUES, default: null },
     loanType: String,
     preApprovalAmountCents: { type: Number, default: 0 },
     estPurchasePriceCents: { type: Number, default: 0 },
@@ -358,6 +366,8 @@ export interface ReferralDocument {
   buyStatus?: ReferralStatus;
   sellStatus?: ReferralStatus;
   statusLastUpdated?: Date;
+  lostReason?: LostReason | null;
+  lostReasonSource?: LostReasonSource | null;
   loanType?: string;
   preApprovalAmountCents?: number;
   estPurchasePriceCents?: number;
@@ -389,6 +399,8 @@ export interface ReferralDocument {
     hiddenFromMc?: boolean;
     createdAt: Date;
     emailedTargets?: ('agent' | 'mc' | 'admin')[];
+    pinned?: boolean;
+    pinnedAt?: Date | null;
   }[];
   lender?: Types.ObjectId;
   org: 'AFC' | 'AHA';

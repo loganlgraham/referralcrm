@@ -5,6 +5,12 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
   currency: 'USD'
 });
 
+const wholeCurrencyFormatter = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  maximumFractionDigits: 0
+});
+
 const numberFormatter = new Intl.NumberFormat('en-US');
 const decimalFormatter = new Intl.NumberFormat('en-US', {
   minimumFractionDigits: 1,
@@ -20,6 +26,10 @@ const MST_TIMEZONE = 'America/Denver';
 
 export function formatCurrency(cents: number) {
   return currencyFormatter.format((cents || 0) / 100);
+}
+
+export function formatCurrencyWhole(cents: number) {
+  return wholeCurrencyFormatter.format((cents || 0) / 100);
 }
 
 export function formatNumber(value: number) {

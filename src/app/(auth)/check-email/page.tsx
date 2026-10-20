@@ -12,7 +12,7 @@ export default function CheckEmailPage() {
       }}
     >
       <div className="flex items-center justify-center">
-        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary-50 text-primary-600 ring-1 ring-primary-200">
+        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-primary-soft text-primary ring-1 ring-primary/20">
           <MailCheck className="h-6 w-6" aria-hidden />
         </span>
       </div>
@@ -23,7 +23,7 @@ export default function CheckEmailPage() {
       />
       <p className="text-center text-sm text-foreground-muted">
         Didn&apos;t receive it?{' '}
-        <Link href="/email" className="font-medium text-primary-700 no-underline hover:underline">
+        <Link href="/email" className="font-medium text-primary no-underline hover:underline">
           Try again
         </Link>
       </p>

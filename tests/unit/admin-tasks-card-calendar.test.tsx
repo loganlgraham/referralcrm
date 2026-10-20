@@ -12,6 +12,8 @@ jest.mock('sonner', () => ({
   },
 }));
 
+const HELPER_COPY = 'Select a day to view and manage tasks.';
+
 describe('AdminTasksCard calendar', () => {
   const realFetch = global.fetch;
 
@@ -20,11 +22,14 @@ describe('AdminTasksCard calendar', () => {
     jest.clearAllMocks();
   });
 
-  it('shows a dot for days with tasks and reveals day tasks on click', async () => {
+  it('shows a dot for days with tasks and filters the list on click', async () => {
     const now = new Date();
-    const taskDay = Math.min(now.getDate() + 1, 28);
+    const taskDay = Math.min(now.getDate() + 1, 27);
+    const otherDay = Math.min(taskDay + 1, 28);
     const dueAt = new Date(now.getFullYear(), now.getMonth(), taskDay, 10, 30, 0).toISOString();
+    const otherDueAt = new Date(now.getFullYear(), now.getMonth(), otherDay, 10, 30, 0).toISOString();
     const taskTitle = `Task for day-${taskDay}`;
+    const otherTitle = `Task for day-${otherDay}`;
 
     global.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -43,13 +48,29 @@ describe('AdminTasksCard calendar', () => {
               createdAt: dueAt,
               createdBy: 'admin',
             },
+            {
+              _id: 'task-2',
+              referralId: 'ref-1',
+              title: otherTitle,
+              status: 'open',
+              dueAt: otherDueAt,
+              effectiveDueAt: otherDueAt,
+              cycleKey: 'manual',
+              createdAt: otherDueAt,
+              createdBy: 'admin',
+            },
           ],
         } as Response;
       }
       return { ok: true, json: async () => ({}) } as Response;
     }) as typeof fetch;
 
-    const { container } = render(<AdminTasksCard referralId="ref-1" viewerRole="admin" />);
+    render(<AdminTasksCard referralId="ref-1" viewerRole="admin" />);
+
+    expect(screen.queryByText(HELPER_COPY)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Previous month' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show calendar' }));
 
     const dayButton = screen.getByRole('button', { name: String(taskDay) });
     await waitFor(() => {
@@ -59,14 +80,50 @@ describe('AdminTasksCard calendar', () => {
     fireEvent.click(dayButton);
 
     await waitFor(() => {
-      expect(screen.getByText('1 task(s)')).toBeInTheDocument();
       expect(screen.getByText(taskTitle)).toBeInTheDocument();
     });
 
-    expect(screen.queryByText('Select a day to view and manage tasks.')).not.toBeInTheDocument();
+    expect(screen.queryByText(HELPER_COPY)).not.toBeInTheDocument();
+    expect(screen.queryByText(otherTitle)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Clear day filter' })).toBeInTheDocument();
+  });
 
-    const scrollList = container.querySelector('ul.max-h-60.overflow-y-auto');
-    expect(scrollList).toBeTruthy();
+  it('groups overdue tasks and caps the due list until expanded', async () => {
+    const now = new Date();
+    const overdueTasks = Array.from({ length: 6 }, (_, idx) => {
+      const dueAt = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (idx + 2), 8, 0, 0).toISOString();
+      return {
+        _id: `overdue-${idx}`,
+        referralId: 'ref-overdue',
+        title: `Overdue task ${idx}`,
+        status: 'open',
+        dueAt,
+        effectiveDueAt: dueAt,
+        cycleKey: 'manual',
+        createdAt: dueAt,
+        createdBy: 'admin',
+      };
+    });
+
+    global.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (!init?.method && url.includes('/api/admin/tasks?')) {
+        return { ok: true, json: async () => overdueTasks } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    }) as typeof fetch;
+
+    render(<AdminTasksCard referralId="ref-overdue" viewerRole="admin" />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Overdue')).toBeInTheDocument();
+    });
+    expect(screen.getAllByText(/^Overdue task \d$/)).toHaveLength(4);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show 2 more' }));
+
+    expect(screen.getAllByText(/^Overdue task \d$/)).toHaveLength(6);
+    expect(screen.getByRole('button', { name: 'Show fewer' })).toBeInTheDocument();
   });
 
   it('allows creating a manual task from an empty calendar day', async () => {
@@ -92,13 +149,18 @@ describe('AdminTasksCard calendar', () => {
     });
     global.fetch = fetchMock as typeof fetch;
 
-    render(<AdminTasksCard referralId="ref-1" viewerRole="admin" />);
+    render(<AdminTasksCard referralId="ref-empty-day" viewerRole="admin" />);
 
+    expect(screen.queryByText(HELPER_COPY)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show calendar' }));
     fireEvent.click(screen.getByRole('button', { name: String(emptyDay) }));
 
     await waitFor(() => {
       expect(screen.getByText('No tasks due on this day.')).toBeInTheDocument();
     });
+
+    expect(screen.queryByText(HELPER_COPY)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /add task for this day/i }));
     fireEvent.change(screen.getByPlaceholderText('Task name'), { target: { value: 'Manual calendar task' } });
@@ -110,7 +172,7 @@ describe('AdminTasksCard calendar', () => {
       );
       expect(postCall).toBeDefined();
       const body = JSON.parse(String(postCall?.[1]?.body));
-      expect(body.referralId).toBe('ref-1');
+      expect(body.referralId).toBe('ref-empty-day');
       expect(body.title).toBe('Manual calendar task');
       const submittedDate = new Date(body.dueAt);
       expect(submittedDate.getDate()).toBe(emptyDay);

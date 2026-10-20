@@ -4,43 +4,75 @@
 
 @layer base {
   :root {
-    --font-sans: 'Inter', sans-serif;
+    --font-sans: 'Manrope', sans-serif;
+    --font-display: 'Manrope', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
     color-scheme: light;
 
     /* Semantic tokens (HSL triplets so `hsl(var(--x) / <alpha>)` works in Tailwind) */
+    /* Surfaces — bright porcelain */
     --surface: 0 0% 100%;
     --surface-raised: 0 0% 100%;
-    --surface-muted: 210 40% 96%;
-    --surface-subtle: 210 40% 98%;
+    --surface-muted: 228 33% 97%;
+    --surface-subtle: 227 33% 95%;
 
-    --border: 220 14% 91%;
-    --border-strong: 220 13% 82%;
+    /* Borders */
+    --border: 224 25% 90%;
+    --border-strong: 226 22% 84%;
 
-    --text: 222 47% 11%;
-    --text-muted: 215 16% 37%;
-    --text-subtle: 215 14% 50%;
+    /* Text */
+    --text: 230 27% 13%;
+    --text-muted: 226 15% 41%;
+    --text-subtle: 224 15% 59%;
 
-    /* Primary = original slate brand (#1F2937). */
-    --primary: 217 33% 17%;
+    /* Navy accent matches the sidebar and identifies work that moves a handoff forward.
+       Near-black has no room to darken, so the interaction steps lift instead. */
+    --primary: 222 47% 11%;
+    --primary-hover: 222 30% 28%;
+    --primary-active: 222 40% 16%;
     --primary-foreground: 0 0% 100%;
+    --primary-soft: 222 32% 92%;
 
-    --ring: 217 33% 32%;
+    /* Focus shares the informational hue but stays brighter, so the ring keeps
+       3:1 against the navy button, white inputs and the porcelain app bg. */
+    --ring: 214 90% 48%;
 
-    --success: 152 56% 35%;
+    /* Solid values are tuned to clear 4.5:1 against their own -soft wash, since
+       every one of them is used for 11px badge text. */
+    --success: 152 52% 28%;
     --success-foreground: 0 0% 100%;
-    --success-soft: 152 60% 94%;
+    --success-soft: 152 40% 94%;
 
-    --warning: 32 95% 44%;
-    --warning-foreground: 30 100% 8%;
-    --warning-soft: 45 94% 94%;
+    --warning: 30 85% 31%;
+    --warning-foreground: 0 0% 100%;
+    --warning-soft: 40 90% 93%;
 
-    --danger: 0 72% 48%;
+    --danger: 12 68% 42%;
     --danger-foreground: 0 0% 100%;
-    --danger-soft: 0 80% 96%;
+    --danger-soft: 16 85% 96%;
 
-    --info: 214 90% 48%;
+    --info: 214 92% 40%;
     --info-foreground: 0 0% 100%;
     --info-soft: 214 95% 95%;
+
+    --accent: 250 55% 45%;
+    --accent-foreground: 0 0% 100%;
+    --accent-soft: 250 100% 97%;
+
+    /* Route motif marker — the node on the handoff rail. */
+    --signal: 12 72% 59%;
+    --signal-foreground: 0 0% 100%;
+    --signal-soft: 16 100% 96%;
+
+    /* Referrio logo palette. Nothing outside this list is brand color. */
+    --referrio-navy: #0F1729;      /* letterforms, icon tile, primary buttons */
+    --referrio-coral: #E2694B;     /* the drawn r, eyebrows, accents */
+    --referrio-coral-deep: #C9522F;/* link hover, text on coral tint */
+    --referrio-coral-tint: #FFF1EB;/* accent surfaces, totals, badges */
+    --referrio-off-white: #FBFCFE; /* light icon tile, inset panels */
+    --referrio-slate: #5A6178;     /* body copy on light */
+    --referrio-slate-light: #8890A6;/* captions, meta */
+    --referrio-border: #DFE3EE;    /* hairlines */
   }
 
   html,
@@ -50,7 +82,12 @@
 
   body {
     background-color: hsl(var(--surface-muted));
+    background-image:
+      linear-gradient(hsl(var(--border) / 0.28) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--border) / 0.2) 1px, transparent 1px);
+    background-size: 32px 32px;
     color: hsl(var(--text));
+    font-family: var(--font-sans);
     font-feature-settings: 'cv11', 'ss01';
     min-height: 100%;
     overflow-x: hidden;
@@ -59,18 +96,19 @@
     scroll-behavior: smooth;
   }
 
-  /* Default link styling — override on purpose inside shells using the Button/Link primitives. */
+  /* Default link styling — neutral text color, underline on interaction. Override on
+     purpose inside shells using the Button/Link primitives. */
   a {
     color: hsl(var(--text));
-    text-decoration: underline;
-    text-decoration-color: hsl(var(--text) / 0.25);
+    text-decoration: none;
     text-underline-offset: 3px;
   }
 
+  /* Don't set color on hover — it beats Tailwind `text-white` on button-styled links. */
   a:hover,
   a:focus-visible {
-    color: hsl(var(--text));
-    text-decoration-color: hsl(var(--primary) / 0.9);
+    text-decoration: underline;
+    text-decoration-color: hsl(var(--text) / 0.4);
   }
 
   ::selection {
@@ -78,7 +116,15 @@
     color: hsl(var(--text));
   }
 
-  /* Inputs inherit the warm ring by default for a consistent focus style. */
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+  }
+
+  /* Inputs inherit the route-blue ring for a consistent focus style. */
   :where(input, textarea, select, button):focus-visible {
     outline: none;
   }
@@ -86,11 +132,48 @@
 
 @layer utilities {
   .text-eyebrow {
+    font-family: var(--font-mono);
     font-size: 0.6875rem;
     line-height: 1rem;
     letter-spacing: 0.18em;
     text-transform: uppercase;
     font-weight: 600;
+  }
+
+  /* Loan numbers, currency, basis points and dates. Mono keeps digit columns
+     aligned in the tables and echoes the eyebrow/route labels. */
+  .text-numeric {
+    font-family: var(--font-mono);
+    font-feature-settings: 'tnum';
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+
+  .route-label {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .route-surface {
+    position: relative;
+  }
+
+  .route-surface::before {
+    background: linear-gradient(
+      180deg,
+      hsl(var(--primary)) 0%,
+      hsl(var(--primary)) 58%,
+      hsl(var(--signal)) 58%,
+      hsl(var(--signal)) 100%
+    );
+    border-radius: 9999px;
+    content: '';
+    inset: 14px auto 14px 0;
+    position: absolute;
+    width: 3px;
   }
 
   .scrollbar-thin {
@@ -135,6 +218,21 @@
   animation: top-progress-finish 0.35s ease-out forwards;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 @keyframes top-progress {
   0% {
     transform: translateX(-80%);
@@ -158,5 +256,35 @@
   100% {
     transform: translateX(130%);
     opacity: 0.4;
+  }
+}
+
+/*
+  Sonner's mobile sheet uses width: 100% plus left/right offsets, which pushes
+  toasts off-screen (and body overflow-x: hidden then clips them). Stretch the
+  admin toaster between equal gutters so every toast sits fully on-screen and
+  centered.
+*/
+@media (max-width: 767px) {
+  [data-sonner-toaster].admin-toaster {
+    left: 1rem !important;
+    right: 1rem !important;
+    top: max(1rem, env(safe-area-inset-top)) !important;
+    width: auto !important;
+    max-width: none;
+    transform: none !important;
+  }
+
+  [data-sonner-toaster].admin-toaster [data-sonner-toast] {
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  [data-sonner-toaster].admin-toaster [data-sonner-toast] > * {
+    max-width: 100%;
+    box-sizing: border-box;
   }
 }

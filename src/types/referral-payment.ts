@@ -1,3 +1,5 @@
+import type { FeeBreakdownVerificationStatus } from '@/lib/fee-verification';
+
 export interface ReferralPayment {
   closingDatePushbackCount?: number | null;
   closingDatePushbacks?: Array<{
@@ -36,5 +38,7 @@ export interface ReferralPayment {
   feeBreakdownEmailSentAt?: string | null;
   feeBreakdownEmailSentBy?: string | null;
   feeBreakdownEmailSentByUser?: { id: string; name: string | null; email: string | null } | null;
+  feeBreakdownVerificationStatus?: FeeBreakdownVerificationStatus | null;
+  feeBreakdownVerifiedAt?: string | null;
   isCrossSideReadOnly?: boolean;
 }

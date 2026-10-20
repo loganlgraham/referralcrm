@@ -1,0 +1,264 @@
+import { Types } from 'mongoose';
+import { NextRequest, NextResponse } from 'next/server';
+
+import { connectMongo } from '@/lib/mongoose';
+import { EmailMessage, type EmailMessageStatus } from '@/models/email-message';
+import { recordBounce, recordDelivery } from '@/lib/server/email-address-health';
+import {
+  recordEmailDeliveryFailure,
+  type EmailFailureKind
+} from '@/lib/server/email-delivery-failure';
+import {
+  resolveResendSignatureHeader,
+  resolveResendTimestampHeader,
+  verifyResendWebhookSignature
+} from '@/lib/server/resend-webhook-signature';
+
+const HANDLED_EVENTS = [
+  'email.sent',
+  'email.delivered',
+  'email.bounced',
+  'email.complained',
+  'email.delivery_delayed',
+  'email.failed'
+] as const;
+
+type HandledEvent = (typeof HANDLED_EVENTS)[number];
+
+const isHandledEvent = (value: string): value is HandledEvent =>
+  (HANDLED_EVENTS as readonly string[]).includes(value);
+
+function resolveStatus(event: HandledEvent): EmailMessageStatus {
+  switch (event) {
+    case 'email.sent':
+      return 'sent';
+    case 'email.delivered':
+      return 'delivered';
+    case 'email.bounced':
+      return 'bounced';
+    case 'email.complained':
+      return 'complained';
+    case 'email.delivery_delayed':
+      return 'delayed';
+    case 'email.failed':
+      return 'failed';
+    default: {
+      const exhaustive: never = event;
+      return exhaustive;
+    }
+  }
+}
+
+/** Returns null for the statuses that represent a healthy message. */
+function resolveFailureKind(status: EmailMessageStatus): EmailFailureKind | null {
+  switch (status) {
+    case 'bounced':
+      return 'bounced';
+    case 'complained':
+      return 'complained';
+    case 'failed':
+      return 'send_failed';
+    case 'sent':
+    case 'delivered':
+    case 'delayed':
+    case 'suppressed':
+      return null;
+    default: {
+      const exhaustive: never = status;
+      return exhaustive;
+    }
+  }
+}
+
+/**
+ * The events webhook and the inbound webhook are separate Resend endpoints with separate signing
+ * secrets, so the fallback below only works if both happen to be the same value. Falling back
+ * silently once cost us every delivery event until Resend disabled the endpoint, hence the warning.
+ */
+function resolveEventSecret(): string | undefined {
+  const dedicated = process.env.RESEND_EVENTS_WEBHOOK_SECRET;
+  if (dedicated) {
+    return dedicated;
+  }
+
+  const fallback = process.env.RESEND_WEBHOOK_SECRET;
+  if (fallback) {
+    console.warn(
+      '[EmailEvents] RESEND_EVENTS_WEBHOOK_SECRET is not set; falling back to RESEND_WEBHOOK_SECRET, ' +
+        'which is the inbound webhook secret and will not verify events.'
+    );
+  }
+  return fallback;
+}
+
+const EMAIL_IN_TEXT = /[^\s<>,;"']+@[^\s<>,;"']+\.[^\s<>,;"']+/g;
+
+function toStringArray(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((entry): entry is string => typeof entry === 'string');
+  }
+  return typeof value === 'string' ? [value] : [];
+}
+
+/**
+ * Resend reports a bounce against the whole message rather than naming the recipient, so a
+ * CC address that fails makes the message look bounced for everyone on it. Pull the address
+ * out of the bounce text when possible and only act when it maps to a known recipient; if it
+ * stays ambiguous we would rather record nothing than suppress an address that is fine.
+ */
+function resolveFailedRecipients(
+  bounceMessage: string | null,
+  knownRecipients: string[]
+): string[] {
+  const normalizedKnown = knownRecipients.map((entry) => entry.toLowerCase());
+
+  if (bounceMessage) {
+    const mentioned = (bounceMessage.match(EMAIL_IN_TEXT) ?? []).map((entry) =>
+      entry.toLowerCase()
+    );
+    const matched = normalizedKnown.filter((recipient) => mentioned.includes(recipient));
+    if (matched.length > 0) {
+      return matched;
+    }
+  }
+
+  // With a single recipient there is nothing to disambiguate.
+  return normalizedKnown.length === 1 ? normalizedKnown : [];
+}
+
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  const secret = resolveEventSecret();
+  if (!secret) {
+    console.error('[EmailEvents] Rejected event: no signing secret is configured.');
+    return NextResponse.json(
+      { error: 'Email event signing secret is not configured.' },
+      { status: 500 }
+    );
+  }
+
+  const signatureHeader = resolveResendSignatureHeader(request.headers);
+  if (!signatureHeader) {
+    console.warn('[EmailEvents] Rejected event: request carried no signature header.');
+    return new NextResponse('Unauthorized', { status: 401 });
+  }
+
+  const timestampHeader = resolveResendTimestampHeader(request.headers);
+  const svixMessageId = request.headers.get('svix-id') ?? undefined;
+  const rawBody = await request.text();
+
+  if (
+    !verifyResendWebhookSignature(rawBody, signatureHeader, secret, timestampHeader, svixMessageId)
+  ) {
+    console.warn(
+      '[EmailEvents] Rejected event: signature did not match the configured signing secret. ' +
+        'Check that RESEND_EVENTS_WEBHOOK_SECRET matches this webhook in Resend.'
+    );
+    return new NextResponse('Unauthorized', { status: 401 });
+  }
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(rawBody);
+  } catch {
+    return NextResponse.json({ error: 'Unable to parse event payload.' }, { status: 400 });
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    return NextResponse.json({ error: 'Event payload is malformed.' }, { status: 400 });
+  }
+
+  const record = payload as Record<string, unknown>;
+  const eventType = typeof record.type === 'string' ? record.type : '';
+  if (!isHandledEvent(eventType)) {
+    return NextResponse.json({ status: 'ignored', reason: 'event_type_unhandled' }, { status: 200 });
+  }
+
+  const data = (record.data ?? {}) as Record<string, unknown>;
+  const resendId = typeof data.email_id === 'string' ? data.email_id : null;
+  if (!resendId) {
+    return NextResponse.json({ status: 'ignored', reason: 'missing_email_id' }, { status: 200 });
+  }
+
+  const status = resolveStatus(eventType);
+  // Bounces explain themselves under `bounce`, while a send that never left Resend uses `failed`.
+  const bounce = (data.bounce ?? {}) as Record<string, unknown>;
+  const failed = (data.failed ?? {}) as Record<string, unknown>;
+  const failureMessage =
+    (typeof bounce.message === 'string' ? bounce.message : null) ??
+    (typeof failed.reason === 'string' ? failed.reason : null);
+
+  console.log(`[EmailEvents] Accepted ${eventType} for ${resendId}`);
+
+  try {
+    await connectMongo();
+
+    const message = await EmailMessage.findOne({ resendId })
+      .select('to cc referralId subject')
+      .lean<{
+        to?: string[];
+        cc?: string[];
+        referralId?: unknown;
+        subject?: string;
+      } | null>();
+
+    // Fall back to the payload for messages sent before we started recording them.
+    const knownRecipients = message
+      ? [...(message.to ?? []), ...(message.cc ?? [])]
+      : [...toStringArray(data.to), ...toStringArray(data.cc)];
+
+    const failureKind = resolveFailureKind(status);
+    const isFailure = failureKind !== null;
+    const failedRecipients = isFailure
+      ? resolveFailedRecipients(failureMessage, knownRecipients)
+      : [];
+
+    await EmailMessage.updateOne(
+      { resendId },
+      {
+        $set: {
+          status,
+          lastEventAt: new Date(),
+          ...(isFailure
+            ? { failedRecipients, failureReason: failureMessage }
+            : {}),
+        },
+      }
+    );
+
+    // A send that failed on our side says nothing about the address, so it must not start a
+    // bounce backoff the way a real bounce or complaint does.
+    const blamesTheAddress = failureKind === 'bounced' || failureKind === 'complained';
+    if (blamesTheAddress && failedRecipients.length > 0) {
+      await recordBounce(failedRecipients, failureMessage);
+    }
+
+    if (status === 'delivered') {
+      await recordDelivery(knownRecipients);
+    }
+
+    if (failureKind && message?.referralId) {
+      await recordEmailDeliveryFailure({
+        referralId: message.referralId as Types.ObjectId,
+        subject: message.subject,
+        recipients: failedRecipients,
+        reason: failureMessage,
+        kind: failureKind,
+      });
+    }
+
+    if (isFailure) {
+      console.warn(
+        `[EmailEvents] ${status} for ${resendId}` +
+          (failedRecipients.length > 0
+            ? ` (${failedRecipients.join(', ')})`
+            : ' (recipient could not be identified)') +
+          (failureMessage ? `: ${failureMessage}` : '')
+      );
+    }
+  } catch (error) {
+    console.error('[EmailEvents] Failed to process event', error);
+    // Still acknowledge so Resend does not retry or disable the endpoint over our own bug.
+  }
+
+  return NextResponse.json({ status: 'ok' }, { status: 200 });
+}

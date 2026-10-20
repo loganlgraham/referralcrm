@@ -39,9 +39,13 @@
     "**/*.d.ts",
     "**/*.test.ts",
     "**/*.test.tsx",
-    ".next/types/**/*.ts"
+    ".next/types/**/*.ts",
+    ".next-buildcheck/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "scripts",
+    "tests",
+    "e2e"
   ]
 }

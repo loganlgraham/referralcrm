@@ -84,7 +84,7 @@ export default function EmailSignInPage() {
       </Suspense>
 
       <p className="text-center text-sm text-foreground-muted">
-        <Link href="/login" className="font-medium text-primary-700 no-underline hover:underline">
+        <Link href="/login" className="font-medium text-primary no-underline hover:underline">
           Back to login
         </Link>
       </p>

@@ -4,17 +4,24 @@ import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
+import { cn } from '@/lib/cn';
+import { Button } from '@/components/ui/button';
+import { inputFieldClasses } from '@/components/ui/input';
+
 interface AgentNpsEditorProps {
   agentId: string;
   initialScore: number | null;
 }
 
 export function AgentNpsEditor({ agentId, initialScore }: AgentNpsEditorProps) {
+  const [savedScore, setSavedScore] = useState(initialScore);
   const [value, setValue] = useState(initialScore != null ? String(initialScore) : '');
+  const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
+    setSavedScore(initialScore);
     setValue(initialScore != null ? String(initialScore) : '');
   }, [initialScore]);
 
@@ -49,7 +56,9 @@ export function AgentNpsEditor({ agentId, initialScore }: AgentNpsEditorProps) {
       }
 
       toast.success('NPS score updated');
+      setSavedScore(parsed);
       setValue(parsed != null ? String(parsed) : '');
+      setEditing(false);
       router.refresh();
     } catch (error) {
       console.error(error);
@@ -59,10 +68,30 @@ export function AgentNpsEditor({ agentId, initialScore }: AgentNpsEditorProps) {
     }
   };
 
+  if (!editing) {
+    return (
+      <div>
+        <p className="text-eyebrow text-foreground-subtle">NPS Score</p>
+        <div className="mt-1 flex items-center gap-2">
+          <p className="text-numeric font-medium text-foreground">
+            {savedScore != null ? savedScore.toFixed(1) : '—'}
+          </p>
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="text-xs font-medium text-primary hover:underline"
+          >
+            Edit
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <form onSubmit={handleSubmit} className="rounded-lg border border-border bg-surface-muted p-4">
-      <label className="block text-sm font-semibold text-foreground-muted">NPS score</label>
-      <div className="mt-1 flex flex-col gap-3 sm:flex-row sm:items-center">
+    <form onSubmit={handleSubmit}>
+      <label className="text-eyebrow text-foreground-subtle">NPS Score</label>
+      <div className="mt-1 flex flex-wrap items-center gap-2">
         <input
           type="number"
           inputMode="numeric"
@@ -70,19 +99,28 @@ export function AgentNpsEditor({ agentId, initialScore }: AgentNpsEditorProps) {
           max={100}
           value={value}
           onChange={(event) => setValue(event.target.value)}
-          className="flex-1 rounded-lg border border-border px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/40 sm:max-w-xs"
-          placeholder="68"
+          aria-label="NPS Score"
+          className={cn(inputFieldClasses, 'text-numeric w-24')}
+          placeholder="Enter score"
           disabled={saving}
+          autoFocus
         />
-        <button
-          type="submit"
+        <Button type="submit" size="sm" loading={saving}>
+          {saving ? 'Saving…' : 'Save'}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
           disabled={saving}
-          className="inline-flex shrink-0 items-center justify-center rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-60"
+          onClick={() => {
+            setValue(savedScore != null ? String(savedScore) : '');
+            setEditing(false);
+          }}
         >
-          {saving ? 'Saving…' : 'Save NPS'}
-        </button>
+          Cancel
+        </Button>
       </div>
-      <p className="mt-2 text-xs text-foreground-subtle">Only admins can update this score. Leave blank to clear the value.</p>
     </form>
   );
 }

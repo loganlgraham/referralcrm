@@ -3,15 +3,14 @@
 import { type ReactNode } from 'react';
 import { Info } from 'lucide-react';
 import { cn } from '@/lib/cn';
+import { buttonClasses } from '@/components/ui/button';
 import { Tooltip } from '@/components/ui/tooltip';
 
 /** Single card shell shared by every dashboard widget. */
+export const dashCardClasses = 'rounded-card border border-border bg-surface-raised p-4 shadow-card';
+
 export function DashCard({ className, children }: { className?: string; children: ReactNode }) {
-  return (
-    <div className={cn('rounded-card border border-border bg-surface-raised p-4 shadow-card', className)}>
-      {children}
-    </div>
-  );
+  return <div className={cn(dashCardClasses, className)}>{children}</div>;
 }
 
 /** Small info icon that reveals methodology/details on hover or focus. */
@@ -21,7 +20,11 @@ export function DashInfoTip({ label, content }: { label: string; content: string
       <button
         type="button"
         aria-label={label}
-        className="inline-flex rounded-full text-foreground-subtle transition-colors hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+        className={buttonClasses({
+          variant: 'ghost',
+          size: 'icon',
+          className: 'h-6 w-6 text-foreground-subtle hover:bg-transparent hover:text-foreground'
+        })}
       >
         <Info className="h-3.5 w-3.5" aria-hidden="true" />
       </button>
@@ -44,7 +47,7 @@ export function DashCardHeader({
   return (
     <div className={cn('flex flex-wrap items-center justify-between gap-3', className)}>
       <div className="flex items-center gap-1.5">
-        <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
+        <p className="font-mono text-[10px] font-medium uppercase tracking-[0.12em] text-foreground-subtle">{title}</p>
         {info ? <DashInfoTip label={`${title} details`} content={info} /> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}

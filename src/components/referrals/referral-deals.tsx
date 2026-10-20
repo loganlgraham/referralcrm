@@ -1,19 +1,51 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { FormEvent } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { ChevronDown, ChevronRight, Minus, MoreHorizontal, Plus } from 'lucide-react';
 
-import { DEAL_STATUS_LABELS, DEAL_STATUS_OPTIONS, type DealStatus } from '@/constants/deals';
-import type { ReferralStatus } from '@/constants/referrals';
-import { formatCurrency, formatDateMST, formatDateTimeMST } from '@/utils/formatters';
+import {
+  DEAL_STATUS_LABELS,
+  DEAL_STATUS_OPTIONS,
+  DEAL_STATUS_VALUES,
+  TERMINATED_REASON_LABELS,
+  TERMINATED_REASON_OPTIONS,
+  type DealStatus,
+  type TerminatedReason,
+} from '@/constants/deals';
+import type { LostReason, ReferralStatus } from '@/constants/referrals';
+import { formatCurrencyWhole, formatDateMST, formatDateTimeMST } from '@/utils/formatters';
 import type { ReferralPayment } from '@/types/referral-payment';
 import {
   confirmCloseStatusDate,
   confirmFeeBreakdownSend,
   confirmPaidStatusDate,
 } from '@/components/referrals/status-date-confirmation-toast';
+import {
+  confirmReferralTermination,
+  type TerminationResolvedStatus
+} from '@/components/referrals/terminate-confirmation-toast';
+import { cn } from '@/lib/cn';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { railCardClasses, railTitleClasses } from '@/components/referrals/referral-rail';
+import { StageTrack } from '@/components/referrals/stage-track';
+import { inputFieldClasses } from '@/components/ui/input';
+import { sectionLabelClasses } from '@/components/ui/section-label';
+import { EmptyState } from '@/components/ui/empty-state';
+import { formatCurrencyInputDisplay, sanitizeCurrencyInput } from '@/components/referrals/referral-detail-draft';
+import {
+  describeFeeVerificationStatus,
+  type FeeVerificationStatusTone,
+} from '@/components/referrals/fee-verification-status';
 
 interface ReferralDealsProps {
   referralId: string;
@@ -31,18 +63,19 @@ interface ReferralDealsProps {
   hiddenOutsideAgentCount?: number;
   assignedAgentDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
   defaultSide?: 'buy' | 'sell';
+  borrowerName?: string;
 }
 
 type AgentOption = { id: string; name: string };
 
-type TerminatedReason = 'inspection' | 'appraisal' | 'financing' | 'changed_mind';
+const HISTORY_DEAL_STATUSES = new Set(['paid', 'closed', 'terminated', 'payment_sent']);
 
-const TERMINATED_REASON_OPTIONS: { value: TerminatedReason; label: string }[] = [
-  { value: 'inspection', label: 'Inspection' },
-  { value: 'appraisal', label: 'Appraisal' },
-  { value: 'financing', label: 'Financing' },
-  { value: 'changed_mind', label: 'Changed Mind' },
-];
+const isHistoryDealStatus = (status: string | null | undefined) =>
+  typeof status === 'string' && HISTORY_DEAL_STATUSES.has(status);
+
+const isTerminatedDealStatus = (status: DealStatus) => status === 'terminated';
+
+const getDealStatusLabel = (status: DealStatus) => DEAL_STATUS_LABELS[status];
 
 type DealUpdatePayload = {
   status: DealStatus;
@@ -63,6 +96,8 @@ type DealUpdatePayload = {
   usedAssignedAgent: boolean;
   receivedAmountCents?: number;
   terminatedReason?: TerminatedReason | null;
+  nextReferralStatus?: TerminationResolvedStatus;
+  lostReason?: LostReason | null;
 };
 
 type PaymentPatchResponse = {
@@ -129,6 +164,145 @@ const toDateInputValue = (sourceIso?: string | null): string => {
   return `${year}-${month}-${day}`;
 };
 
+const sanitizeStateInput = (value: string) => value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 2);
+
+function DealFormSection({ title, className, children }: { title: string; className?: string; children: ReactNode }) {
+  return (
+    <div className="space-y-3">
+      <h3 className="text-[13px] font-semibold text-foreground">{title}</h3>
+      <div className={cn('grid gap-x-4 gap-y-3 sm:grid-cols-2 lg:grid-cols-4', className)}>{children}</div>
+    </div>
+  );
+}
+
+function DealField({ label, className, children }: { label: string; className?: string; children: ReactNode }) {
+  return (
+    <label className={cn('flex min-w-0 flex-col gap-1.5', className)}>
+      <span className="text-xs font-medium text-foreground-muted">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+type NumericInputProps = {
+  value: string;
+  onValueChange: (value: string) => void;
+  disabled?: boolean;
+  placeholder?: string;
+  /** Interactive control pinned inside the right edge of the input (e.g. the commission % / $ toggle). */
+  trailing?: ReactNode;
+};
+
+function NumericInput({
+  value,
+  onValueChange,
+  disabled,
+  placeholder = '0.00',
+  prefix,
+  suffix,
+  trailing,
+  groupThousands = false,
+}: NumericInputProps & { prefix?: string; suffix?: string; groupThousands?: boolean }) {
+  return (
+    <div className="relative">
+      {prefix ? (
+        <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-foreground-subtle">
+          {prefix}
+        </span>
+      ) : null}
+      <input
+        type="text"
+        inputMode="decimal"
+        autoComplete="off"
+        value={groupThousands ? formatCurrencyInputDisplay(value) : value}
+        onChange={(event) => onValueChange(sanitizeCurrencyInput(event.target.value))}
+        className={cn(
+          inputFieldClasses,
+          'text-numeric',
+          prefix && 'pl-7',
+          suffix && 'pr-8',
+          trailing ? 'pr-16' : null
+        )}
+        placeholder={placeholder}
+        disabled={disabled}
+      />
+      {trailing ? (
+        <span className="absolute inset-y-0 right-1.5 flex items-center">{trailing}</span>
+      ) : suffix ? (
+        <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-foreground-subtle">
+          {suffix}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function MoneyInput(props: NumericInputProps) {
+  return <NumericInput {...props} prefix="$" groupThousands />;
+}
+
+function PercentInput(props: NumericInputProps) {
+  return <NumericInput {...props} suffix="%" />;
+}
+
+function CommissionModeToggle({
+  mode,
+  onChange,
+  disabled,
+}: {
+  mode: '%' | '$';
+  onChange: (mode: '%' | '$') => void;
+  disabled?: boolean;
+}) {
+  return (
+    <span role="group" aria-label="Commission type" className="flex overflow-hidden rounded-md border border-border-strong/70 text-[11px] font-semibold">
+      {(['%', '$'] as const).map((option) => (
+        <button
+          key={option}
+          type="button"
+          aria-pressed={mode === option}
+          onClick={() => onChange(option)}
+          disabled={disabled}
+          className={cn(
+            'px-2 py-0.5 transition-colors disabled:cursor-not-allowed',
+            mode === option ? 'bg-primary text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'
+          )}
+        >
+          {option}
+        </button>
+      ))}
+    </span>
+  );
+}
+
+function CommissionInput({
+  mode,
+  onModeChange,
+  percentage,
+  onPercentageChange,
+  flat,
+  onFlatChange,
+  disabled,
+}: {
+  mode: '%' | '$';
+  onModeChange: (mode: '%' | '$') => void;
+  percentage: string;
+  onPercentageChange: (value: string) => void;
+  flat: string;
+  onFlatChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  const toggle = <CommissionModeToggle mode={mode} onChange={onModeChange} disabled={disabled} />;
+  return mode === '%' ? (
+    <NumericInput value={percentage} onValueChange={onPercentageChange} disabled={disabled} trailing={toggle} />
+  ) : (
+    <NumericInput value={flat} onValueChange={onFlatChange} disabled={disabled} prefix="$" groupThousands trailing={toggle} />
+  );
+}
+
+const dealCheckboxClasses = 'h-4 w-4 rounded border-border-strong';
+const dealCheckboxLabelClasses = 'flex items-center gap-2 text-sm text-foreground-muted';
+
 function DealCard({
   deal,
   agents,
@@ -144,6 +318,7 @@ function DealCard({
   viewerRole,
   feeBreakdownAutoSendEnabled,
   isCrossSideReadOnly = false,
+  borrowerName,
 }: {
   deal: ReferralPayment;
   agents: AgentOption[];
@@ -165,6 +340,7 @@ function DealCard({
   viewerRole?: string;
   feeBreakdownAutoSendEnabled?: boolean;
   isCrossSideReadOnly?: boolean;
+  borrowerName: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -416,13 +592,27 @@ function DealCard({
       return;
     }
 
-    setSaving(true);
     const statusToSend = viewerRole === 'admin' && markPaid ? 'paid' : status;
-    if (statusToSend === 'terminated' && !terminatedReason) {
+    let nextReferralStatus: TerminationResolvedStatus | undefined;
+    let nextLostReason: LostReason | null | undefined;
+    let reasonToSend = terminatedReason;
+    if (statusToSend === 'terminated' && deal.status !== 'terminated') {
+      const confirmation = await confirmReferralTermination({
+        borrowerName,
+        isAgentOrigin: Boolean(isAgentOrigin)
+      });
+      if (!confirmation.confirmed || !confirmation.resolvedStatus || !confirmation.terminatedReason) {
+        return;
+      }
+      reasonToSend = confirmation.terminatedReason;
+      setTerminatedReason(confirmation.terminatedReason);
+      nextReferralStatus = confirmation.resolvedStatus;
+      nextLostReason = confirmation.lostReason ?? null;
+    } else if (statusToSend === 'terminated' && !reasonToSend) {
       toast.error('Select a termination reason');
-      setSaving(false);
       return;
     }
+    setSaving(true);
     // Only auto-set closing date when status is CHANGING to 'closed' (not already closed)
     const isChangingToClosed = statusToSend === 'closed' && deal.status !== 'closed';
     const closingDateToSend = isChangingToClosed
@@ -451,7 +641,9 @@ function DealCard({
       usedAfc: side === 'sell' ? false : usedAfc,
       usedAssignedAgent,
       receivedAmountCents: netReferralFeePaidCents,
-      terminatedReason: statusToSend === 'terminated' ? terminatedReason : undefined,
+      terminatedReason: statusToSend === 'terminated' ? reasonToSend : undefined,
+      nextReferralStatus,
+      lostReason: nextReferralStatus === 'Lost' ? nextLostReason ?? null : undefined,
     });
 
     if (success) {
@@ -461,20 +653,19 @@ function DealCard({
     setSaving(false);
   };
 
-  const statusLabel = DEAL_STATUS_LABELS[(deal.status as DealStatus | undefined) ?? 'under_contract'];
   const expectedAmountCents = deal.expectedAmountCents ?? 0;
   const reportedNetPaidCents = deal.netReferralFeePaidCents ?? deal.receivedAmountCents;
   const netPaidCents =
     reportedNetPaidCents ??
     (deal.status === 'paid' ? expectedAmountCents : 0);
   const remainingExpectedCents = Math.max(expectedAmountCents - (reportedNetPaidCents ?? 0), 0);
-  const expected = formatCurrency(remainingExpectedCents);
-  const netPaid = formatCurrency(netPaidCents ?? 0);
-  const contractPriceValue = deal.contractPriceCents ? formatCurrency(deal.contractPriceCents) : '—';
+  const expected = formatCurrencyWhole(remainingExpectedCents);
+  const netPaid = formatCurrencyWhole(netPaidCents ?? 0);
+  const contractPriceValue = deal.contractPriceCents ? formatCurrencyWhole(deal.contractPriceCents) : '—';
   const dealSide = deal.side === 'sell' ? 'Sell-side' : 'Buy-side';
-  const terminatedReasonLabel = terminatedReason
-    ? TERMINATED_REASON_OPTIONS.find((option) => option.value === terminatedReason)?.label ??
-      terminatedReason
+  const savedTerminatedReason = deal.terminatedReason as TerminatedReason | null | undefined;
+  const terminatedReasonLabel = savedTerminatedReason
+    ? TERMINATED_REASON_LABELS[savedTerminatedReason] ?? savedTerminatedReason
     : null;
   const defaultPaidAmountDisplay = centsToDisplay(
     deal.expectedAmountCents ??
@@ -501,7 +692,7 @@ function DealCard({
     toast.custom(
       (toastInstance) => (
         <form
-          className="w-[360px] rounded-lg border border-border bg-surface-raised p-4 shadow-lg"
+          className="mx-auto w-full max-w-[360px] rounded-card border border-border bg-surface-raised p-4 shadow-card"
           onSubmit={async (event) => {
             event.preventDefault();
             const trimmedValue = amountDraft.trim();
@@ -525,7 +716,7 @@ function DealCard({
         >
           <p className="text-sm font-semibold text-foreground">Mark deal as paid</p>
           <p className="mt-1 text-xs text-foreground-subtle">Confirm the amount paid for this deal.</p>
-          <label className="mt-3 block text-xs font-semibold text-foreground-muted">
+          <label className={cn('mt-3 block', sectionLabelClasses)}>
             Amount paid
             <input
               autoFocus
@@ -537,10 +728,10 @@ function DealCard({
               onChange={(event) => {
                 amountDraft = event.target.value;
               }}
-              className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+              className={cn(inputFieldClasses, 'mt-1')}
             />
           </label>
-          <label className="mt-3 block text-xs font-semibold text-foreground-muted">
+          <label className={cn('mt-3 block', sectionLabelClasses)}>
             Paid date
             <input
               type="date"
@@ -548,23 +739,16 @@ function DealCard({
               onChange={(event) => {
                 paidDateDraft = event.target.value;
               }}
-              className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+              className={cn(inputFieldClasses, 'mt-1')}
             />
           </label>
           <div className="mt-3 flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => toast.dismiss(toastInstance)}
-              className="rounded border border-border-strong bg-surface-raised px-3 py-1.5 text-xs font-semibold text-foreground-muted transition hover:bg-surface-muted"
-            >
+            <Button type="button" variant="secondary" size="sm" onClick={() => toast.dismiss(toastInstance)}>
               Cancel
-            </button>
-            <button
-              type="submit"
-              className="rounded bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-800"
-            >
+            </Button>
+            <Button type="submit" size="sm">
               Save
-            </button>
+            </Button>
           </div>
         </form>
       ),
@@ -572,348 +756,238 @@ function DealCard({
     );
   };
 
+  const dealStatus = (deal.status as DealStatus | undefined) ?? 'under_contract';
+  const trackOptions = DEAL_STATUS_VALUES.filter(
+    (value) => value === dealStatus || statusOptions.some((option) => option.value === value)
+  );
+  const commissionValue = deal.commissionFlatFeeCents
+    ? formatCurrencyWhole(deal.commissionFlatFeeCents)
+    : formatPercent(deal.commissionBasisPoints);
+  const financingLabel = deal.side === 'sell' ? null : deal.usedAfc ? 'AFC financing' : 'Outside lender';
+  const canMarkPaid = viewerRole === 'admin';
+  const canMarkPaymentSent = viewerRole === 'agent';
+  const canSendFeeBreakdown = viewerRole === 'admin';
+  const feeBreakdownDisabled = saving || !deal.closingDate || !deal.agentId;
+  const feeBreakdownStatus: { tone: FeeVerificationStatusTone; text: string }[] = [];
+  if (canSendFeeBreakdown) {
+    if (!deal.closingDate) {
+      feeBreakdownStatus.push({ tone: 'warning', text: 'Add a closing date to send the fee breakdown email.' });
+    } else if (!deal.agentId) {
+      feeBreakdownStatus.push({ tone: 'warning', text: 'Assign an agent to send the fee breakdown email.' });
+    } else if (deal.feeBreakdownEmailSentAt) {
+      const sentAt = formatDateTimeMST(deal.feeBreakdownEmailSentAt);
+      feeBreakdownStatus.push({
+        tone: 'muted',
+        text:
+          deal.feeBreakdownEmailSentBy === 'cron'
+            ? `Fee breakdown auto-sent ${sentAt}`
+            : `Fee breakdown sent ${sentAt} by ${
+                deal.feeBreakdownEmailSentByUser?.name ?? deal.feeBreakdownEmailSentByUser?.email ?? 'admin'
+              } (auto-send off)`,
+      });
+      const verification = describeFeeVerificationStatus(
+        deal.feeBreakdownVerificationStatus,
+        deal.feeBreakdownVerifiedAt
+      );
+      if (verification) {
+        feeBreakdownStatus.push(verification);
+      }
+    } else if (feeBreakdownAutoSendEnabled !== false) {
+      feeBreakdownStatus.push({ tone: 'muted', text: 'Fee breakdown auto-sends 7 days before closing' });
+    }
+  }
+
+  const isFullyPaid = remainingExpectedCents === 0 && (netPaidCents ?? 0) > 0;
+
+  const metaItems = isCrossSideReadOnly
+    ? [deal.agent?.name ?? 'Unassigned agent', dealSide]
+    : [
+        deal.agent?.name ?? 'Unassigned agent',
+        dealSide,
+        financingLabel,
+        deal.usedAssignedAgent ? 'Assigned agent' : 'Outside agent',
+      ].filter((item): item is string => Boolean(item));
+
+  const dateItems = [
+    { label: 'Created', value: formatDateMST(deal.createdAt) },
+    { label: 'Under contract', value: deal.underContractDate ? formatDateMST(deal.underContractDate) : '—' },
+    { label: 'Closing', value: deal.closingDate ? formatDateMST(deal.closingDate) : '—' },
+    ...(originalClosingDate ? [{ label: 'Original close', value: formatDateMST(originalClosingDate) }] : []),
+  ];
+
   return (
-    <div
-      className="flex flex-col gap-3 rounded-md border border-border bg-surface-muted p-4 shadow-sm"
-    >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-2">
-          <div className="space-y-1">
-            <p className="text-xs uppercase text-foreground-subtle">Status</p>
-            <p className="text-sm font-semibold text-foreground">{statusLabel}</p>
-            <p className="text-xs text-foreground-subtle">Created {formatDateMST(deal.createdAt)}</p>
-            <p className="text-xs text-foreground-subtle">
-              Under contract: {deal.underContractDate ? formatDateMST(deal.underContractDate) : '—'}
-            </p>
-            <p className="text-xs text-foreground-subtle">
-              Closing date: {deal.closingDate ? formatDateMST(deal.closingDate) : '—'}
-            </p>
-            {originalClosingDate ? (
-              <p className="text-xs text-foreground-subtle">
-                Original close date: {formatDateMST(originalClosingDate)}
-              </p>
-            ) : null}
-            {deal.status === 'terminated' && (
-              <p className="text-xs font-medium text-rose-600">
-                Termination reason: {terminatedReasonLabel ?? 'Not specified'}
-              </p>
-            )}
-          </div>
-          {!isCrossSideReadOnly && (
-            <label className="block text-xs font-semibold text-foreground-muted">
-              <span className="mr-2">Update stage</span>
-              <select
-                value={(deal.status as DealStatus | undefined) ?? 'under_contract'}
-                onChange={(event) =>
-                  onStatusChange(
-                    deal,
-                    event.target.value as DealStatus,
-                    event.target.value === 'terminated' ? terminatedReason : null
-                  )
-                }
-                disabled={!canManage || statusUpdating}
-                className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-xs shadow-sm focus:border-primary-500 focus:outline-none"
-              >
-                {statusOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          {canManage && !isCrossSideReadOnly && (
-            <label className="block text-xs font-semibold text-foreground-muted">
-              <span className="mr-2">Termination reason</span>
-              <select
-                value={terminatedReason ?? ''}
-                onChange={(event) =>
-                  setTerminatedReason(
-                    event.target.value ? (event.target.value as TerminatedReason) : null
-                  )
-                }
-                disabled={!canManage || statusUpdating}
-                className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-xs shadow-sm focus:border-primary-500 focus:outline-none"
-              >
-                <option value="">Select reason</option>
-                {TERMINATED_REASON_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
+    <div className="flex flex-col gap-4 rounded-card border border-border bg-surface p-4 sm:p-5">
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-base font-bold tracking-[-0.01em] text-foreground">
+            {deal.propertyAddress?.trim() || 'No address yet'}
+          </h3>
+          <p className="mt-0.5 text-[13px] text-foreground-muted">{metaItems.join(' · ')}</p>
         </div>
-        {!isCrossSideReadOnly && (
-          <div className="space-y-1">
-            <p className="text-xs uppercase text-foreground-subtle">Expected</p>
-            <p className="text-sm font-semibold text-foreground">{expected}</p>
-            <p className="text-xs text-foreground-subtle">Net paid: {netPaid}</p>
+        {!isCrossSideReadOnly && dealStatus !== 'terminated' ? (
+          <div className="shrink-0 text-right">
+            <p className="text-numeric text-xl font-extrabold leading-none tracking-[-0.02em] text-foreground">
+              {isFullyPaid ? netPaid : expected}
+            </p>
+            <p className="mt-1 text-[11px] font-medium text-foreground-subtle">{isFullyPaid ? 'paid' : 'expected'}</p>
           </div>
-        )}
-        <div className="space-y-1 text-sm text-foreground-muted">
-          <p>
-            <span className="text-xs uppercase text-foreground-subtle">Contract price: </span>
-            <span className="font-semibold">{contractPriceValue}</span>
-          </p>
-          {!isCrossSideReadOnly && (
-            <>
-              <p>
-                <span className="text-xs uppercase text-foreground-subtle">Commission: </span>
-                <span className="font-semibold">
-                  {deal.commissionFlatFeeCents
-                    ? formatCurrency(deal.commissionFlatFeeCents)
-                    : formatPercent(deal.commissionBasisPoints)}
-                </span>
-              </p>
-              <p>
-                <span className="text-xs uppercase text-foreground-subtle">Referral fee: </span>
-                <span className="font-semibold">{formatPercent(deal.referralFeeBasisPoints)}</span>
-              </p>
-              <p>
-                <span className="text-xs uppercase text-foreground-subtle">Side: </span>
-                <span className="font-semibold">{dealSide}</span>
-              </p>
-              <p>
-                <span className="text-xs uppercase text-foreground-subtle">Used AFC: </span>
-                <span className="font-semibold">{deal.side === 'sell' ? 'N/A' : deal.usedAfc ? 'Yes' : 'No'}</span>
-              </p>
-              <p>
-                <span className="text-xs uppercase text-foreground-subtle">Used Agent: </span>
-                <span className="font-semibold">{deal.usedAssignedAgent ? 'Yes' : 'No'}</span>
-              </p>
-            </>
-          )}
-          <p>
-            <span className="text-xs uppercase text-foreground-subtle">Address: </span>
-            <span className="font-semibold">{deal.propertyAddress?.trim() || '—'}</span>
-          </p>
-          <p>
-            <span className="text-xs uppercase text-foreground-subtle">Agent: </span>
-            <span className="font-semibold">{deal.agent?.name ?? 'Unassigned'}</span>
-          </p>
-        </div>
+        ) : null}
         {canManage && (
-          <div className="flex flex-col gap-2 sm:w-44">
-            {viewerRole === 'admin' && (
-              <button
-                type="button"
-                onClick={handleMarkPaidClick}
-                disabled={statusUpdating}
-                className="rounded border border-border-strong bg-surface-muted px-3 py-2 text-xs font-semibold text-foreground transition hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                Mark Paid
-              </button>
-            )}
-            {viewerRole === 'agent' && (
-              <button
-                type="button"
-                onClick={() => void onStatusChange(deal, 'payment_sent')}
-                disabled={statusUpdating || deal.status === 'payment_sent' || deal.status === 'paid'}
-                className="rounded border border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                Payment Sent
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setEditing((previous) => !previous)}
-              className="rounded border border-border bg-surface-raised px-3 py-2 text-xs font-semibold text-foreground-muted transition hover:bg-surface-muted"
-            >
-              {editing ? 'Close edit' : 'Edit deal'}
-            </button>
-            <button
-              type="button"
-              onClick={() => onDelete(deal)}
-              disabled={deleting}
-              className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {deleting ? 'Deleting…' : 'Delete deal'}
-            </button>
-            {viewerRole === 'admin' && (
-              <>
-                <button
-                  type="button"
-                  onClick={handleSendFeeBreakdown}
-                  disabled={saving || !deal.closingDate || !deal.agentId}
-                  className="rounded bg-blue-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="Deal actions" className="-mr-2 -mt-1 shrink-0">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {canMarkPaid && (
+                <DropdownMenuItem onSelect={handleMarkPaidClick} disabled={statusUpdating}>
+                  Mark paid
+                </DropdownMenuItem>
+              )}
+              {canMarkPaymentSent && (
+                <DropdownMenuItem
+                  onSelect={() => void onStatusChange(deal, 'payment_sent')}
+                  disabled={statusUpdating || deal.status === 'payment_sent' || deal.status === 'paid'}
                 >
-                  {deal.feeBreakdownEmailSentAt ? 'Resend Fee Breakdown Email' : 'Send Fee Breakdown Email'}
-                </button>
-                {deal.closingDate && (
-                  <div className="space-y-0.5">
-                    <p className="text-xs text-foreground-subtle">
-                      {deal.feeBreakdownEmailSentAt ? (
-                        <>
-                          {deal.feeBreakdownEmailSentBy === 'cron'
-                            ? `✓ Sent ${formatDateTimeMST(deal.feeBreakdownEmailSentAt)} (auto)`
-                            : `✓ Sent ${formatDateTimeMST(deal.feeBreakdownEmailSentAt)} by ${deal.feeBreakdownEmailSentByUser?.name ?? deal.feeBreakdownEmailSentByUser?.email ?? 'admin'}`}
-                        </>
-                      ) : feeBreakdownAutoSendEnabled !== false ? (
-                        '⏰ Auto-sends 7 days before closing.'
-                      ) : null}
-                    </p>
-                    {deal.feeBreakdownEmailSentAt &&
-                      deal.feeBreakdownEmailSentBy !== 'cron' && (
-                        <p className="text-xs text-amber-600">
-                          Auto-send disabled for this deal because it was sent manually.
-                        </p>
-                      )}
-                  </div>
-                )}
-                {!deal.closingDate && (
-                  <p className="text-xs text-amber-600">
-                    Add closing date to enable
-                  </p>
-                )}
-                {!deal.agentId && deal.closingDate && (
-                  <p className="text-xs text-amber-600">
-                    Assign an agent to enable
-                  </p>
-                )}
-              </>
-            )}
-          </div>
+                  Payment sent
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onSelect={() => setEditing((previous) => !previous)}>
+                {editing ? 'Close edit' : 'Edit deal'}
+              </DropdownMenuItem>
+              {canSendFeeBreakdown && (
+                <DropdownMenuItem onSelect={handleSendFeeBreakdown} disabled={feeBreakdownDisabled}>
+                  {deal.feeBreakdownEmailSentAt ? 'Resend fee breakdown email' : 'Send fee breakdown email'}
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem destructive onSelect={() => onDelete(deal)} disabled={deleting}>
+                {deleting ? 'Deleting…' : 'Delete deal'}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </div>
 
+      {!isCrossSideReadOnly ? (
+        <DealFigures
+          items={[
+            { label: 'Contract price', value: contractPriceValue },
+            { label: 'Commission', value: commissionValue },
+            { label: 'Referral fee', value: formatPercent(deal.referralFeeBasisPoints) },
+            { label: 'Net paid', value: netPaid },
+          ]}
+        />
+      ) : (
+        <DealFigures items={[{ label: 'Contract price', value: contractPriceValue }]} />
+      )}
+
+      <StageTrack
+        options={trackOptions}
+        currentStatus={dealStatus}
+        getLabel={getDealStatusLabel}
+        isOutcome={isTerminatedDealStatus}
+        outcomeLabel={terminatedReasonLabel ? `Terminated · ${terminatedReasonLabel}` : null}
+        disabled={!canManage || Boolean(statusUpdating)}
+        ariaLabel="Deal stage"
+        onSelect={(next) => void onStatusChange(deal, next)}
+      />
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border pt-3 text-xs text-foreground-subtle">
+        {dateItems.map((item) => (
+          <span key={item.label}>
+            {item.label} <span className="text-numeric font-medium text-foreground-muted">{item.value}</span>
+          </span>
+        ))}
+        {canManage
+          ? feeBreakdownStatus.map((item) => (
+              <span
+                key={item.text}
+                className={
+                  item.tone === 'warning'
+                    ? 'font-medium text-warning'
+                    : item.tone === 'success'
+                      ? 'text-success'
+                      : undefined
+                }
+              >
+                {item.text}
+              </span>
+            ))
+          : null}
+      </div>
+
       {editing && canManage && (
-        <form onSubmit={handleSubmit} className="grid gap-3 rounded-md border border-border bg-surface-raised p-4 sm:grid-cols-2 lg:grid-cols-4">
-          <label className="space-y-1 text-sm font-medium text-foreground-muted">
-            <span>Contract price</span>
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
-              value={contractPrice}
-              onChange={(event) => setContractPrice(event.target.value)}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-              placeholder="0.00"
-              disabled={saving || isNoFeeDeal}
-            />
-          </label>
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-foreground-muted">Commission</span>
-              <div className="flex rounded border border-border-strong text-xs font-medium overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => handleCommissionModeToggle('%')}
-                  disabled={saving || isNoFeeDeal}
-                  className={`px-1.5 py-0.5 transition-colors ${commissionMode === '%' ? 'bg-primary-600 text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
-                >
-                  %
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleCommissionModeToggle('$')}
-                  disabled={saving || isNoFeeDeal}
-                  className={`px-1.5 py-0.5 transition-colors ${commissionMode === '$' ? 'bg-primary-600 text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
-                >
-                  $
-                </button>
-              </div>
-            </div>
-            {commissionMode === '%' ? (
-              <input
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="0.01"
-                value={commissionPercentage}
-                onChange={(event) => handleCommissionPercentageChange(event.target.value)}
-                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-                placeholder="0.00"
-                disabled={saving || isNoFeeDeal}
-              />
-            ) : (
-              <input
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="0.01"
-                value={commissionFlat}
-                onChange={(event) => handleCommissionFlatChange(event.target.value)}
-                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-                placeholder="0.00"
-                disabled={saving || isNoFeeDeal}
-              />
+        <form onSubmit={handleSubmit} className="space-y-5 border-t border-border pt-4">
+          <DealFormSection title="Price and fees" className={agentCreatedReferral ? undefined : 'lg:grid-cols-5'}>
+            <DealField label="Contract price">
+              <MoneyInput value={contractPrice} onValueChange={setContractPrice} disabled={saving || isNoFeeDeal} />
+            </DealField>
+            {!agentCreatedReferral && (
+              <>
+                <DealField label="Commission">
+                  <CommissionInput
+                    mode={commissionMode}
+                    onModeChange={handleCommissionModeToggle}
+                    percentage={commissionPercentage}
+                    onPercentageChange={handleCommissionPercentageChange}
+                    flat={commissionFlat}
+                    onFlatChange={handleCommissionFlatChange}
+                    disabled={saving || isNoFeeDeal}
+                  />
+                </DealField>
+                <DealField label="Referral fee">
+                  <PercentInput
+                    value={referralFeePercentage}
+                    onValueChange={setReferralFeePercentage}
+                    disabled={saving || isNoFeeDeal}
+                  />
+                </DealField>
+                <DealField label="Expected amount">
+                  <MoneyInput
+                    value={expectedAmount}
+                    onValueChange={(value) => {
+                      setExpectedManuallyEdited(Boolean(value));
+                      setExpectedAmount(value);
+                    }}
+                    disabled={saving || isNoFeeDeal}
+                  />
+                </DealField>
+                <DealField label="Net fee paid (optional)">
+                  <MoneyInput
+                    value={netReferralFeePaid}
+                    onValueChange={setNetReferralFeePaid}
+                    disabled={saving || isNoFeeDeal}
+                  />
+                </DealField>
+              </>
             )}
-          </div>
-          <label className="space-y-1 text-sm font-medium text-foreground-muted">
-            <span>Referral fee %</span>
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
-              value={referralFeePercentage}
-              onChange={(event) => setReferralFeePercentage(event.target.value)}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-              placeholder="0.00"
-              disabled={saving || isNoFeeDeal}
-            />
-          </label>
-          <label className="space-y-1 text-sm font-medium text-foreground-muted">
-            <span>Expected amount</span>
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
-              value={expectedAmount}
-              onChange={(event) => {
-                const value = event.target.value;
-                setExpectedManuallyEdited(Boolean(value));
-                setExpectedAmount(value);
-              }}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-              placeholder="0.00"
-              disabled={saving || isNoFeeDeal}
-            />
-          </label>
-          <label className="space-y-1 text-sm font-medium text-foreground-muted">
-            <span>Net referral fee paid (optional)</span>
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
-              value={netReferralFeePaid}
-              onChange={(event) => setNetReferralFeePaid(event.target.value)}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-              placeholder="0.00"
-              disabled={saving || isNoFeeDeal}
-            />
-          </label>
-            <label className="space-y-1 text-sm font-medium text-foreground-muted">
-              <span>Status</span>
+          </DealFormSection>
+
+          <DealFormSection title="Status and dates">
+            <DealField label="Status">
               <select
                 value={status}
                 onChange={(event) => setStatus(event.target.value as DealStatus)}
-                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                className={inputFieldClasses}
                 disabled={saving}
               >
                 {statusOptions.map((option) => (
                   <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
+                    {option.label}
+                  </option>
+                ))}
               </select>
-            </label>
+            </DealField>
             {status === 'terminated' && (
-              <label className="space-y-1 text-sm font-medium text-foreground-muted">
-                <span>Termination reason</span>
+              <DealField label="Termination reason">
                 <select
                   value={terminatedReason ?? ''}
                   onChange={(event) =>
-                    setTerminatedReason(
-                      event.target.value ? (event.target.value as TerminatedReason) : null
-                    )
+                    setTerminatedReason(event.target.value ? (event.target.value as TerminatedReason) : null)
                   }
-                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                  className={inputFieldClasses}
                   disabled={saving}
                 >
                   <option value="">Select reason</option>
@@ -923,127 +997,137 @@ function DealCard({
                     </option>
                   ))}
                 </select>
-              </label>
+              </DealField>
             )}
-            <label className="space-y-1 text-sm font-medium text-foreground-muted">
-              <span>Under contract date</span>
+            <DealField label="Under contract date">
               <input
                 type="date"
                 value={underContractDate}
                 onChange={(event) => setUnderContractDate(event.target.value)}
-                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                className={inputFieldClasses}
                 disabled={saving}
               />
-            </label>
-            <label className="space-y-1 text-sm font-medium text-foreground-muted">
-              <span>Closing date</span>
+            </DealField>
+            <DealField label="Closing date">
               <input
                 type="date"
                 value={closingDate}
-              onChange={(event) => setClosingDate(event.target.value)}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-              disabled={saving}
-            />
-          </label>
-          <label className="space-y-1 text-sm font-medium text-foreground-muted">
-            <span>Property address</span>
-            <input
-              type="text"
-              value={propertyAddress}
-              onChange={(event) => setPropertyAddress(event.target.value)}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-              placeholder="123 Main St, City, ST"
-              disabled={saving}
-            />
-          </label>
-          <label className="space-y-1 text-sm font-medium text-foreground-muted">
-            <span>Property city</span>
-            <input
-              type="text"
-              value={propertyCity}
-              onChange={(event) => setPropertyCity(event.target.value)}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-              placeholder="City"
-              disabled={saving}
-            />
-          </label>
-          <label className="space-y-1 text-sm font-medium text-foreground-muted">
-            <span>Property state</span>
-            <input
-              type="text"
-              value={propertyState}
-              maxLength={2}
-              onChange={(event) => {
-                const value = event.target.value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 2);
-                setPropertyState(value);
-              }}
-              onPaste={(event) => {
-                event.preventDefault();
-                const pastedText = event.clipboardData.getData('text');
-                const processed = pastedText.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 2);
-                setPropertyState(processed);
-                event.currentTarget.value = processed;
-              }}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm uppercase focus:border-primary-500 focus:outline-none"
-              placeholder="ST"
-              disabled={saving}
-            />
-          </label>
-          <label className="space-y-1 text-sm font-medium text-foreground-muted">
-            <span>Agent</span>
-            <select
-              value={agentId}
-              onChange={(event) => setAgentId(event.target.value)}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-              disabled={saving || agentsLoading}
-            >
-              <option value="">Unassigned</option>
-              {agentsLoading && agents.length === 0 ? (
-                <option value="" disabled>Loading agents...</option>
-              ) : (
-                agents.map((agent) => (
-                  <option key={agent.id} value={agent.id}>
-                    {agent.name}
-                  </option>
-                ))
-              )}
-            </select>
-          </label>
-          <label className="space-y-1 text-sm font-medium text-foreground-muted">
-            <span>Deal side</span>
-            <select
-              value={side}
-              onChange={(event) => setSide(event.target.value as 'buy' | 'sell')}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-              disabled={saving}
-            >
-              <option value="buy">Buy-side</option>
-              <option value="sell">Sell-side</option>
-            </select>
-          </label>
-          <div className="flex flex-col justify-center gap-2 rounded border border-border p-3 text-sm sm:col-span-2 lg:col-span-4">
-            {side !== 'sell' && (
-              <label className="flex items-center gap-2 text-foreground-muted">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-border-strong"
-                  checked={usedAfc}
-                  onChange={(event) => setUsedAfc(event.target.checked)}
-                  disabled={saving}
-                />
-                Used AFC
-              </label>
-            )}
-            <label className="flex items-center gap-2 text-foreground-muted">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-border-strong"
-                checked={usedAssignedAgent}
-                onChange={(event) => setUsedAssignedAgent(event.target.checked)}
+                onChange={(event) => setClosingDate(event.target.value)}
+                className={inputFieldClasses}
                 disabled={saving}
               />
-              Used Agent
-            </label>
+            </DealField>
+          </DealFormSection>
+
+          <DealFormSection title="Property and agent">
+            <DealField label="Street address" className="sm:col-span-2">
+              <input
+                type="text"
+                value={propertyAddress}
+                onChange={(event) => setPropertyAddress(event.target.value)}
+                className={inputFieldClasses}
+                placeholder="123 Main St"
+                disabled={saving}
+              />
+            </DealField>
+            <DealField label="City">
+              <input
+                type="text"
+                value={propertyCity}
+                onChange={(event) => setPropertyCity(event.target.value)}
+                className={inputFieldClasses}
+                placeholder="City"
+                disabled={saving}
+              />
+            </DealField>
+            <DealField label="State">
+              <input
+                type="text"
+                value={propertyState}
+                onChange={(event) => setPropertyState(sanitizeStateInput(event.target.value))}
+                className={cn(inputFieldClasses, 'uppercase')}
+                placeholder="ST"
+                disabled={saving}
+              />
+            </DealField>
+            <DealField label="Agent" className="sm:col-span-2">
+              <select
+                value={agentId}
+                onChange={(event) => setAgentId(event.target.value)}
+                className={inputFieldClasses}
+                disabled={saving || agentsLoading}
+              >
+                <option value="">Unassigned</option>
+                {agentsLoading && agents.length === 0 ? (
+                  <option value="" disabled>Loading agents...</option>
+                ) : (
+                  agents.map((agent) => (
+                    <option key={agent.id} value={agent.id}>
+                      {agent.name}
+                    </option>
+                  ))
+                )}
+              </select>
+            </DealField>
+            <DealField label="Deal side">
+              <select
+                value={side}
+                onChange={(event) => setSide(event.target.value as 'buy' | 'sell')}
+                className={inputFieldClasses}
+                disabled={saving}
+              >
+                <option value="buy">Buy-side</option>
+                <option value="sell">Sell-side</option>
+              </select>
+            </DealField>
+          </DealFormSection>
+
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+              {side !== 'sell' && (
+                <label className={dealCheckboxLabelClasses}>
+                  <input
+                    type="checkbox"
+                    className={dealCheckboxClasses}
+                    checked={usedAfc}
+                    onChange={(event) => setUsedAfc(event.target.checked)}
+                    disabled={saving}
+                  />
+                  Client is financing with AFC
+                </label>
+              )}
+              <label className={dealCheckboxLabelClasses}>
+                <input
+                  type="checkbox"
+                  className={dealCheckboxClasses}
+                  checked={usedAssignedAgent}
+                  onChange={(event) => setUsedAssignedAgent(event.target.checked)}
+                  disabled={saving}
+                />
+                Used Agent
+              </label>
+              {viewerRole === 'admin' && (
+                <label className={dealCheckboxLabelClasses}>
+                  <input
+                    type="checkbox"
+                    className={dealCheckboxClasses}
+                    checked={markPaid || status === 'paid'}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      setMarkPaid(checked);
+                      if (checked) {
+                        setStatus('paid');
+                        if (!netReferralFeePaid) {
+                          setNetReferralFeePaid(expectedAmount);
+                        }
+                      }
+                    }}
+                    disabled={saving}
+                  />
+                  Paid
+                </label>
+              )}
+            </div>
             {!agentCreatedReferral && isNoFeeDeal && (
               <p className="text-xs text-foreground-subtle">
                 {isAgitDeal
@@ -1051,48 +1135,25 @@ function DealCard({
                   : 'Outside-agent deal selected: commission/referral fee fields are disabled and owed amount is forced to $0.'}
               </p>
             )}
-            {viewerRole === 'admin' && (
-              <label className="flex items-center gap-2 text-foreground-muted">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-border-strong"
-                  checked={markPaid || status === 'paid'}
-                  onChange={(event) => {
-                    const checked = event.target.checked;
-                    setMarkPaid(checked);
-                    if (checked) {
-                      setStatus('paid');
-                      if (!netReferralFeePaid) {
-                        setNetReferralFeePaid(expectedAmount);
-                      }
-                    }
-                  }}
-                  disabled={saving}
-                />
-                Paid
-              </label>
-            )}
           </div>
-          <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-4">
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {saving ? 'Saving…' : 'Save changes'}
-            </button>
-            <button
+
+          <div className="flex justify-end gap-2 border-t border-border pt-4">
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
               onClick={() => {
                 populateFromDeal();
                 setExpectedManuallyEdited(false);
                 setEditing(false);
               }}
-              className="rounded-md border border-border bg-surface-raised px-4 py-2 text-sm font-semibold text-foreground-muted shadow-sm transition hover:bg-surface-muted"
               disabled={saving}
             >
               Cancel
-            </button>
+            </Button>
+            <Button type="submit" size="sm" loading={saving}>
+              {saving ? 'Saving…' : 'Save changes'}
+            </Button>
           </div>
         </form>
       )}
@@ -1113,7 +1174,9 @@ export function ReferralDeals({
   hiddenOutsideAgentCount = 0,
   assignedAgentDesignation,
   defaultSide = 'buy',
+  borrowerName = 'this referral',
 }: ReferralDealsProps) {
+  const [showPastDeals, setShowPastDeals] = useState(false);
   const [status, setStatus] = useState<DealStatus>('under_contract');
   const [markPaid, setMarkPaid] = useState(false);
   const [expectedAmount, setExpectedAmount] = useState('');
@@ -1132,7 +1195,7 @@ export function ReferralDeals({
   const [underContractDate, setUnderContractDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [agentId, setAgentId] = useState('');
   const [side, setSide] = useState<'buy' | 'sell'>(defaultSide);
-  const [usedAfc, setUsedAfc] = useState(false);
+  const [usedAfc, setUsedAfc] = useState(true);
   const [usedAssignedAgent, setUsedAssignedAgent] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [terminatedReason, setTerminatedReason] = useState<TerminatedReason | null>(null);
@@ -1299,8 +1362,39 @@ export function ReferralDeals({
     }),
     [deals]
   );
+  const activeDeals = sortedDeals.filter((deal) => !isHistoryDealStatus(deal.status));
+  const pastDeals = sortedDeals.filter((deal) => isHistoryDealStatus(deal.status));
   const shouldHideAgentEmptyState =
     viewerRole === 'agent' && sortedDeals.length === 0 && hiddenOutsideAgentCount > 0;
+
+  const renderDealCard = (deal: ReferralPayment) => {
+    const isCrossSideReadOnly =
+      viewerRole === 'agent' &&
+      (deal.isCrossSideReadOnly === true ||
+        ((viewerAssignedSide === 'buy' || viewerAssignedSide === 'sell') &&
+          (deal.side === 'buy' || deal.side === 'sell') &&
+          deal.side !== viewerAssignedSide));
+    return (
+      <DealCard
+        key={deal._id}
+        deal={deal}
+        agents={agents}
+        agentsLoading={agentsLoading}
+        canManage={canManage && !isCrossSideReadOnly}
+        isCrossSideReadOnly={isCrossSideReadOnly}
+        isAgentOrigin={isAgentOrigin}
+        isAgitDeal={isAgitDeal}
+        statusUpdating={statusUpdating[deal._id]}
+        deleting={deleting[deal._id]}
+        onStatusChange={handleStatusChange}
+        onDelete={handleDelete}
+        onUpdate={handleDealEdit}
+        viewerRole={viewerRole}
+        feeBreakdownAutoSendEnabled={feeBreakdownAutoSendEnabled}
+        borrowerName={borrowerName}
+      />
+    );
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1389,7 +1483,7 @@ export function ReferralDeals({
           closingDate: closingDateToSend,
           underContractDate: underContractDate ? dateStringToLocalISO(underContractDate) : new Date().toISOString(),
           agentId: agentId || null,
-          usedAfc: isAgentOrigin ? false : effectiveCreateSide === 'sell' ? false : usedAfc,
+          usedAfc: effectiveCreateSide === 'sell' ? false : usedAfc,
           usedAssignedAgent: isAgentOrigin ? true : usedAssignedAgent,
           agentAttribution: isOutsideAgent ? 'OUTSIDE_AGENT' : null,
           side: effectiveCreateSide,
@@ -1420,7 +1514,7 @@ export function ReferralDeals({
           underContractDate: underContractDate ? dateStringToLocalISO(underContractDate) : new Date().toISOString(),
           agent: agentId ? { id: agentId, name: agents.find((option) => option.id === agentId)?.name ?? null } : null,
           agentId: agentId || null,
-          usedAfc: isAgentOrigin ? false : effectiveCreateSide === 'sell' ? false : usedAfc,
+          usedAfc: effectiveCreateSide === 'sell' ? false : usedAfc,
           usedAssignedAgent: isAgentOrigin ? true : usedAssignedAgent,
           side: effectiveCreateSide,
           terminatedReason: statusToSend === 'terminated' ? terminatedReason : undefined,
@@ -1447,9 +1541,21 @@ export function ReferralDeals({
     paidDateFromAction?: string
   ): Promise<boolean> => {
     if (statusUpdating[deal._id]) return false;
-    if (nextStatus === 'terminated' && !terminationReason) {
-      toast.error('Select a termination reason before marking the deal terminated');
-      return false;
+
+    let resolvedTerminationReason = terminationReason ?? null;
+    let nextReferralStatus: TerminationResolvedStatus | undefined;
+    let nextLostReason: LostReason | null | undefined;
+    if (nextStatus === 'terminated') {
+      const confirmation = await confirmReferralTermination({
+        borrowerName,
+        isAgentOrigin,
+      });
+      if (!confirmation.confirmed || !confirmation.resolvedStatus || !confirmation.terminatedReason) {
+        return false;
+      }
+      resolvedTerminationReason = confirmation.terminatedReason;
+      nextReferralStatus = confirmation.resolvedStatus;
+      nextLostReason = confirmation.lostReason ?? null;
     }
     
     let closingDate: string | undefined;
@@ -1457,9 +1563,11 @@ export function ReferralDeals({
     let sendClosedEmails = false;
     let sendAgentNpsEmail = false;
 
+    let confirmedUsedAfc: boolean | undefined;
     if (nextStatus === 'closed') {
       const usedAssignedAgent = deal.usedAssignedAgent ?? false;
       const closeUsedAfc = deal.side === 'sell' ? false : Boolean(deal.usedAfc);
+      const askUsedAfc = deal.side !== 'sell' && (viewerRole === 'admin' || viewerRole === 'agent');
 
       if (viewerRole === 'admin' || viewerRole === 'agent') {
         const confirmation = await confirmCloseStatusDate({
@@ -1469,6 +1577,8 @@ export function ReferralDeals({
           canSendAgentNpsEmail: viewerRole === 'admin' ? closeUsedAfc : false,
           defaultSendAgentNpsEmail: viewerRole === 'admin' ? closeUsedAfc : false,
           showEmailPreference: viewerRole === 'admin',
+          askUsedAfc,
+          defaultUsedAfc: closeUsedAfc,
         });
 
         if (!confirmation.confirmed) {
@@ -1480,6 +1590,9 @@ export function ReferralDeals({
           viewerRole === 'admin' ? confirmation.sendClosedEmails : true;
         sendAgentNpsEmail =
           viewerRole === 'admin' ? confirmation.sendAgentNpsEmail : true;
+        if (askUsedAfc && typeof confirmation.usedAfc === 'boolean') {
+          confirmedUsedAfc = confirmation.usedAfc;
+        }
 
         if (sendClosedEmails) {
           toast.success('A referral rating email will be sent to the referral.');
@@ -1525,10 +1638,17 @@ export function ReferralDeals({
         sendAgentNpsEmail,
       };
       if (nextStatus === 'closed') {
-        patchPayload.usedAfc = deal.side === 'sell' ? false : Boolean(deal.usedAfc);
+        patchPayload.usedAfc =
+          deal.side === 'sell'
+            ? false
+            : typeof confirmedUsedAfc === 'boolean'
+              ? confirmedUsedAfc
+              : Boolean(deal.usedAfc);
       }
       if (nextStatus === 'terminated') {
-        patchPayload.terminatedReason = terminationReason ?? null;
+        patchPayload.terminatedReason = resolvedTerminationReason;
+        patchPayload.nextReferralStatus = nextReferralStatus;
+        patchPayload.lostReason = nextReferralStatus === 'Lost' ? nextLostReason ?? null : null;
       }
 
       const response = await fetch('/api/payments', {
@@ -1553,7 +1673,7 @@ export function ReferralDeals({
         expectedAmountCents: patchResult.expectedAmountCents ?? deal.expectedAmountCents,
         receivedAmountCents: resolvedPaidAmountCents ?? deal.receivedAmountCents,
         netReferralFeePaidCents: resolvedPaidAmountCents ?? deal.netReferralFeePaidCents,
-        terminatedReason: nextStatus === 'terminated' ? terminationReason ?? null : null,
+        terminatedReason: nextStatus === 'terminated' ? resolvedTerminationReason : null,
         closingDate: patchResult.closingDate ?? closingDate ?? deal.closingDate ?? null,
         paidDate: patchResult.paidDate ?? paidDate ?? deal.paidDate ?? null,
         updatedAt: new Date().toISOString(),
@@ -1665,167 +1785,102 @@ export function ReferralDeals({
   };
 
   return (
-    <section className="space-y-4 rounded-md border border-border bg-surface-raised p-6 shadow-sm">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs uppercase text-foreground-subtle">Deals</p>
-          <h2 className="text-lg font-semibold text-foreground">Referral deals</h2>
+    <section className={railCardClasses}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <h2 className={railTitleClasses}>Deals</h2>
+          {sortedDeals.length > 0 ? (
+            <span className="text-numeric rounded-full bg-surface-muted px-2.5 py-0.5 text-xs font-semibold text-foreground-muted">
+              {sortedDeals.length}
+            </span>
+          ) : null}
         </div>
         {canManage && canCreateForViewer && (
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="sm"
+            leadingIcon={showForm ? <Minus className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
             onClick={() => setShowForm((previous) => !previous)}
-            className="flex items-center gap-2 rounded-full border border-border bg-surface-muted px-3 py-1 text-xs font-semibold text-foreground-muted shadow-sm transition hover:bg-surface-subtle"
           >
-            <span className="text-lg leading-none">{showForm ? '−' : '+'}</span>
             {showForm ? 'Hide form' : 'Add deal'}
-          </button>
+          </Button>
         )}
       </div>
-
+      <div className="mt-4 space-y-4">
       {canManage && canCreateForViewer && showForm && (
         <form
           onSubmit={handleSubmit}
-          className="grid gap-4 rounded-md border border-border p-4 sm:grid-cols-2 lg:grid-cols-4"
+          className="space-y-5 rounded-card border border-dashed border-border bg-surface-muted/60 p-4"
         >
-          <label className="space-y-1 text-sm font-medium text-foreground-muted">
-            <span>Contract price</span>
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="0.01"
-              value={contractPrice}
-              onChange={(event) => setContractPrice(event.target.value)}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-              placeholder="0.00"
-              disabled={submitting}
-            />
-          </label>
-          {!isAgentOrigin && (
-            <>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-foreground-muted">Commission</span>
-                  <div className="flex rounded border border-border-strong text-xs font-medium overflow-hidden">
-                    <button
-                      type="button"
-                      onClick={() => handleCommissionModeToggle('%')}
-                      disabled={submitting || !usedAssignedAgent || isAgitDeal}
-                      className={`px-1.5 py-0.5 transition-colors ${commissionMode === '%' ? 'bg-primary-600 text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
-                    >
-                      %
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleCommissionModeToggle('$')}
-                      disabled={submitting || !usedAssignedAgent || isAgitDeal}
-                      className={`px-1.5 py-0.5 transition-colors ${commissionMode === '$' ? 'bg-primary-600 text-white' : 'bg-surface-raised text-foreground-subtle hover:bg-surface-muted'}`}
-                    >
-                      $
-                    </button>
-                  </div>
-                </div>
-                {commissionMode === '%' ? (
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    step="0.01"
-                    value={commissionPercentage}
-                    onChange={(event) => handleCommissionPercentageChange(event.target.value)}
-                    className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-                    placeholder="0.00"
+          <DealFormSection title="Price and fees" className={isAgentOrigin ? undefined : 'lg:grid-cols-5'}>
+            <DealField label="Contract price">
+              <MoneyInput value={contractPrice} onValueChange={setContractPrice} disabled={submitting} />
+            </DealField>
+            {!isAgentOrigin && (
+              <>
+                <DealField label="Commission">
+                  <CommissionInput
+                    mode={commissionMode}
+                    onModeChange={handleCommissionModeToggle}
+                    percentage={commissionPercentage}
+                    onPercentageChange={handleCommissionPercentageChange}
+                    flat={commissionFlat}
+                    onFlatChange={handleCommissionFlatChange}
                     disabled={submitting || !usedAssignedAgent || isAgitDeal}
                   />
-                ) : (
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min="0"
-                    step="0.01"
-                    value={commissionFlat}
-                    onChange={(event) => handleCommissionFlatChange(event.target.value)}
-                    className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-                    placeholder="0.00"
+                </DealField>
+                <DealField label="Referral fee">
+                  <PercentInput
+                    value={referralFeePercentage}
+                    onValueChange={setReferralFeePercentage}
                     disabled={submitting || !usedAssignedAgent || isAgitDeal}
                   />
-                )}
-              </div>
-              <label className="space-y-1 text-sm font-medium text-foreground-muted">
-                <span>Referral fee %</span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  step="0.01"
-                  value={referralFeePercentage}
-                  onChange={(event) => setReferralFeePercentage(event.target.value)}
-                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-                  placeholder="0.00"
-                  disabled={submitting || !usedAssignedAgent || isAgitDeal}
-                />
-              </label>
-              <label className="space-y-1 text-sm font-medium text-foreground-muted">
-                <span>Expected amount</span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  step="0.01"
-                  value={expectedAmount}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    setExpectedManuallyEdited(Boolean(value));
-                    setExpectedAmount(value);
-                  }}
-                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-                  placeholder="0.00"
-                  disabled={submitting || !usedAssignedAgent || isAgitDeal}
-                />
-              </label>
-              <label className="space-y-1 text-sm font-medium text-foreground-muted">
-                <span>Net referral fee paid (optional)</span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  step="0.01"
-                  value={netReferralFeePaid}
-                  onChange={(event) => setNetReferralFeePaid(event.target.value)}
-                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-                  placeholder="0.00"
-                  disabled={submitting || !usedAssignedAgent || isAgitDeal}
-                />
-              </label>
-            </>
-          )}
-            <label className="space-y-1 text-sm font-medium text-foreground-muted">
-              <span>Status</span>
+                </DealField>
+                <DealField label="Expected amount">
+                  <MoneyInput
+                    value={expectedAmount}
+                    onValueChange={(value) => {
+                      setExpectedManuallyEdited(Boolean(value));
+                      setExpectedAmount(value);
+                    }}
+                    disabled={submitting || !usedAssignedAgent || isAgitDeal}
+                  />
+                </DealField>
+                <DealField label="Net fee paid (optional)">
+                  <MoneyInput
+                    value={netReferralFeePaid}
+                    onValueChange={setNetReferralFeePaid}
+                    disabled={submitting || !usedAssignedAgent || isAgitDeal}
+                  />
+                </DealField>
+              </>
+            )}
+          </DealFormSection>
+
+          <DealFormSection title="Status and dates">
+            <DealField label="Status">
               <select
                 value={status}
                 onChange={(event) => setStatus(event.target.value as DealStatus)}
-                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                className={inputFieldClasses}
                 disabled={submitting}
               >
                 {statusOptions.map((option) => (
                   <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
+                    {option.label}
+                  </option>
+                ))}
               </select>
-            </label>
+            </DealField>
             {status === 'terminated' && (
-              <label className="space-y-1 text-sm font-medium text-foreground-muted">
-                <span>Termination reason</span>
+              <DealField label="Termination reason">
                 <select
                   value={terminatedReason ?? ''}
                   onChange={(event) =>
-                    setTerminatedReason(
-                      event.target.value ? (event.target.value as TerminatedReason) : null
-                    )
+                    setTerminatedReason(event.target.value ? (event.target.value as TerminatedReason) : null)
                   }
-                  className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                  className={inputFieldClasses}
                   disabled={submitting}
                 >
                   <option value="">Select reason</option>
@@ -1835,129 +1890,139 @@ export function ReferralDeals({
                     </option>
                   ))}
                 </select>
-              </label>
+              </DealField>
             )}
-            <label className="space-y-1 text-sm font-medium text-foreground-muted">
-              <span>Under contract date</span>
+            <DealField label="Under contract date">
               <input
                 type="date"
                 value={underContractDate}
                 onChange={(event) => setUnderContractDate(event.target.value)}
-                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
+                className={inputFieldClasses}
                 disabled={submitting}
               />
-            </label>
-            <label className="space-y-1 text-sm font-medium text-foreground-muted">
-              <span>Closing date</span>
+            </DealField>
+            <DealField label="Closing date">
               <input
                 type="date"
                 value={closingDate}
-              onChange={(event) => setClosingDate(event.target.value)}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-              disabled={submitting}
-            />
-          </label>
-          <label className="space-y-1 text-sm font-medium text-foreground-muted sm:col-span-2 lg:col-span-4">
-            <span>Property address</span>
-            <input
-              type="text"
-              value={propertyAddress}
-              onChange={(event) => setPropertyAddress(event.target.value)}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-              placeholder="123 Main St, City, ST"
-              disabled={submitting}
-            />
-          </label>
-          <label className="space-y-1 text-sm font-medium text-foreground-muted">
-            <span>Property city</span>
-            <input
-              type="text"
-              value={propertyCity}
-              onChange={(event) => setPropertyCity(event.target.value)}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-              placeholder="City"
-              disabled={submitting}
-            />
-          </label>
-          <label className="space-y-1 text-sm font-medium text-foreground-muted">
-            <span>Property state</span>
-            <input
-              type="text"
-              value={propertyState}
-              maxLength={2}
-              onChange={(event) => {
-                const value = event.target.value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 2);
-                setPropertyState(value);
-              }}
-              onPaste={(event) => {
-                event.preventDefault();
-                const pastedText = event.clipboardData.getData('text');
-                const processed = pastedText.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 2);
-                setPropertyState(processed);
-                event.currentTarget.value = processed;
-              }}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm uppercase focus:border-primary-500 focus:outline-none"
-              placeholder="ST"
-              disabled={submitting}
-            />
-          </label>
-          <label className="space-y-1 text-sm font-medium text-foreground-muted">
-            <span>Agent</span>
-            <select
-              value={agentId}
-              onChange={(event) => setAgentId(event.target.value)}
-              className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-              disabled={submitting || agentsLoading}
-            >
-              <option value="">Unassigned</option>
-              {agentsLoading && agents.length === 0 ? (
-                <option value="" disabled>Loading agents...</option>
-              ) : (
-                agents.map((agent) => (
-                  <option key={agent.id} value={agent.id}>
-                    {agent.name}
-                  </option>
-                ))
-              )}
-            </select>
-          </label>
-          {!(viewerRole === 'agent' && (viewerAssignedSide === 'buy' || viewerAssignedSide === 'sell')) && (
-            <label className="space-y-1 text-sm font-medium text-foreground-muted">
-              <span>Deal side</span>
-              <select
-                value={side}
-                onChange={(event) => setSide(event.target.value as 'buy' | 'sell')}
-                className="w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-                disabled={submitting}
-              >
-                <option value="buy">Buy-side</option>
-                <option value="sell">Sell-side</option>
-              </select>
-            </label>
-          )}
-          <div className="flex flex-col justify-center gap-2 rounded border border-border p-3 text-sm sm:col-span-2 lg:col-span-4">
-            {effectiveCreateSide !== 'sell' && (
-              <label className="flex items-center gap-2 text-foreground-muted">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-border-strong"
-                  checked={usedAfc}
-                  onChange={(event) => setUsedAfc(event.target.checked)}
-                  disabled={submitting}
-                />
-                Used AFC
-              </label>
-            )}
-            <label className="flex items-center gap-2 text-foreground-muted">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-border-strong"
-                checked={usedAssignedAgent}
-                onChange={(event) => setUsedAssignedAgent(event.target.checked)}
+                onChange={(event) => setClosingDate(event.target.value)}
+                className={inputFieldClasses}
                 disabled={submitting}
               />
-              Used Agent
-            </label>
+            </DealField>
+          </DealFormSection>
+
+          <DealFormSection title="Property and agent">
+            <DealField label="Street address" className="sm:col-span-2">
+              <input
+                type="text"
+                value={propertyAddress}
+                onChange={(event) => setPropertyAddress(event.target.value)}
+                className={inputFieldClasses}
+                placeholder="123 Main St"
+                disabled={submitting}
+              />
+            </DealField>
+            <DealField label="City">
+              <input
+                type="text"
+                value={propertyCity}
+                onChange={(event) => setPropertyCity(event.target.value)}
+                className={inputFieldClasses}
+                placeholder="City"
+                disabled={submitting}
+              />
+            </DealField>
+            <DealField label="State">
+              <input
+                type="text"
+                value={propertyState}
+                onChange={(event) => setPropertyState(sanitizeStateInput(event.target.value))}
+                className={cn(inputFieldClasses, 'uppercase')}
+                placeholder="ST"
+                disabled={submitting}
+              />
+            </DealField>
+            <DealField label="Agent" className="sm:col-span-2">
+              <select
+                value={agentId}
+                onChange={(event) => setAgentId(event.target.value)}
+                className={inputFieldClasses}
+                disabled={submitting || agentsLoading}
+              >
+                <option value="">Unassigned</option>
+                {agentsLoading && agents.length === 0 ? (
+                  <option value="" disabled>Loading agents...</option>
+                ) : (
+                  agents.map((agent) => (
+                    <option key={agent.id} value={agent.id}>
+                      {agent.name}
+                    </option>
+                  ))
+                )}
+              </select>
+            </DealField>
+            {!(viewerRole === 'agent' && (viewerAssignedSide === 'buy' || viewerAssignedSide === 'sell')) && (
+              <DealField label="Deal side">
+                <select
+                  value={side}
+                  onChange={(event) => setSide(event.target.value as 'buy' | 'sell')}
+                  className={inputFieldClasses}
+                  disabled={submitting}
+                >
+                  <option value="buy">Buy-side</option>
+                  <option value="sell">Sell-side</option>
+                </select>
+              </DealField>
+            )}
+          </DealFormSection>
+
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+              {effectiveCreateSide !== 'sell' && (
+                <label className={dealCheckboxLabelClasses}>
+                  <input
+                    type="checkbox"
+                    className={dealCheckboxClasses}
+                    checked={usedAfc}
+                    onChange={(event) => setUsedAfc(event.target.checked)}
+                    disabled={submitting}
+                  />
+                  Client is financing with AFC
+                </label>
+              )}
+              <label className={dealCheckboxLabelClasses}>
+                <input
+                  type="checkbox"
+                  className={dealCheckboxClasses}
+                  checked={usedAssignedAgent}
+                  onChange={(event) => setUsedAssignedAgent(event.target.checked)}
+                  disabled={submitting}
+                />
+                Used Agent
+              </label>
+              {viewerRole === 'admin' && (
+                <label className={dealCheckboxLabelClasses}>
+                  <input
+                    type="checkbox"
+                    className={dealCheckboxClasses}
+                    checked={markPaid || status === 'paid'}
+                    onChange={(event) => {
+                      const checked = event.target.checked;
+                      setMarkPaid(checked);
+                      if (checked) {
+                        setStatus('paid');
+                        if (!netReferralFeePaid) {
+                          setNetReferralFeePaid(expectedAmount);
+                        }
+                      }
+                    }}
+                    disabled={submitting}
+                  />
+                  Paid
+                </label>
+              )}
+            </div>
             {!isAgentOrigin && (!usedAssignedAgent || isAgitDeal) && (
               <p className="text-xs text-foreground-subtle">
                 {isAgitDeal
@@ -1965,36 +2030,12 @@ export function ReferralDeals({
                   : 'Outside-agent deal selected: commission/referral fee fields are disabled and owed amount is forced to $0.'}
               </p>
             )}
-            {viewerRole === 'admin' && (
-              <label className="flex items-center gap-2 text-foreground-muted">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-border-strong"
-                  checked={markPaid || status === 'paid'}
-                  onChange={(event) => {
-                    const checked = event.target.checked;
-                    setMarkPaid(checked);
-                    if (checked) {
-                      setStatus('paid');
-                      if (!netReferralFeePaid) {
-                        setNetReferralFeePaid(expectedAmount);
-                      }
-                    }
-                  }}
-                  disabled={submitting}
-                />
-                Paid
-              </label>
-            )}
           </div>
-          <div className="flex items-end">
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
-            >
+
+          <div className="flex justify-end border-t border-border pt-4">
+            <Button type="submit" size="sm" loading={submitting}>
               {submitting ? 'Saving…' : 'Add deal'}
-            </button>
+            </Button>
           </div>
         </form>
       )}
@@ -2002,47 +2043,48 @@ export function ReferralDeals({
       <div className="space-y-3">
         {sortedDeals.length === 0 ? (
           shouldHideAgentEmptyState ? null : (
-          <p className="text-sm text-foreground-muted">No deals have been added yet.</p>
+            <EmptyState
+              compact
+              title="No deals yet"
+              description="Deals show up here once this referral goes under contract."
+            />
           )
         ) : (
           <>
-            {sortedDeals.map((deal) => (
-              <DealCard
-                key={deal._id}
-                deal={deal}
-                agents={agents}
-                agentsLoading={agentsLoading}
-                canManage={
-                  canManage &&
-                  !(
-                    viewerRole === 'agent' &&
-                    (deal.isCrossSideReadOnly === true ||
-                      ((viewerAssignedSide === 'buy' || viewerAssignedSide === 'sell') &&
-                        (deal.side === 'buy' || deal.side === 'sell') &&
-                        deal.side !== viewerAssignedSide))
-                  )
-                }
-                isCrossSideReadOnly={
-                  viewerRole === 'agent' &&
-                  (deal.isCrossSideReadOnly === true ||
-                    ((viewerAssignedSide === 'buy' || viewerAssignedSide === 'sell') &&
-                      (deal.side === 'buy' || deal.side === 'sell') &&
-                      deal.side !== viewerAssignedSide))
-                }
-                isAgentOrigin={isAgentOrigin}
-                isAgitDeal={isAgitDeal}
-                statusUpdating={statusUpdating[deal._id]}
-                deleting={deleting[deal._id]}
-                onStatusChange={handleStatusChange}
-                onDelete={handleDelete}
-                onUpdate={handleDealEdit}
-                viewerRole={viewerRole}
-                feeBreakdownAutoSendEnabled={feeBreakdownAutoSendEnabled}
-              />
-            ))}
+            {(activeDeals.length > 0 ? activeDeals : pastDeals).map(renderDealCard)}
+            {activeDeals.length > 0 && pastDeals.length > 0 ? (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowPastDeals((previous) => !previous)}
+                  aria-expanded={showPastDeals}
+                  className="flex items-center gap-1 text-[13px] font-semibold text-foreground-muted transition hover:text-foreground"
+                >
+                  {showPastDeals ? <ChevronDown className="h-4 w-4" aria-hidden /> : <ChevronRight className="h-4 w-4" aria-hidden />}
+                  Past deals ({pastDeals.length})
+                </button>
+                {showPastDeals ? (
+                  <div className="mt-3 space-y-3">{pastDeals.map(renderDealCard)}</div>
+                ) : null}
+              </div>
+            ) : null}
           </>
         )}
       </div>
+      </div>
     </section>
+  );
+}
+
+function DealFigures({ items }: { items: { label: string; value: string }[] }) {
+  return (
+    <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-lg bg-surface-muted/60 px-4 py-3 sm:grid-cols-4">
+      {items.map((item) => (
+        <div key={item.label} className="min-w-0">
+          <dt className="text-[11px] font-medium text-foreground-subtle">{item.label}</dt>
+          <dd className="text-numeric mt-0.5 truncate text-sm font-semibold text-foreground">{item.value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }

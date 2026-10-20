@@ -248,6 +248,114 @@ describe('Referral status route table-driven deal status sync', () => {
     expect(latestDeal.save).toHaveBeenCalled();
   });
 
+  it('terminates attributed deal and keeps referral Active Lead when terminateDeal is true', async () => {
+    const referralDoc = makeReferralDoc();
+    referralDoc.clientType = 'Buyer';
+    referralDoc.estPurchasePriceCents = 50000000;
+    referralDoc.referralFeeDueCents = 375000;
+    mockedReferralFindById.mockReturnValue(referralDoc);
+
+    const latestDeal = makeLatestDealDoc();
+    latestDeal.expectedAmountCents = 375000;
+    mockPaymentFindOneChain(latestDeal);
+
+    const response: any = await postHandler(
+      makeRequest({
+        status: 'Active Lead',
+        source: 'referral_table',
+        terminateDeal: true,
+        terminatedReason: 'financing',
+      }),
+      { params: { id: 'ref-1' } }
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.status).toBe('Active Lead');
+    expect(referralDoc.buyStatus).toBe('Active Lead');
+    expect(referralDoc.status).toBe('Active Lead');
+    expect(referralDoc.estPurchasePriceCents).toBe(50000000);
+    expect(referralDoc.referralFeeDueCents).toBe(375000);
+    expect(latestDeal.status).toBe('terminated');
+    expect(latestDeal.terminatedReason).toBe('financing');
+    expect(latestDeal.expectedAmountCents).toBe(0);
+    expect(latestDeal.save).toHaveBeenCalled();
+    expect(referralDoc.save).toHaveBeenCalled();
+  });
+
+  it('terminates attributed deal and moves referral to Lost when terminateDeal is true', async () => {
+    const referralDoc = makeReferralDoc();
+    referralDoc.clientType = 'Buyer';
+    referralDoc.autoUpdateRemindersEnabled = true;
+    referralDoc.estPurchasePriceCents = 50000000;
+    referralDoc.referralFeeDueCents = 375000;
+    mockedReferralFindById.mockReturnValue(referralDoc);
+
+    const latestDeal = makeLatestDealDoc();
+    latestDeal.expectedAmountCents = 375000;
+    mockPaymentFindOneChain(latestDeal);
+
+    const response: any = await postHandler(
+      makeRequest({
+        status: 'Lost',
+        source: 'referral_table',
+        terminateDeal: true,
+        terminatedReason: 'changed_mind',
+        lostReason: 'no_longer_buying',
+      }),
+      { params: { id: 'ref-1' } }
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.status).toBe('Lost');
+    expect(referralDoc.buyStatus).toBe('Lost');
+    expect(referralDoc.status).toBe('Lost');
+    expect(referralDoc.estPurchasePriceCents).toBe(0);
+    expect(referralDoc.referralFeeDueCents).toBe(0);
+    expect(referralDoc.autoUpdateRemindersEnabled).toBe(false);
+    expect(latestDeal.status).toBe('terminated');
+    expect(latestDeal.terminatedReason).toBe('changed_mind');
+    expect(latestDeal.expectedAmountCents).toBe(0);
+    expect(latestDeal.save).toHaveBeenCalled();
+    expect(mockedPaymentUpdateMany).toHaveBeenCalled();
+    expect(referralDoc.save).toHaveBeenCalled();
+  });
+
+  it('terminates attributed deal and parks referral In Communication when terminateDeal is true', async () => {
+    const referralDoc = makeReferralDoc();
+    referralDoc.clientType = 'Buyer';
+    referralDoc.estPurchasePriceCents = 50000000;
+    referralDoc.referralFeeDueCents = 375000;
+    referralDoc.autoUpdateRemindersEnabled = true;
+    mockedReferralFindById.mockReturnValue(referralDoc);
+
+    const latestDeal = makeLatestDealDoc();
+    latestDeal.expectedAmountCents = 375000;
+    mockPaymentFindOneChain(latestDeal);
+
+    const response: any = await postHandler(
+      makeRequest({
+        status: 'In Communication',
+        source: 'referral_table',
+        terminateDeal: true,
+        terminatedReason: 'appraisal',
+      }),
+      { params: { id: 'ref-1' } }
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.status).toBe('In Communication');
+    expect(referralDoc.buyStatus).toBe('In Communication');
+    expect(referralDoc.status).toBe('In Communication');
+    expect(referralDoc.estPurchasePriceCents).toBe(50000000);
+    expect(referralDoc.referralFeeDueCents).toBe(375000);
+    expect(referralDoc.autoUpdateRemindersEnabled).toBe(true);
+    expect(latestDeal.status).toBe('terminated');
+    expect(latestDeal.terminatedReason).toBe('appraisal');
+    expect(latestDeal.expectedAmountCents).toBe(0);
+    expect(latestDeal.save).toHaveBeenCalled();
+    expect(referralDoc.save).toHaveBeenCalled();
+  });
+
   it('updates only the current agent-owned deal when multiple deals exist', async () => {
     const referralDoc = makeReferralDoc();
     mockedReferralFindById.mockReturnValue(referralDoc);
@@ -349,12 +457,52 @@ describe('Referral status route table-driven deal status sync', () => {
     mockedReferralFindById.mockReturnValue(referralDoc);
     mockPaymentFindOneChain(null);
 
-    const response: any = await postHandler(makeRequest({ status: 'Lost' }), {
+    const response: any = await postHandler(makeRequest({ status: 'Lost', lostReason: 'chose_other_agent_postcontact' }), {
       params: { id: 'ref-1' },
     });
 
     expect(response.status).toBe(200);
     expect(mockedCreateAdminNotifications).toHaveBeenCalled();
+  });
+
+  it('records the reported lost reason and audits it', async () => {
+    const referralDoc = makeReferralDoc();
+    referralDoc.clientType = 'Buyer';
+    mockedReferralFindById.mockReturnValue(referralDoc);
+    mockPaymentFindOneChain(null);
+
+    const response: any = await postHandler(
+      makeRequest({ status: 'Lost', lostReason: 'already_had_agent' }),
+      { params: { id: 'ref-1' } }
+    );
+
+    expect(response.status).toBe(200);
+    expect(referralDoc.lostReason).toBe('already_had_agent');
+    expect(referralDoc.lostReasonSource).toBe('reported');
+    expect(referralDoc.audit).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ field: 'lostReason', newValue: 'already_had_agent' }),
+      ])
+    );
+  });
+
+  it('clears the lost reason when a lost referral is reopened', async () => {
+    const referralDoc = makeReferralDoc();
+    referralDoc.clientType = 'Buyer';
+    referralDoc.status = 'Lost';
+    referralDoc.buyStatus = 'Lost';
+    referralDoc.lostReason = 'never_connected';
+    referralDoc.lostReasonSource = 'reported';
+    mockedReferralFindById.mockReturnValue(referralDoc);
+    mockPaymentFindOneChain(null);
+
+    const response: any = await postHandler(makeRequest({ status: 'In Communication' }), {
+      params: { id: 'ref-1' },
+    });
+
+    expect(response.status).toBe(200);
+    expect(referralDoc.lostReason).toBeNull();
+    expect(referralDoc.lostReasonSource).toBeNull();
   });
 
   it('does not notify admins when an admin persists a referral status change', async () => {
@@ -366,7 +514,7 @@ describe('Referral status route table-driven deal status sync', () => {
     mockedReferralFindById.mockReturnValue(referralDoc);
     mockPaymentFindOneChain(null);
 
-    const response: any = await postHandler(makeRequest({ status: 'Lost' }), {
+    const response: any = await postHandler(makeRequest({ status: 'Lost', lostReason: 'chose_other_agent_postcontact' }), {
       params: { id: 'ref-1' },
     });
 
@@ -470,7 +618,7 @@ describe('Referral status route table-driven deal status sync', () => {
     mockedReferralFindById.mockReturnValue(referralDoc);
     mockPaymentFindOneChain(null);
 
-    const response: any = await postHandler(makeRequest({ status: 'Lost' }), {
+    const response: any = await postHandler(makeRequest({ status: 'Lost', lostReason: 'chose_other_agent_postcontact' }), {
       params: { id: 'ref-1' },
     });
 
@@ -490,7 +638,12 @@ describe('Referral status route table-driven deal status sync', () => {
     mockPaymentFindOneChain(null);
 
     const response: any = await postHandler(
-      makeRequest({ status: 'Lost', source: 'referral_detail', side: 'buy' }),
+      makeRequest({
+        status: 'Lost',
+        source: 'referral_detail',
+        side: 'buy',
+        lostReason: 'chose_other_agent_postcontact',
+      }),
       { params: { id: 'ref-1' } }
     );
 
@@ -513,7 +666,11 @@ describe('Referral status route table-driven deal status sync', () => {
     mockPaymentFindOneChain(null);
 
     const response: any = await postHandler(
-      makeRequest({ status: 'Lost', source: 'referral_detail' }),
+      makeRequest({
+        status: 'Lost',
+        source: 'referral_detail',
+        lostReason: 'chose_other_agent_postcontact',
+      }),
       { params: { id: 'ref-1' } }
     );
 
@@ -535,7 +692,12 @@ describe('Referral status route table-driven deal status sync', () => {
     mockPaymentFindOneChain(null);
 
     const response: any = await postHandler(
-      makeRequest({ status: 'Lost', source: 'referral_detail', side: 'sell' }),
+      makeRequest({
+        status: 'Lost',
+        source: 'referral_detail',
+        side: 'sell',
+        lostReason: 'chose_other_agent_postcontact',
+      }),
       { params: { id: 'ref-1' } }
     );
 

@@ -11,6 +11,8 @@ export type ReferralAgentSlots = {
   assignedAgent?: { toString(): string } | null | undefined;
   buySideAgent?: { toString(): string } | null | undefined;
   sellSideAgent?: { toString(): string } | null | undefined;
+  ahaBucket?: 'AHA' | 'AHA_OOS' | null | undefined;
+  org?: string | null | undefined;
 };
 
 export type PaymentAgentSlots = {
@@ -24,6 +26,9 @@ export type PaymentAgentSlots = {
  * Resolve a referral's network designation by walking
  * assignedAgent → buySideAgent → sellSideAgent and picking the first agent
  * that has a designation in the provided map.
+ *
+ * When no agent is designated, fall back to referral.ahaBucket (then org)
+ * so inbound OOS/AHA New Leads without an agent still bucket correctly.
  */
 export function getReferralDesignation(
   referral: ReferralAgentSlots,
@@ -35,6 +40,9 @@ export function getReferralDesignation(
     const designation = designationMap.get(id.toString());
     if (designation) return designation;
   }
+
+  if (referral.ahaBucket === 'AHA_OOS') return 'AHA_OOS';
+  if (referral.ahaBucket === 'AHA' || referral.org === 'AHA') return 'AHA';
   return null;
 }
 

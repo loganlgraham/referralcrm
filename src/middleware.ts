@@ -2,7 +2,15 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 
-const protectedRoutes = ['/dashboard', '/referrals', '/agents', '/lenders', '/payments', '/imports', '/settings'];
+const protectedRoutes = [
+  '/dashboard',
+  '/referrals',
+  '/agents',
+  '/lenders',
+  '/payments',
+  '/imports',
+  '/settings'
+];
 
 const securityHeaders: Record<string, string> = {
   'Content-Security-Policy': [

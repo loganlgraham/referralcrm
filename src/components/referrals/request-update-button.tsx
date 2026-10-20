@@ -1,59 +1,66 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { type ReactNode, useState, useMemo } from 'react';
 import { Mail, Clock, CheckCircle2, Send, Calendar } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
+import { Button } from '@/components/ui/button';
 import type { Contact } from '@/components/referrals/contact-assignment';
 import { getNextAutoUpdateSendAt } from '@/utils/auto-update-schedule';
 import { formatInTimeZone } from 'date-fns-tz';
 import { SLA_TIME_ZONE } from '@/utils/sla-insights';
+import {
+  getLastUpdateRequestSentAt,
+  hasPendingUpdateRequest,
+} from '@/utils/update-request-pending';
 
 interface RequestUpdateButtonProps {
   referralId: string;
   assignedAgent?: Contact | null;
   buySideAgent?: Contact | null;
   sellSideAgent?: Contact | null;
-  lastAutoReminderSentAt?: Date | null;
-  lastManualReminderSentAt?: Date | null;
+  lastAutoReminderSentAt?: string | Date | null;
+  lastManualReminderSentAt?: string | Date | null;
+  lastUpdateRequestResponseNotifiedAt?: string | Date | null;
   autoRemindersEnabled?: boolean;
   status?: string;
   lastPairedAt?: Date | null;
-  audit?: Array<{
-    actorRole: string;
-    field: string;
-    timestamp: Date;
-  }>;
-  notes?: Array<{
-    authorRole: string;
-    createdAt: Date;
-  }>;
   viewerRole: string;
 }
 
-export function RequestUpdateButton({
+export interface RequestUpdateParts {
+  /** Admin-only. False when the viewer cannot request updates; every node is then null. */
+  enabled: boolean;
+  hasAgents: boolean;
+  /** "Request update" button; disabled when no agents are assigned. */
+  trigger: ReactNode;
+  /** Compact last-sent / response / next-scheduled summary. */
+  statusLine: ReactNode;
+  /** Agent picker modal plus the post-send confirmation. Render once near the trigger. */
+  modal: ReactNode;
+}
+
+/**
+ * Request-update flow split into parts so the Team card can place the button in an action row
+ * and the status summary underneath it.
+ */
+export function useRequestUpdate({
   referralId,
   assignedAgent,
   buySideAgent,
   sellSideAgent,
   lastAutoReminderSentAt,
   lastManualReminderSentAt,
+  lastUpdateRequestResponseNotifiedAt,
   autoRemindersEnabled = false,
   status = 'New Lead',
   lastPairedAt,
-  audit = [],
-  notes = [],
   viewerRole,
-}: RequestUpdateButtonProps) {
+}: RequestUpdateButtonProps): RequestUpdateParts {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-
-  // Only show for admins
-  if (viewerRole !== 'admin') {
-    return null;
-  }
 
   // Get unique agents
   const agents = useMemo(() => {
@@ -74,13 +81,14 @@ export function RequestUpdateButton({
       .filter((contact): contact is Contact & { id: string } => Boolean(contact.id));
   }, [assignedAgent, buySideAgent, sellSideAgent]);
 
-  // Calculate last sent timestamp and agent response
   const statusInfo = useMemo(() => {
-    const lastAutoTime = lastAutoReminderSentAt ? new Date(lastAutoReminderSentAt).getTime() : 0;
-    const lastManualTime = lastManualReminderSentAt ? new Date(lastManualReminderSentAt).getTime() : 0;
-    const lastSentTime = Math.max(lastAutoTime, lastManualTime);
-
-    if (lastSentTime === 0) {
+    const pendingInput = {
+      lastAutoReminderSentAt,
+      lastManualReminderSentAt,
+      lastUpdateRequestResponseNotifiedAt,
+    };
+    const lastSent = getLastUpdateRequestSentAt(pendingInput);
+    if (!lastSent) {
       return {
         lastSent: null,
         agentResponded: false,
@@ -88,38 +96,19 @@ export function RequestUpdateButton({
       };
     }
 
-    const lastSentDate = new Date(lastSentTime);
-
-    // Check for agent actions after last sent
-    const agentActionsAfter = audit.filter(
-      (entry) =>
-        entry.actorRole === 'agent' &&
-        new Date(entry.timestamp).getTime() > lastSentTime &&
-        ['status', 'propertyAddress', 'stageOnTransfer'].includes(entry.field)
-    );
-
-    const notesAfter = notes.filter(
-      (note) =>
-        note.authorRole === 'agent' &&
-        new Date(note.createdAt).getTime() > lastSentTime
-    );
-
-    const hasResponse = agentActionsAfter.length > 0 || notesAfter.length > 0;
-    let responseDate: Date | null = null;
-
-    if (hasResponse) {
-      const actionTimes = agentActionsAfter.map((a) => new Date(a.timestamp).getTime());
-      const noteTimes = notesAfter.map((n) => new Date(n.createdAt).getTime());
-      const allTimes = [...actionTimes, ...noteTimes];
-      responseDate = new Date(Math.max(...allTimes));
-    }
+    const pending = hasPendingUpdateRequest(pendingInput);
+    const responseTime = lastUpdateRequestResponseNotifiedAt
+      ? new Date(lastUpdateRequestResponseNotifiedAt)
+      : null;
+    const responseDate =
+      !pending && responseTime && !Number.isNaN(responseTime.getTime()) ? responseTime : null;
 
     return {
-      lastSent: lastSentDate,
-      agentResponded: hasResponse,
+      lastSent,
+      agentResponded: !pending,
       responseDate,
     };
-  }, [lastAutoReminderSentAt, lastManualReminderSentAt, audit, notes]);
+  }, [lastAutoReminderSentAt, lastManualReminderSentAt, lastUpdateRequestResponseNotifiedAt]);
 
   // Calculate next scheduled send
   const nextSendInfo = useMemo(() => {
@@ -208,81 +197,81 @@ export function RequestUpdateButton({
     return `in ${futureDays} days`;
   };
 
-  return (
-    <div className="space-y-2">
-      <button
-        type="button"
-        onClick={handleOpenModal}
-        disabled={agents.length === 0}
-        className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        <Mail className="h-4 w-4" />
-        Request Update from Agent
-      </button>
+  const enabled = viewerRole === 'admin';
+  const hasAgents = agents.length > 0;
 
-      {/* Status Display */}
-      {agents.length > 0 && (
-        <div className="text-xs text-foreground-muted">
-          {statusInfo.lastSent ? (
-            <div className="space-y-1">
-              <div className="flex items-center gap-1.5">
-                <Clock className="h-3.5 w-3.5 text-foreground-subtle" />
-                <span>
-                  Last sent: {formatDate(statusInfo.lastSent)} ({daysSince(statusInfo.lastSent)})
-                </span>
-              </div>
-              {statusInfo.agentResponded && statusInfo.responseDate ? (
-                <div className="flex items-center gap-1.5 text-green-600">
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  <span>Agent updated on {formatDate(statusInfo.responseDate)}</span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1.5 text-amber-600">
-                  <Clock className="h-3.5 w-3.5" />
-                  <span>No action yet</span>
-                </div>
-              )}
-            </div>
+  if (!enabled) {
+    return { enabled: false, hasAgents, trigger: null, statusLine: null, modal: null };
+  }
+
+  const trigger = (
+    <Button
+      type="button"
+      size="sm"
+      variant="secondary"
+      className="w-full"
+      onClick={handleOpenModal}
+      disabled={!hasAgents}
+      leadingIcon={<Mail className="h-3.5 w-3.5" />}
+    >
+      Request update
+    </Button>
+  );
+
+  const statusLine = hasAgents ? (
+    <div className="flex flex-col gap-1 text-xs text-foreground-subtle">
+      {statusInfo.lastSent ? (
+        <span className="inline-flex items-start gap-1.5">
+          {statusInfo.agentResponded && statusInfo.responseDate ? (
+            <CheckCircle2 className="mt-[1px] h-3.5 w-3.5 shrink-0 text-success" aria-hidden />
           ) : (
-            <div className="flex items-center gap-1.5 text-foreground-subtle">
-              <Mail className="h-3.5 w-3.5" />
-              <span>Never sent</span>
-            </div>
+            <Clock className="mt-[1px] h-3.5 w-3.5 shrink-0" aria-hidden />
           )}
-          
-          {/* Next Scheduled Send */}
-          {nextSendInfo.nextAt ? (
-            <div
-              className={`flex items-center gap-1.5 mt-2 ${nextSendInfo.nextAt.getTime() < Date.now() ? 'text-amber-600' : 'text-blue-600'}`}
-            >
-              <Calendar className="h-3.5 w-3.5" />
-              <span>
-                {nextSendInfo.nextAt.getTime() < Date.now()
-                  ? `Overdue: ${formatDate(nextSendInfo.nextAt)} (${daysSince(nextSendInfo.nextAt)})`
-                  : `Next scheduled: ${formatDate(nextSendInfo.nextAt)} (${daysSince(nextSendInfo.nextAt)})`}
-              </span>
-            </div>
-          ) : nextSendInfo.reason ? (
-            <div className="flex items-center gap-1.5 text-foreground-subtle mt-2">
-              <Calendar className="h-3.5 w-3.5" />
-              <span>{nextSendInfo.reason}</span>
-            </div>
-          ) : null}
-        </div>
+          <span>
+            Last request <span className="text-numeric">{formatDate(statusInfo.lastSent)}</span> ({daysSince(statusInfo.lastSent)})
+            {' · '}
+            {statusInfo.agentResponded && statusInfo.responseDate ? (
+              <>
+                Agent updated <span className="text-numeric">{formatDate(statusInfo.responseDate)}</span>
+              </>
+            ) : (
+              'No reply yet'
+            )}
+          </span>
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-1.5">
+          <Mail className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          No update requested yet
+        </span>
       )}
+      {nextSendInfo.nextAt ? (
+        <span className="inline-flex items-start gap-1.5">
+          <Calendar className="mt-[1px] h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span>
+            {nextSendInfo.nextAt.getTime() < Date.now() ? 'Auto reminder overdue' : 'Next auto reminder'}{' '}
+            <span className="text-numeric">{formatDate(nextSendInfo.nextAt)}</span> ({daysSince(nextSendInfo.nextAt)})
+          </span>
+        </span>
+      ) : nextSendInfo.reason ? (
+        <span className="inline-flex items-start gap-1.5">
+          <Calendar className="mt-[1px] h-3.5 w-3.5 shrink-0" aria-hidden />
+          <span>{nextSendInfo.reason}</span>
+        </span>
+      ) : null}
+    </div>
+  ) : (
+    <p className="text-xs text-foreground-subtle">Assign an agent to send intros or request updates.</p>
+  );
 
-      {agents.length === 0 && (
-        <p className="text-xs text-foreground-subtle">No agents assigned to this referral</p>
-      )}
-
-      {/* Success message outside modal */}
+  const modal = (
+    <>
       {successMessage && !isModalOpen && (
-        <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-xs text-green-700">
+        <div className="rounded-lg bg-success-soft border border-success/30 px-3 py-2 text-xs text-success">
           {successMessage}
         </div>
       )}
 
-      {/* Modal */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -295,7 +284,7 @@ export function RequestUpdateButton({
           </p>
 
           {error && (
-            <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+            <div className="rounded-lg bg-danger-soft border border-danger/30 px-3 py-2 text-sm text-danger">
               {error}
             </div>
           )}
@@ -310,7 +299,7 @@ export function RequestUpdateButton({
                   type="checkbox"
                   checked={selectedAgentIds.includes(agent.id)}
                   onChange={() => handleToggleAgent(agent.id)}
-                  className="h-4 w-4 rounded border-border-strong text-primary-700 focus:ring-primary-500"
+                  className="h-4 w-4 rounded border-border-strong text-primary focus:ring-ring"
                 />
                 <div className="flex-1">
                   <div className="font-medium text-sm text-foreground">{agent.name ?? 'Agent'}</div>
@@ -321,34 +310,52 @@ export function RequestUpdateButton({
           </div>
 
           <div className="flex gap-3 pt-4 border-t border-border">
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              className="flex-1"
               onClick={() => setIsModalOpen(false)}
-              className="flex-1 rounded-lg border border-border-strong bg-surface-raised px-4 py-2 text-sm font-semibold text-foreground-muted transition hover:bg-surface-muted"
             >
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              className="flex-1"
               onClick={handleSubmit}
-              disabled={isSending || selectedAgentIds.length === 0}
-              className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={selectedAgentIds.length === 0}
+              loading={isSending}
+              leadingIcon={<Send className="h-4 w-4" />}
             >
-              {isSending ? (
-                <>
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  Sending...
-                </>
-              ) : (
-                <>
-                  <Send className="h-4 w-4" />
-                  Send Email{selectedAgentIds.length > 1 ? 's' : ''}
-                </>
-              )}
-            </button>
+              {isSending ? 'Sending...' : `Send email${selectedAgentIds.length > 1 ? 's' : ''}`}
+            </Button>
           </div>
         </div>
       </Modal>
+    </>
+  );
+
+  return { enabled, hasAgents, trigger, statusLine, modal };
+}
+
+/** Standalone stacked layout (button, then status). The Team card composes the parts directly. */
+export function RequestUpdateButton(props: RequestUpdateButtonProps) {
+  const { enabled, trigger, statusLine, modal } = useRequestUpdate(props);
+
+  if (!enabled) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="space-y-0.5">
+          <p className="text-sm font-semibold text-foreground">Agent updates</p>
+          <p className="text-xs text-foreground-subtle">Ask the assigned agent for a status note.</p>
+        </div>
+        <div className="shrink-0">{trigger}</div>
+      </div>
+      {statusLine}
+      {modal}
     </div>
   );
 }

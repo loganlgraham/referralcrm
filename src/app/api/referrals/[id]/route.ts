@@ -102,11 +102,17 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
     return new NextResponse('Forbidden', { status: 403 });
   }
   const updatePayload = parsed.data as Record<string, unknown>;
-  const canEditBorrowerContact = session.user.role === 'admin' || session.user.role === 'manager';
+  const canEditBorrowerContact =
+    session.user.role === 'admin' ||
+    session.user.role === 'manager' ||
+    (session.user.role === 'agent' && existing.origin === 'agent');
   const borrowerFieldKeys = ['borrowerFirstName', 'borrowerLastName', 'borrowerEmail', 'borrowerPhone'] as const;
   const borrowerFieldUpdateRequested = borrowerFieldKeys.some((field) => field in updatePayload);
   if (borrowerFieldUpdateRequested && !canEditBorrowerContact) {
-    return NextResponse.json({ error: 'Only admins and managers can update borrower contact details' }, { status: 403 });
+    return NextResponse.json(
+      { error: 'Only admins, managers, or the creating agent can update borrower contact details' },
+      { status: 403 }
+    );
   }
 
   const nextBorrowerFirstName =
@@ -290,7 +296,18 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
 
     // Put all updatePayload fields in $set
     const setFields: Record<string, unknown> = { ...updatePayload };
-    
+
+    // Keep the lost reason consistent with the status being written: stamp the
+    // source when a reason is supplied, and drop a stale reason if the referral is
+    // being moved out of Lost.
+    if (setFields.lostReason) {
+      setFields.lostReasonSource = 'reported';
+    } else if (typeof setFields.status === 'string' && setFields.status !== 'Lost') {
+      setFields.lostReason = null;
+      setFields.lostReasonSource = null;
+    }
+
+
     // Only add $set if there are fields to set
     if (Object.keys(setFields).length > 0) {
       updateObject.$set = setFields;
@@ -422,9 +439,7 @@ export async function DELETE(request: NextRequest, context: RouteContext): Promi
   if (referral.deletedAt) {
     return new NextResponse('Not found', { status: 404 });
   }
-  const agentDeletingAgentReferral = session.user.role === 'agent' && referral.origin === 'agent';
-  const adminDeletingAdminReferral = session.user.role === 'admin' && referral.origin === 'admin';
-  const canDelete = agentDeletingAgentReferral || adminDeletingAdminReferral;
+  const canDelete = session.user.role === 'admin' && referral.origin === 'admin';
 
   if (!canDelete) {
     return new NextResponse('Forbidden', { status: 403 });

@@ -2,7 +2,10 @@ import { forwardRef, type InputHTMLAttributes, type TextareaHTMLAttributes } fro
 import { cn } from '@/lib/cn';
 
 const baseField =
-  'flex w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-foreground shadow-sm transition placeholder:text-foreground-subtle focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30 disabled:cursor-not-allowed disabled:opacity-60';
+  'flex w-full rounded-lg border border-border-strong/70 bg-surface px-3 py-2 text-sm text-foreground shadow-[inset_0_1px_1px_rgba(15,23,42,0.03)] transition placeholder:text-foreground-subtle focus:border-ring focus:outline-none focus:shadow-focus disabled:cursor-not-allowed disabled:bg-surface-muted disabled:opacity-60';
+
+/** For the handful of places that still render a raw `input` (dynamic name/value maps). */
+export const inputFieldClasses = cn(baseField, 'h-9');
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   invalid?: boolean;
@@ -18,7 +21,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       className={cn(
         baseField,
         'h-9',
-        invalid && 'border-danger focus:border-danger focus:ring-danger/30',
+        invalid && 'border-danger focus:border-danger focus:shadow-[0_0_0_4px_hsl(var(--danger)/0.22)]',
         className
       )}
       {...props}
@@ -41,7 +44,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
       className={cn(
         baseField,
         'min-h-[80px] py-2',
-        invalid && 'border-danger focus:border-danger focus:ring-danger/30',
+        invalid && 'border-danger focus:border-danger focus:shadow-[0_0_0_4px_hsl(var(--danger)/0.22)]',
         className
       )}
       {...props}

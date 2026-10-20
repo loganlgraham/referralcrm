@@ -19,7 +19,11 @@ import {
 } from 'date-fns';
 import { connectMongo } from '@/lib/mongoose';
 import { getCurrentSession } from '@/lib/auth';
-import { DEFAULT_AGENT_COMMISSION_BPS } from '@/constants/referrals';
+import {
+  DEFAULT_AGENT_COMMISSION_BPS,
+  LOST_REASON_LABELS,
+  type LostReason
+} from '@/constants/referrals';
 import { zipToState, inferStateFromLocationText } from '@/utils/location';
 import { Referral } from '@/models/referral';
 import { Payment } from '@/models/payment';
@@ -46,12 +50,17 @@ import {
   normalizeAhaKpiMap
 } from '@/lib/server/aha-leaderboard-scoring';
 import { resolvePushbackMetricsInTimeframe } from '@/lib/server/pushback-metrics';
+import { isAttributableLoss } from '@/lib/server/lost-attribution';
+import { isDashboardInternalAdminRequest } from '@/lib/server/dashboard-internal-request';
 import { buildConversionFunnel, type FunnelReferralInput } from '@/lib/server/conversion-funnel';
 import {
   computeCohortCloseRate,
   isClosingInNonTerminatedMonth,
+  isDealClosedInWindow,
   isTotalFutureClosingStatus,
-  safePercent
+  resolveDealClosingDate,
+  safePercent,
+  type DealClosingDateInput
 } from '@/lib/server/dashboard-math';
 import { SLA_THRESHOLDS } from '@/utils/sla-insights';
 import {
@@ -70,16 +79,16 @@ import {
   type TimeframeInfo,
   type TrendPoint
 } from '@/lib/server/dashboard/timeframe';
+import { parseNetworkList, serializeNetworkList } from '@/utils/network-filter';
 
 export const dynamic = 'force-dynamic';
-
-type NetworkFilter = 'ALL' | 'AHA' | 'AHA_OOS';
 
 interface DashboardRequestContext {
   referralMatch: Record<string, unknown>;
   paymentMatch: Record<string, unknown>;
   timeframe: TimeframeInfo;
-  networkFilter: NetworkFilter;
+  /** Selected networks; null means all referrals, including undesignated ones. */
+  networkFilter: Set<NetworkDesignation> | null;
 }
 
 interface AggregatedPayment {
@@ -195,6 +204,7 @@ interface DashboardReferral {
   sellStatus?: string | null;
   lender?: Types.ObjectId | null;
   status?: string;
+  lostReason?: string | null;
   preApprovalAmountCents?: number;
   stageOnTransfer?: string | null;
   initialNotes?: string;
@@ -576,12 +586,67 @@ function resolvePaymentReceivedDate(payment: AggregatedPayment): Date | null {
   return payment.updatedAt ?? null;
 }
 
-/** Closing date for bucketing "generated" revenue (when the deal closed). */
+function dealClosingDateInput(payment: AggregatedPayment): DealClosingDateInput {
+  return {
+    closingDate: payment.closingDate,
+    lastClosedAt: payment.referral?.sla?.lastClosedAt ?? null,
+    status: payment.status,
+    paidDate: payment.paidDate,
+    invoiceDate: payment.invoiceDate,
+    updatedAt: payment.updatedAt
+  };
+}
+
+/** Closing date for closed-deal counts and generated revenue. */
 function resolveClosingDate(payment: AggregatedPayment): Date | null {
-  if (payment.closingDate) return payment.closingDate;
-  const lastClosedAt = payment.referral?.sla?.lastClosedAt;
-  if (lastClosedAt) return typeof lastClosedAt === 'string' ? new Date(lastClosedAt) : lastClosedAt;
-  return resolveMetricDate(payment);
+  return resolveDealClosingDate(dealClosingDateInput(payment));
+}
+
+function resolveClosedDealCommercials(payment: AggregatedPayment): {
+  contractPriceCents: number;
+  referralFeeCents: number;
+  referralFeePercent: number | null;
+  commissionPercent: number;
+  commissionCents: number;
+} {
+  const contractPriceCents =
+    payment.contractPriceCents ??
+    payment.referral?.closedPriceCents ??
+    payment.referral?.estPurchasePriceCents ??
+    0;
+  const referralFeeCents = payment.referral?.referralFeeDueCents ?? 0;
+  let referralFeePercent: number | null =
+    typeof payment.referral?.referralFeeBasisPoints === 'number'
+      ? (payment.referral.referralFeeBasisPoints ?? 0) / 100
+      : null;
+  if ((!referralFeePercent || referralFeePercent <= 0) && contractPriceCents > 0 && referralFeeCents > 0) {
+    referralFeePercent = (referralFeeCents / contractPriceCents) * 100;
+  }
+  // Flat fee wins because deals entered in dollar mode store the dollar amount
+  // and clear the basis points, while the referral still carries the default 3%.
+  const flatFeeCents = payment.commissionFlatFeeCents ?? 0;
+  if (flatFeeCents > 0) {
+    return {
+      contractPriceCents,
+      referralFeeCents,
+      referralFeePercent,
+      commissionCents: flatFeeCents,
+      commissionPercent: contractPriceCents > 0 ? (flatFeeCents / contractPriceCents) * 100 : 0
+    };
+  }
+  const resolvedCommissionBasisPoints =
+    (payment.commissionBasisPoints ?? 0) > 0
+      ? payment.commissionBasisPoints!
+      : (payment.referral?.commissionBasisPoints ?? 0) > 0
+        ? payment.referral!.commissionBasisPoints!
+        : DEFAULT_AGENT_COMMISSION_BPS;
+  return {
+    contractPriceCents,
+    referralFeeCents,
+    referralFeePercent,
+    commissionPercent: resolvedCommissionBasisPoints / 100,
+    commissionCents: (contractPriceCents * resolvedCommissionBasisPoints) / 10000
+  };
 }
 
 function createDashboardContext(request: NextRequest): DashboardRequestContext {
@@ -591,17 +656,13 @@ function createDashboardContext(request: NextRequest): DashboardRequestContext {
     request.nextUrl.searchParams.get('end')
   );
   const referralMatch: Record<string, unknown> = { deletedAt: null };
-  const networkParam = request.nextUrl.searchParams.get('network');
-  const normalizedNetwork =
-    networkParam === 'AHA' || networkParam === 'AHA_OOS' || networkParam === 'ALL'
-      ? (networkParam as NetworkFilter)
-      : 'ALL';
+  const networks = parseNetworkList(request.nextUrl.searchParams.get('network'));
 
   return {
     referralMatch,
     paymentMatch: {},
     timeframe,
-    networkFilter: normalizedNetwork
+    networkFilter: networks.length > 0 ? new Set(networks) : null
   };
 }
 
@@ -723,7 +784,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const authHeader = request.headers.get('authorization');
   const isCronAdmin = Boolean(cronSecret && authHeader === `Bearer ${cronSecret}`);
 
-  if (!session && !isCronAdmin) {
+  const isInternalAdmin = isDashboardInternalAdminRequest(request);
+  if (!session && !isCronAdmin && !isInternalAdmin) {
     return new NextResponse('Unauthorized', { status: 401 });
   }
 
@@ -734,7 +796,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const context = createDashboardContext(request);
   const { referralMatch, timeframe } = context;
 
-  const role = session?.user?.role ?? (isCronAdmin ? 'admin' : null);
+  const role = isInternalAdmin ? 'admin' : session?.user?.role ?? (isCronAdmin ? 'admin' : null);
   const userId = session?.user?.id;
 
   let missingProfile = false;
@@ -753,7 +815,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (!agent) {
       missingProfile = true;
     } else {
-      referralMatch.assignedAgent = agent._id as Types.ObjectId;
+      const agentId = agent._id as Types.ObjectId;
+      referralMatch.$or = [
+        { assignedAgent: agentId },
+        { buySideAgent: agentId },
+        { sellSideAgent: agentId },
+      ];
     }
   }
 
@@ -904,17 +971,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         missingAttributionReferrals: [],
         stalePipelineCount: 0,
         stalePipelineList: []
-      },
-      agit: {
-        agitReferrals: 0,
-        agitPercentage: 0,
-        usedAfcCount: 0,
-        usedAfcRate: 0,
-        lostReferrals: 0,
-        closeRate: 0,
-        dealsClosed: 0,
-        referralRows: [],
-        dealRows: []
       }
     });
     missingProfileResponse.headers.set('server-timing', `dashboard;dur=${missingProfileDurationMs}`);
@@ -926,6 +982,24 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return acc;
   }, {});
 
+  // An agent match is `$or` across the three agent slots. Prefixing the key
+  // would look for a field named `$or` on the referral instead of filtering.
+  const nestedAgentOr = paymentMatch['referral.$or'];
+  if (Array.isArray(nestedAgentOr)) {
+    delete paymentMatch['referral.$or'];
+    paymentMatch.$or = nestedAgentOr.flatMap((clause) => {
+      if (!clause || typeof clause !== 'object') return [];
+      return [
+        Object.fromEntries(
+          Object.entries(clause as Record<string, unknown>).map(([field, value]) => [
+            `referral.${field}`,
+            value,
+          ])
+        ),
+      ];
+    });
+  }
+
   context.paymentMatch = paymentMatch;
 
   const timeframeStart = timeframe.start;
@@ -935,7 +1009,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ...referralMatch,
   })
     .select(
-      'createdAt updatedAt referralDate status statusLastUpdated referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents stageOnTransfer initialNotes notes.content notes.createdAt assignedAgent buySideAgent sellSideAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser origin dealSide clientType sla lookingInZip lookingInZips loanFileNumber borrower.name audit.field audit.previousValue audit.newValue audit.timestamp'
+      'createdAt updatedAt referralDate status lostReason statusLastUpdated referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents stageOnTransfer initialNotes notes.content notes.createdAt assignedAgent buySideAgent sellSideAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser origin dealSide clientType sla lookingInZip lookingInZips loanFileNumber borrower.name audit.field audit.previousValue audit.newValue audit.timestamp'
     )
     .lean<DashboardReferral[]>()
     .exec();
@@ -1126,26 +1200,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const isAgentIncludedInLeaderboards = (id: string) => !excludedAgentIds.has(id);
 
   const lenderNameMap = new Map<string, string>();
-  const lenderEmailMap = new Map<string, string | null>();
-  const lenderPhoneMap = new Map<string, string | null>();
   const lenderNpsMap = new Map<string, number | null>();
   lenders.forEach((lender) => {
     const id = lender._id.toString();
     lenderNameMap.set(id, lender.name || 'Unnamed MC');
-    lenderEmailMap.set(id, lender.email ?? null);
-    lenderPhoneMap.set(id, lender.phone ?? null);
     lenderNpsMap.set(id, (lender as { npsScore?: number | null }).npsScore ?? null);
   });
 
   const agentNameMap = new Map<string, string>();
-  const agentEmailMap = new Map<string, string | null>();
-  const agentPhoneMap = new Map<string, string | null>();
   const agentUserIdToAgentIdMap = new Map<string, string>();
   agents.forEach((agent) => {
     const id = agent._id.toString();
     agentNameMap.set(id, agent.name || 'Unnamed Agent');
-    agentEmailMap.set(id, agent.email ?? null);
-    agentPhoneMap.set(id, agent.phone ?? null);
     const userId = (agent as { userId?: Types.ObjectId | null }).userId;
     if (userId) {
       agentUserIdToAgentIdMap.set(userId.toString(), id);
@@ -1166,18 +1232,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const getReferralDesignation = (referral: DashboardReferral): NetworkDesignation | null =>
     sharedGetReferralDesignation(referral, agentDesignationMap);
 
-  const matchesNetwork = (designation: 'AHA' | 'AHA_OOS' | 'AGIT' | null) => {
-    if (context.networkFilter === 'ALL') return true;
-    return designation === context.networkFilter;
+  const selectedNetworks = context.networkFilter;
+  const matchesNetwork = (designation: NetworkDesignation | null) => {
+    if (selectedNetworks === null) return true;
+    return designation !== null && selectedNetworks.has(designation);
   };
 
   const paymentsByNetwork =
-    context.networkFilter === 'ALL'
+    context.networkFilter === null
       ? paymentsWithMetric
       : paymentsWithMetric.filter((payment) => matchesNetwork(getAgentDesignation(payment)));
 
   const filteredPaymentsByNetwork =
-    context.networkFilter === 'ALL'
+    context.networkFilter === null
       ? filteredPayments
       : filteredPayments.filter((payment) => matchesNetwork(getAgentDesignation(payment)));
 
@@ -1189,7 +1256,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     isWithinTimeframe(resolvePaymentReceivedDate(payment));
 
   const referralsByNetwork =
-    context.networkFilter === 'ALL'
+    context.networkFilter === null
       ? referrals
       : referrals.filter((referral) => matchesNetwork(getReferralDesignation(referral)));
 
@@ -1201,11 +1268,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   });
 
   const terminatedWithinNetwork =
-    context.networkFilter === 'ALL'
+    context.networkFilter === null
       ? terminatedWithinTimeframe
       : terminatedWithinTimeframe.filter((payment) => matchesNetwork(getAgentDesignation(payment)));
   const terminatedByNetwork =
-    context.networkFilter === 'ALL'
+    context.networkFilter === null
       ? terminatedWithMetric
       : terminatedWithMetric.filter((payment) => matchesNetwork(getAgentDesignation(payment)));
 
@@ -1247,28 +1314,21 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       filteredReferralIds.has(payment.referral._id.toString())
   );
 
-  // Deals closed in timeframe: matches "Deals closed" graph logic (closed | payment_sent | paid)
-  // Use paymentsByNetwork (same as graph) and filter by metricDate being within timeframe
-  const dealsClosedInTimeframe = paymentsByNetwork.filter((payment) => {
-    const metricDate = payment.metricDate ?? resolveMetricDate(payment);
-    if (!metricDate) return false;
-    if (timeframeStart && metricDate < timeframeStart) return false;
-    if (timeframeEnd && metricDate > timeframeEnd) return false;
-    if (!isClosedDealEligible(payment)) return false;
-    return true;
-  });
+  // Deals closed in the selected period: closing date, not the day the deal
+  // was marked paid or invoiced. Payment Received still counts — the status
+  // moved past Closed — but it counts in the month it closed.
+  const dealsClosedInTimeframe = paymentsByNetwork.filter(
+    (payment) =>
+      isClosedDealEligible(payment) &&
+      isDealClosedInWindow(dealClosingDateInput(payment), timeframeStart, timeframeEnd)
+  );
   const allClosedDealsInNetwork = paymentsByNetwork.filter((payment) => CLOSED_DEAL_STATUSES.has(payment.status));
-  // MC closed-deal leaderboards (close rate, outside-lender loss, KPI ranking) must
-  // count deals that actually *closed* within the timeframe, so bucket by the real
-  // closing date rather than metricDate (paid/invoice/updatedAt). resolveClosingDate
-  // falls back to metricDate only when a payment has no closingDate/lastClosedAt.
-  const allClosedDealsInTimeframe = allClosedDealsInNetwork.filter((payment) => {
-    const closingDate = resolveClosingDate(payment);
-    if (closingDate === null || Number.isNaN(closingDate.getTime())) return false;
-    if (timeframeStart && closingDate < timeframeStart) return false;
-    if (timeframeEnd && closingDate > timeframeEnd) return false;
-    return true;
-  });
+  // MC closed-deal leaderboards use the same closing-date window. The fallback
+  // inside resolveDealClosingDate applies only when a payment has no closing
+  // date and no last-closed time.
+  const allClosedDealsInTimeframe = allClosedDealsInNetwork.filter((payment) =>
+    isDealClosedInWindow(dealClosingDateInput(payment), timeframeStart, timeframeEnd)
+  );
   // Pushback metrics must count any non-terminated deal whose closing date was moved,
   // not just already-closed deals. Include events where the pushback timestamp falls in
   // the timeframe even if the payment itself hasn't been updated since. Entries without
@@ -1563,10 +1623,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       .filter((value): value is number => value != null && value >= 0)
   );
 
-  const revenueContributingClosedDeals = revenueEligiblePayments.filter(
-    (payment) => isClosedDealEligible(payment)
-  );
-  const closedDealPrices = revenueContributingClosedDeals
+  const closedDealPrices = dealsClosedInTimeframe
     .map((payment) =>
       payment.contractPriceCents ??
       payment.referral?.closedPriceCents ??
@@ -1794,26 +1851,22 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const dealTimeframeMap = new Map<string, { dealsClosed: number; revenueReceivedCents: number }>();
   const generatedByTimeframe = new Map<string, { dealsClosed: number; revenueGeneratedCents: number }>();
-  filteredPaymentsByNetwork.forEach((payment) => {
-    const metricDate = payment.metricDate ?? resolveMetricDate(payment);
+  // Both closed-deal series use the closing-date list so a deal paid this
+  // period but closed earlier cannot land in this period's bucket.
+  dealsClosedInTimeframe.forEach((payment) => {
     const closingDate = resolveClosingDate(payment);
-    if (!isClosedDealEligible(payment)) return;
-
+    if (!closingDate) return;
+    const key = getTimeframeBucketKey(closingDate, context.timeframe);
     const expectedCents = Math.max(payment.expectedAmountCents ?? 0, 0);
 
-    if (metricDate) {
-      const key = getTimeframeBucketKey(new Date(metricDate), context.timeframe);
-      const current = dealTimeframeMap.get(key) ?? { dealsClosed: 0, revenueReceivedCents: 0 };
-      current.dealsClosed += 1;
-      dealTimeframeMap.set(key, current);
-    }
-    if (closingDate) {
-      const key = getTimeframeBucketKey(closingDate, context.timeframe);
-      const current = generatedByTimeframe.get(key) ?? { dealsClosed: 0, revenueGeneratedCents: 0 };
-      current.dealsClosed += 1;
-      current.revenueGeneratedCents += expectedCents;
-      generatedByTimeframe.set(key, current);
-    }
+    const closed = dealTimeframeMap.get(key) ?? { dealsClosed: 0, revenueReceivedCents: 0 };
+    closed.dealsClosed += 1;
+    dealTimeframeMap.set(key, closed);
+
+    const generated = generatedByTimeframe.get(key) ?? { dealsClosed: 0, revenueGeneratedCents: 0 };
+    generated.dealsClosed += 1;
+    generated.revenueGeneratedCents += expectedCents;
+    generatedByTimeframe.set(key, generated);
   });
   paidRevenueEligiblePaymentsInTimeframe.forEach((payment) => {
     const receivedDate = resolvePaymentReceivedDate(payment);
@@ -1916,38 +1969,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     };
   });
 
-  // C-5: generatedRevenueList must mirror the KPI (payments bucketed by
-  // resolveClosingDate), not the dealsClosedInTimeframe (metricDate) list.
-  const dealsGeneratedInTimeframe = paymentsByNetwork.filter((payment) => {
-    if (!isClosedDealEligible(payment)) return false;
-    const closingDate = resolveClosingDate(payment);
-    if (!closingDate) return false;
-    if (timeframeStart && closingDate < timeframeStart) return false;
-    if (timeframeEnd && closingDate > timeframeEnd) return false;
-    return true;
-  });
+  // Generated (closed) is the same closing-date population as Deals closed,
+  // so the dollar amount, the popup, and the card cannot diverge.
+  const dealsGeneratedInTimeframe = dealsClosedInTimeframe;
 
-  // Card deals closed: per-deal closing-date filter so partial-month and
-  // week/custom timeframes count correctly (month buckets would over/undercount).
-  const dealsClosedForSummary = dealsGeneratedInTimeframe.length;
+  const dealsClosedForSummary = dealsClosedInTimeframe.length;
 
-  // Generated revenue in timeframe (by closing date)
-  const generatedRevenueCentsForSummary = (() => {
-    let sum = 0;
-    for (const bucket of timeframeBuckets) {
-      const stats = generatedByTimeframe.get(bucket.key);
-      if (stats) sum += stats.revenueGeneratedCents;
-    }
-    return sum;
-  })();
+  const generatedRevenueCentsForSummary = dealsClosedInTimeframe.reduce(
+    (sum, payment) => sum + Math.max(payment.expectedAmountCents ?? 0, 0),
+    0
+  );
 
-  const closedInTimeframe = (payment: AggregatedPayment) => {
-    const closingDate = resolveClosingDate(payment);
-    if (!closingDate) return false;
-    if (timeframeStart && closingDate < timeframeStart) return false;
-    if (timeframeEnd && closingDate > timeframeEnd) return false;
-    return true;
-  };
+  const closedInTimeframe = (payment: AggregatedPayment) =>
+    isDealClosedInWindow(dealClosingDateInput(payment), timeframeStart, timeframeEnd);
 
   // Pipeline-health attach rates honor the dashboard network filter (ALL / AHA /
   // AHA_OOS) by sourcing from paymentsByNetwork rather than the network-agnostic
@@ -2192,7 +2226,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       : null;
 
     return {
-      networkFilter: context.networkFilter,
+      networkFilter: serializeNetworkList(Array.from(context.networkFilter ?? [])),
       timeframe: {
         start: timeframeStart?.toISOString() ?? null,
         end: timeframeEnd?.toISOString() ?? null
@@ -2355,11 +2389,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   });
 
   const mcTotalClosedDealsMap = new Map<string, number>();
-  const mcAssignedAgentClosesMap = new Map<string, number>();
   const mcOutsideLenderLossMap = new Map<string, number>();
-  const mcNoAfcClosesMap = new Map<string, number>();
-  const mcAllClosedDealsForAssignedAgentRateMap = new Map<string, number>();
-  const mcNoAssignedAgentClosesMap = new Map<string, number>();
+  // MC composite KEY metrics: closed buy-side deals with/without AFC / assigned agent.
+  const mcDealsWithAfcMap = new Map<string, number>();
+  const mcDealsWithoutAfcMap = new Map<string, number>();
+  const mcDealsWithoutAssignedAgentMap = new Map<string, number>();
   // MC Close Effectiveness card: share of an MC's closed deals that kept AFC even
   // though the assigned agent was not used, over every closed deal for that MC.
   const mcAfcOnlyClosesMap = new Map<string, number>();
@@ -2382,29 +2416,25 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (payment.usedAfc === true && payment.usedAssignedAgent === false) {
       mcAfcOnlyClosesMap.set(denomKey, (mcAfcOnlyClosesMap.get(denomKey) ?? 0) + 1);
     }
-    // "Closes Without Assigned Agent" compares explicit true/false flags:
-    // outside-agent attributions and unknown (null) flags belong to neither
-    // side of the rate, so they must stay out of the denominator too.
+    if (payment.usedAfc === true) {
+      mcDealsWithAfcMap.set(denomKey, (mcDealsWithAfcMap.get(denomKey) ?? 0) + 1);
+    }
+    if (payment.usedAfc !== true) {
+      mcDealsWithoutAfcMap.set(denomKey, (mcDealsWithoutAfcMap.get(denomKey) ?? 0) + 1);
+    }
+    // Explicit false only — outside-agent / unknown flags are ignored (not
+    // counted as "without assigned agent").
     if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
-    if (payment.usedAssignedAgent !== true && payment.usedAssignedAgent !== false) return;
-    const mcKey = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
-    mcAllClosedDealsForAssignedAgentRateMap.set(
-      mcKey,
-      (mcAllClosedDealsForAssignedAgentRateMap.get(mcKey) ?? 0) + 1
-    );
     if (payment.usedAssignedAgent === false) {
-      mcNoAssignedAgentClosesMap.set(mcKey, (mcNoAssignedAgentClosesMap.get(mcKey) ?? 0) + 1);
+      mcDealsWithoutAssignedAgentMap.set(
+        denomKey,
+        (mcDealsWithoutAssignedAgentMap.get(denomKey) ?? 0) + 1
+      );
     }
   });
   eligibleClosedDealsInTimeframe.forEach((payment) => {
     const mcKey = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
     mcTotalClosedDealsMap.set(mcKey, (mcTotalClosedDealsMap.get(mcKey) ?? 0) + 1);
-    if (payment.usedAfc !== true) {
-      mcNoAfcClosesMap.set(mcKey, (mcNoAfcClosesMap.get(mcKey) ?? 0) + 1);
-    }
-    if (payment.usedAssignedAgent === true) {
-      mcAssignedAgentClosesMap.set(mcKey, (mcAssignedAgentClosesMap.get(mcKey) ?? 0) + 1);
-    }
     if (payment.usedAssignedAgent === true && payment.usedAfc === false) {
       mcOutsideLenderLossMap.set(mcKey, (mcOutsideLenderLossMap.get(mcKey) ?? 0) + 1);
     }
@@ -2450,14 +2480,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
   });
 
-  const mcAfcClosedDealCountMap = new Map<string, number>();
-  eligibleClosedDealsInTimeframe.forEach((payment) => {
-    if (payment.usedAfc !== true) return;
-    const mcKey = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
-    mcAfcClosedDealCountMap.set(mcKey, (mcAfcClosedDealCountMap.get(mcKey) ?? 0) + 1);
-  });
-
-  const mcAfcDealCountMap = new Map<string, number>();
   const allPaymentsWithTerminatedByNetwork = [...paymentsByNetwork, ...terminatedByNetwork];
   const contractReferralIds = new Set<string>();
   const contractsList: ReturnType<typeof serializeClosedDeal>[] = [];
@@ -2475,13 +2497,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return b.underContractDate.localeCompare(a.underContractDate);
   });
   const contractsInTimeframe = contractReferralIds.size;
+
+  // MC composite Deals Created: buy-side deals that entered under contract in
+  // the timeframe (open, closed, or terminated).
+  const mcDealCountMap = new Map<string, number>();
   allPaymentsWithTerminatedByNetwork.forEach((payment) => {
-    if (payment.usedAfc !== true) return;
     if (isSellSideMetricsPayment(payment)) return;
     const contractDate = payment.underContractDate ?? payment.metricDate ?? resolveMetricDate(payment);
     if (!isWithinTimeframe(contractDate)) return;
     const mcKey = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
-    mcAfcDealCountMap.set(mcKey, (mcAfcDealCountMap.get(mcKey) ?? 0) + 1);
+    mcDealCountMap.set(mcKey, (mcDealCountMap.get(mcKey) ?? 0) + 1);
   });
 
   const mcRevenueLeaderboard = Array.from(mcRevenueMap.entries())
@@ -2554,19 +2579,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   type McKpiKey =
     | 'afcCloseRate'
-    | 'afcDealCount'
-    | 'closedDealsWithAfc'
-    | 'closedDealsWithoutAfc'
+    | 'afcContractCloseRate'
+    | 'dealsWithoutAfc'
+    | 'dealsWithoutAssignedAgent'
+    | 'dealCount'
+    | 'referralCount'
     | 'totalRevenueGenerated'
     | 'revenuePerReferral'
     | 'closeVelocityMedianDays'
-    | 'referralCount'
     | 'dealPushbackRate'
-    | 'noAssignedAgentCloseRate'
     | 'financingTerminationRate'
-    | 'agingPipelineRisk'
-    | 'sourceQualityIndex'
-    | 'forecastAccuracy'
     | 'npsScore';
 
   type McRankedEntry = {
@@ -2614,75 +2636,62 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const MC_MIN_RELIABILITY_FACTOR = 0.6;
   const MC_KPI_WEIGHTS: Record<McKpiKey, number> = {
     afcCloseRate: 8,
-    afcDealCount: 8,
-    closedDealsWithAfc: 8,
-    closedDealsWithoutAfc: 7,
+    afcContractCloseRate: 8,
+    dealsWithoutAfc: 8,
+    dealsWithoutAssignedAgent: 8,
+    dealCount: 7,
+    referralCount: 6,
     totalRevenueGenerated: 6,
-    referralCount: 5,
     revenuePerReferral: 2,
     closeVelocityMedianDays: 2,
     dealPushbackRate: 2,
-    noAssignedAgentCloseRate: 2,
     financingTerminationRate: 2,
-    npsScore: 2,
-    agingPipelineRisk: 1,
-    sourceQualityIndex: 1,
-    forecastAccuracy: 1
+    npsScore: 2
   };
   const MC_KPI_TIERS: Record<McKpiKey, 'critical' | 'high' | 'medium' | 'low'> = {
     afcCloseRate: 'critical',
-    afcDealCount: 'critical',
-    closedDealsWithAfc: 'critical',
-    closedDealsWithoutAfc: 'critical',
-    totalRevenueGenerated: 'critical',
+    afcContractCloseRate: 'critical',
+    dealsWithoutAfc: 'critical',
+    dealsWithoutAssignedAgent: 'critical',
+    dealCount: 'critical',
     referralCount: 'critical',
+    totalRevenueGenerated: 'critical',
     revenuePerReferral: 'medium',
     closeVelocityMedianDays: 'medium',
     dealPushbackRate: 'medium',
-    noAssignedAgentCloseRate: 'medium',
     financingTerminationRate: 'medium',
-    npsScore: 'medium',
-    agingPipelineRisk: 'low',
-    sourceQualityIndex: 'low',
-    forecastAccuracy: 'low'
+    npsScore: 'medium'
   };
   const MC_KPI_LABELS: Record<McKpiKey, string> = {
     afcCloseRate: 'AFC Close Rate',
-    afcDealCount: 'AFC Deals',
-    closedDealsWithAfc: 'Closed Deals (AFC)',
-    closedDealsWithoutAfc: 'Closed Deals (No AFC)',
-    totalRevenueGenerated: 'Total Revenue Generated',
+    afcContractCloseRate: 'AFC Contract Close Rate',
+    dealsWithoutAfc: 'Closed Deals Without AFC',
+    dealsWithoutAssignedAgent: 'Closed Deals Without Assigned Agent',
+    dealCount: 'Deals Created',
     referralCount: 'Referral Count',
+    totalRevenueGenerated: 'Total Revenue Generated',
     revenuePerReferral: 'Revenue per Referral',
     closeVelocityMedianDays: 'Median Days Pair -> Close',
     dealPushbackRate: 'Deals Pushed Back Rate',
-    noAssignedAgentCloseRate: 'Closes Without Assigned Agent',
     financingTerminationRate: 'Financing Terminations',
-    agingPipelineRisk: 'Aging Pipeline Risk',
-    sourceQualityIndex: 'Source Quality Index',
-    forecastAccuracy: 'Forecast Accuracy',
     npsScore: 'NPS Score'
   };
   const MC_KPI_ORDER: McKpiKey[] = [
     'afcCloseRate',
-    'afcDealCount',
-    'closedDealsWithAfc',
-    'closedDealsWithoutAfc',
-    'totalRevenueGenerated',
+    'afcContractCloseRate',
+    'dealsWithoutAfc',
+    'dealsWithoutAssignedAgent',
+    'dealCount',
     'referralCount',
+    'totalRevenueGenerated',
     'revenuePerReferral',
     'closeVelocityMedianDays',
     'dealPushbackRate',
-    'noAssignedAgentCloseRate',
     'financingTerminationRate',
-    'npsScore',
-    'agingPipelineRisk',
-    'sourceQualityIndex',
-    'forecastAccuracy',
+    'npsScore'
   ];
 
   const mcVelocityDaysMap = new Map<string, number[]>();
-  const mcForecastMap = new Map<string, { expected: number; realized: number }>();
   const mcPushbackStatsMap = new Map<
     string,
     { dealsWithPushback: number; totalPushbackEvents: number; totalPushedBackDays: number }
@@ -2697,10 +2706,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   let mcTotalPushbackEventsWithDays = 0;
   let mcEligibleDealsForPushbackInScope = 0;
 
-  // Closed-only pass: close velocity and forecast accuracy only make sense once
-  // a deal has actually closed. Bucket by closing date in the timeframe (like the
-  // other MC closed-deal KPIs) — using `updatedAt` here let years-old deals with a
-  // recent touch (note edit, status sync) skew the medians and forecast accuracy.
+  // Closed-only pass: close velocity only makes sense once a deal has actually
+  // closed. Bucket by closing date in the timeframe — using `updatedAt` here
+  // let years-old deals with a recent touch skew the medians.
   buySideClosedDealsInTimeframe.forEach((payment) => {
     const key = payment.referral?.lender ? payment.referral.lender.toString() : 'unassigned';
     const pairedAtRaw = payment.referral?.sla?.lastPairedAt;
@@ -2721,15 +2729,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       const values = mcVelocityDaysMap.get(key) ?? [];
       values.push(days);
       mcVelocityDaysMap.set(key, values);
-    }
-
-    // M-14: forecast accuracy should align with the revenue-eligible deal
-    // set so outside-agent deals aren't counted against MC forecast.
-    if (isRevenueEligiblePayment(payment)) {
-      const forecastCurrent = mcForecastMap.get(key) ?? { expected: 0, realized: 0 };
-      forecastCurrent.expected += Math.max(payment.expectedAmountCents ?? 0, 0);
-      forecastCurrent.realized += Math.max(payment.receivedAmountCents ?? 0, 0);
-      mcForecastMap.set(key, forecastCurrent);
     }
   });
 
@@ -2767,40 +2766,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
   });
 
-  const mcAgingRiskMap = new Map<
-    string,
-    { bucket0To30: number; bucket31To60: number; bucket61Plus: number; total: number }
-  >();
-  // C-18: use `normalizeStatusKey` (same helper used elsewhere) and include
-  // 'terminated' in addition to 'closed' / 'lost' so terminal referrals don't
-  // appear as aging pipeline risk.
-  const inactiveReferralStatuses = new Set(['closed', 'lost', 'terminated']);
-  const agingAnchorDate = timeframeEnd ?? new Date();
-  filteredReferrals.forEach((referral) => {
-    const key = referral.lender ? referral.lender.toString() : 'unassigned';
-    const normalizedStatus = normalizeStatusKey(referral.status ?? '');
-    if (inactiveReferralStatuses.has(normalizedStatus)) {
-      return;
-    }
-    const activityDate = referral.statusLastUpdated ?? referral.updatedAt ?? referral.createdAt;
-    const days = Math.max(0, differenceInCalendarDays(agingAnchorDate, activityDate));
-    const current = mcAgingRiskMap.get(key) ?? {
-      bucket0To30: 0,
-      bucket31To60: 0,
-      bucket61Plus: 0,
-      total: 0
-    };
-    current.total += 1;
-    if (days <= 30) {
-      current.bucket0To30 += 1;
-    } else if (days <= 60) {
-      current.bucket31To60 += 1;
-    } else {
-      current.bucket61Plus += 1;
-    }
-    mcAgingRiskMap.set(key, current);
-  });
-
   const mcTerminatedMap = new Map<
     string,
     {
@@ -2826,26 +2791,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     mcTerminatedMap.set(key, current);
   });
 
-  const sourceTotals = new Map<string, number>();
-  const sourceClosedTotals = new Map<string, number>();
-  const sourceBreakdownByMc = new Map<string, Map<string, number>>();
-  filteredReferrals.forEach((referral) => {
-    const source = String(referral.source ?? 'Unknown');
-    sourceTotals.set(source, (sourceTotals.get(source) ?? 0) + 1);
-    if (closedDealReferralIds.has(referral._id.toString())) {
-      sourceClosedTotals.set(source, (sourceClosedTotals.get(source) ?? 0) + 1);
-    }
-
-    const mcKey = referral.lender ? referral.lender.toString() : 'unassigned';
-    const sourceMap = sourceBreakdownByMc.get(mcKey) ?? new Map<string, number>();
-    sourceMap.set(source, (sourceMap.get(source) ?? 0) + 1);
-    sourceBreakdownByMc.set(mcKey, sourceMap);
-  });
-
-  const sourceCloseRateMap = new Map<string, number>();
-  for (const [source, total] of sourceTotals) {
-    sourceCloseRateMap.set(source, total > 0 ? ((sourceClosedTotals.get(source) ?? 0) / total) * 100 : 0);
-  }
   const buildSourceNetworkKey = (source: string, designation: NetworkDesignation | null): string =>
     `${source || 'Unknown'}::${designation ?? 'Unpaired'}`;
   const sourceNetworkTotalsForAfcRisk = new Map<string, number>();
@@ -2872,36 +2817,30 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const mcKpiRaw: Record<McKpiKey, Map<string, number>> = {
     afcCloseRate: new Map(),
-    afcDealCount: new Map(),
-    closedDealsWithAfc: new Map(),
-    closedDealsWithoutAfc: new Map(),
+    afcContractCloseRate: new Map(),
+    dealsWithoutAfc: new Map(),
+    dealsWithoutAssignedAgent: new Map(),
+    dealCount: new Map(),
+    referralCount: new Map(),
     totalRevenueGenerated: new Map(),
     revenuePerReferral: new Map(),
     closeVelocityMedianDays: new Map(),
-    referralCount: new Map(),
     dealPushbackRate: new Map(),
-    noAssignedAgentCloseRate: new Map(),
     financingTerminationRate: new Map(),
-    agingPipelineRisk: new Map(),
-    sourceQualityIndex: new Map(),
-    forecastAccuracy: new Map(),
     npsScore: new Map()
   };
   const mcKpiDisplayMap: Record<McKpiKey, Map<string, string>> = {
     afcCloseRate: new Map(),
-    afcDealCount: new Map(),
-    closedDealsWithAfc: new Map(),
-    closedDealsWithoutAfc: new Map(),
+    afcContractCloseRate: new Map(),
+    dealsWithoutAfc: new Map(),
+    dealsWithoutAssignedAgent: new Map(),
+    dealCount: new Map(),
+    referralCount: new Map(),
     totalRevenueGenerated: new Map(),
     revenuePerReferral: new Map(),
     closeVelocityMedianDays: new Map(),
-    referralCount: new Map(),
     dealPushbackRate: new Map(),
-    noAssignedAgentCloseRate: new Map(),
     financingTerminationRate: new Map(),
-    agingPipelineRisk: new Map(),
-    sourceQualityIndex: new Map(),
-    forecastAccuracy: new Map(),
     npsScore: new Map()
   };
 
@@ -2909,12 +2848,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ...referralByMcMap.keys(),
     ...mcRevenueMap.keys(),
     ...mcTotalClosedDealsMap.keys(),
-    ...mcAfcClosedDealCountMap.keys(),
-    ...mcAfcDealCountMap.keys(),
+    ...mcDealCountMap.keys(),
     ...mcPushbackStatsMap.keys(),
-    ...mcTerminatedMap.keys(),
-    ...sourceBreakdownByMc.keys(),
-    ...mcAgingRiskMap.keys()
+    ...mcTerminatedMap.keys()
   ]);
   mcIdsForRanking.delete('unassigned');
   for (const id of excludedMcIds) {
@@ -2925,30 +2861,38 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const referralsForMc = referralByMcMap.get(id) ?? 0;
     const mcRevenue = mcRevenueMap.get(id) ?? { revenue: 0, expected: 0, closed: 0, totalReferrals: 0 };
     const realizedRevenue = mcRevenue.revenue;
-    const totalClosedDeals = mcTotalClosedDealsMap.get(id) ?? 0;
-    const afcClosedDeals = mcAfcClosedDealCountMap.get(id) ?? 0;
-    const afcDealCount = mcAfcDealCountMap.get(id) ?? 0;
+    const dealCount = mcDealCountMap.get(id) ?? 0;
+    const closedDealsWithAfc = mcDealsWithAfcMap.get(id) ?? 0;
+    const dealsWithoutAfc = mcDealsWithoutAfcMap.get(id) ?? 0;
+    const dealsWithoutAssignedAgent = mcDealsWithoutAssignedAgentMap.get(id) ?? 0;
 
+    // AFC conversion rates: period AFC closings over period referrals / deals
+    // created. Omit when denom is 0 so composite uses neutral fill.
     if (referralsForMc > 0) {
-      const afcCloseRate = safePercent(afcClosedDeals, referralsForMc);
+      const afcCloseRate = (closedDealsWithAfc / referralsForMc) * 100;
       mcKpiRaw.afcCloseRate.set(id, afcCloseRate);
       mcKpiDisplayMap.afcCloseRate.set(
         id,
-        `${afcCloseRate.toFixed(1)}% (${afcClosedDeals}/${referralsForMc})`
+        `${afcCloseRate.toFixed(1)}% (${closedDealsWithAfc}/${referralsForMc})`
       );
     }
-    mcKpiRaw.afcDealCount.set(id, afcDealCount);
-    mcKpiDisplayMap.afcDealCount.set(id, afcDealCount.toLocaleString());
+    if (dealCount > 0) {
+      const afcContractCloseRate = (closedDealsWithAfc / dealCount) * 100;
+      mcKpiRaw.afcContractCloseRate.set(id, afcContractCloseRate);
+      mcKpiDisplayMap.afcContractCloseRate.set(
+        id,
+        `${afcContractCloseRate.toFixed(1)}% (${closedDealsWithAfc}/${dealCount})`
+      );
+    }
 
-    // Closed-deal volume split by AFC usage. Set explicitly for every ranked MC
-    // (including 0) so non-closers normalize to 0 on these drivers rather than
-    // receiving a neutral 50.
-    const closedDealsWithoutAfc = mcNoAfcClosesMap.get(id) ?? 0;
-    const closedDealsWithAfc = Math.max(0, totalClosedDeals - closedDealsWithoutAfc);
-    mcKpiRaw.closedDealsWithAfc.set(id, closedDealsWithAfc);
-    mcKpiDisplayMap.closedDealsWithAfc.set(id, closedDealsWithAfc.toLocaleString());
-    mcKpiRaw.closedDealsWithoutAfc.set(id, closedDealsWithoutAfc);
-    mcKpiDisplayMap.closedDealsWithoutAfc.set(id, closedDealsWithoutAfc.toLocaleString());
+    // Set KEY deal counts for every ranked MC (including 0) so non-dealers
+    // normalize to floor scores rather than receiving a neutral fill.
+    mcKpiRaw.dealsWithoutAfc.set(id, dealsWithoutAfc);
+    mcKpiDisplayMap.dealsWithoutAfc.set(id, dealsWithoutAfc.toLocaleString());
+    mcKpiRaw.dealsWithoutAssignedAgent.set(id, dealsWithoutAssignedAgent);
+    mcKpiDisplayMap.dealsWithoutAssignedAgent.set(id, dealsWithoutAssignedAgent.toLocaleString());
+    mcKpiRaw.dealCount.set(id, dealCount);
+    mcKpiDisplayMap.dealCount.set(id, dealCount.toLocaleString());
 
     mcKpiRaw.totalRevenueGenerated.set(id, realizedRevenue);
     mcKpiDisplayMap.totalRevenueGenerated.set(
@@ -2975,16 +2919,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       mcKpiDisplayMap.closeVelocityMedianDays.set(id, `${medianDays.toFixed(1)} days`);
     }
 
-    const aging = mcAgingRiskMap.get(id);
-    if (aging && aging.total > 0) {
-      const riskIndex = ((aging.bucket31To60 + aging.bucket61Plus * 2) / aging.total) * 50;
-      mcKpiRaw.agingPipelineRisk.set(id, riskIndex);
-      mcKpiDisplayMap.agingPipelineRisk.set(
-        id,
-        `${aging.bucket0To30}/${aging.bucket31To60}/${aging.bucket61Plus} (0-30/31-60/61+)`
-      );
-    }
-
     const terminated = mcTerminatedMap.get(id);
     const closedDeals = mcTotalClosedDealsMap.get(id) ?? 0;
     const outcomeCount = (terminated?.total ?? 0) + closedDeals;
@@ -2996,16 +2930,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         id,
         `${financingTerminationRate.toFixed(1)}% (${financingTerminationCount})`
       );
-    }
-    const sourceCounts = sourceBreakdownByMc.get(id);
-    if (sourceCounts && referralsForMc > 0) {
-      let weightedSourceScore = 0;
-      for (const [source, count] of sourceCounts) {
-        weightedSourceScore += count * (sourceCloseRateMap.get(source) ?? 0);
-      }
-      const sourceQuality = weightedSourceScore / referralsForMc;
-      mcKpiRaw.sourceQualityIndex.set(id, sourceQuality);
-      mcKpiDisplayMap.sourceQualityIndex.set(id, `${sourceQuality.toFixed(1)} pts`);
     }
 
     const totalEligibleDealsForPushbackRate = mcEligibleDealsForPushbackRateMap.get(id) ?? 0;
@@ -3020,24 +2944,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const totalClosedDealsForAssignedAgentRate = mcAllClosedDealsForAssignedAgentRateMap.get(id) ?? 0;
-    if (totalClosedDealsForAssignedAgentRate > 0) {
-      const noAssignedAgentCloseRate = safePercent(
-        mcNoAssignedAgentClosesMap.get(id) ?? 0,
-        totalClosedDealsForAssignedAgentRate
-      );
-      mcKpiRaw.noAssignedAgentCloseRate.set(id, noAssignedAgentCloseRate);
-      mcKpiDisplayMap.noAssignedAgentCloseRate.set(id, `${noAssignedAgentCloseRate.toFixed(1)}%`);
-    }
-
-    const forecast = mcForecastMap.get(id);
-    if (forecast && forecast.expected > 0) {
-      const variancePct = Math.abs(forecast.expected - forecast.realized) / forecast.expected;
-      const accuracy = Math.max(0, 100 - variancePct * 100);
-      mcKpiRaw.forecastAccuracy.set(id, accuracy);
-      mcKpiDisplayMap.forecastAccuracy.set(id, `${accuracy.toFixed(1)}%`);
-    }
-
     const npsScore = lenderNpsMap.get(id);
     if (npsScore != null) {
       mcKpiRaw.npsScore.set(id, npsScore);
@@ -3047,19 +2953,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const mcKpiNormalized: Record<McKpiKey, Map<string, number>> = {
     afcCloseRate: normalizeAhaKpiMap(mcKpiRaw.afcCloseRate, false),
-    afcDealCount: normalizeAhaKpiMap(mcKpiRaw.afcDealCount, false),
-    closedDealsWithAfc: normalizeAhaKpiMap(mcKpiRaw.closedDealsWithAfc, false),
-    closedDealsWithoutAfc: normalizeAhaKpiMap(mcKpiRaw.closedDealsWithoutAfc, true),
+    afcContractCloseRate: normalizeAhaKpiMap(mcKpiRaw.afcContractCloseRate, false),
+    dealsWithoutAfc: normalizeAhaKpiMap(mcKpiRaw.dealsWithoutAfc, true),
+    dealsWithoutAssignedAgent: normalizeAhaKpiMap(mcKpiRaw.dealsWithoutAssignedAgent, true),
+    dealCount: normalizeAhaKpiMap(mcKpiRaw.dealCount, false),
+    referralCount: normalizeAhaKpiMap(mcKpiRaw.referralCount, false),
     totalRevenueGenerated: normalizeAhaKpiMap(mcKpiRaw.totalRevenueGenerated, false),
     revenuePerReferral: normalizeAhaKpiMap(mcKpiRaw.revenuePerReferral, false),
     closeVelocityMedianDays: normalizeAhaKpiMap(mcKpiRaw.closeVelocityMedianDays, true),
-    referralCount: normalizeAhaKpiMap(mcKpiRaw.referralCount, false),
     dealPushbackRate: normalizeAhaKpiMap(mcKpiRaw.dealPushbackRate, true),
-    noAssignedAgentCloseRate: normalizeAhaKpiMap(mcKpiRaw.noAssignedAgentCloseRate, true),
     financingTerminationRate: normalizeAhaKpiMap(mcKpiRaw.financingTerminationRate, true),
-    agingPipelineRisk: normalizeAhaKpiMap(mcKpiRaw.agingPipelineRisk, true),
-    sourceQualityIndex: normalizeAhaKpiMap(mcKpiRaw.sourceQualityIndex, false),
-    forecastAccuracy: normalizeAhaKpiMap(mcKpiRaw.forecastAccuracy, false),
     npsScore: normalizeAhaKpiMap(mcKpiRaw.npsScore, false)
   };
 
@@ -3420,17 +3323,23 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // (same semantics as the AHA/AGIT lostDeals series) rather than referrals
   // created in this timeframe that happen to be Lost today. This keeps the
   // "Lost referrals by agent" table in-sync with a changing timeframe.
+  // Losses are split by reason: only those the agent could have influenced count
+  // against them. Losses that happened before the agent could reach the borrower
+  // are reported separately as lead quality.
   const agentLostDealsMap = new Map<string, number>();
+  const agentUnattributableLostMap = new Map<string, number>();
   referralsByNetwork.forEach((referral) => {
     if (referral.status !== 'Lost') return;
     const lostAt = referral.statusLastUpdated ?? referral.updatedAt ?? referral.createdAt;
     if (!isWithinTimeframe(lostAt)) return;
     const key = referral.assignedAgent ? referral.assignedAgent.toString() : 'unassigned';
-    agentLostDealsMap.set(key, (agentLostDealsMap.get(key) ?? 0) + 1);
+    const target = isAttributableLoss(referral) ? agentLostDealsMap : agentUnattributableLostMap;
+    target.set(key, (target.get(key) ?? 0) + 1);
   });
 
-  // Aggregate agent metrics from payments
-  // Excludes terminated deals and tracks outside agent attribution separately
+  // Cash stays on the paid/invoice date. Closed-deal size, commission, and
+  // referral-fee averages use the closing date so a payment received this
+  // period does not count as a close this period.
   filteredPaymentsByNetwork.forEach((payment) => {
     if (payment.status === 'terminated') {
       return;
@@ -3448,73 +3357,60 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       closedVolumeCents: 0
     };
     const isOutsideAgentDeal = payment.agentAttribution === 'OUTSIDE_AGENT';
-    const contractPriceCents =
-      payment.contractPriceCents ?? payment.referral?.closedPriceCents ?? payment.referral?.estPurchasePriceCents ?? 0;
 
     // M-20: Agent "Revenue Paid" leaderboard must only sum actually-paid payments.
     // Any non-'paid' status with a receivedAmount value should not contribute.
     if (!isOutsideAgentDeal && payment.status === 'paid') {
       current.revenue += payment.receivedAmountCents ?? 0;
+      const { commissionCents, referralFeeCents } = resolveClosedDealCommercials(payment);
+      if (commissionCents > 0) {
+        const paidReferralFeeCents = payment.receivedAmountCents ?? referralFeeCents;
+        current.netCommissionCents += commissionCents - paidReferralFeeCents;
+      }
     }
     if (!isOutsideAgentDeal) {
       current.expected += calculateOutstandingExpected(payment);
     }
+    current.totalReferrals = agentReferralCount.get(key) ?? current.totalReferrals;
+    agentRevenueMap.set(key, current);
+  });
 
-    if (CLOSED_DEAL_STATUSES.has(payment.status)) {
-      if (!isOutsideAgentDeal) {
-        current.closed += 1;
-        if (contractPriceCents > 0) {
-          current.closedVolumeCents += contractPriceCents;
-        }
-        
-        // Calculate commission and referral fee percentages for averages
-        const referralFeeCents = payment.referral?.referralFeeDueCents ?? 0;
-        let referralFeePercent: number | null =
-          typeof payment.referral?.referralFeeBasisPoints === 'number'
-            ? (payment.referral.referralFeeBasisPoints ?? 0) / 100
-            : null;
-        if ((!referralFeePercent || referralFeePercent <= 0) && contractPriceCents > 0 && referralFeeCents > 0) {
-          referralFeePercent = (referralFeeCents / contractPriceCents) * 100;
-        }
-        // Resolve each closed deal's agent commission as a percentage so flat-fee
-        // (dollar) deals are converted to a percent and averaged in alongside
-        // percent-based deals. Flat fee wins because deals entered in "$" mode
-        // store the dollar amount and clear the basis points, while the referral
-        // still carries the default 3% — so checking basis points first would
-        // wrongly treat dollar deals as the default percentage.
-        const flatFeeCents = payment.commissionFlatFeeCents ?? 0;
-        let commissionPercent: number;
-        let commissionCents: number;
-        if (flatFeeCents > 0) {
-          commissionCents = flatFeeCents;
-          commissionPercent = contractPriceCents > 0 ? (flatFeeCents / contractPriceCents) * 100 : 0;
-        } else {
-          const resolvedCommissionBasisPoints =
-            (payment.commissionBasisPoints ?? 0) > 0
-              ? payment.commissionBasisPoints!
-              : (payment.referral?.commissionBasisPoints ?? 0) > 0
-                ? payment.referral!.commissionBasisPoints!
-                : DEFAULT_AGENT_COMMISSION_BPS;
-          commissionPercent = resolvedCommissionBasisPoints / 100;
-          commissionCents = (contractPriceCents * resolvedCommissionBasisPoints) / 10000;
-        }
+  paymentsByNetwork.forEach((payment) => {
+    if (!CLOSED_DEAL_STATUSES.has(payment.status)) return;
+    if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
+    if (!isDealClosedInWindow(dealClosingDateInput(payment), timeframeStart, timeframeEnd)) return;
 
-        if (commissionPercent > 0) {
-          current.commissionPercentages.push(commissionPercent);
-        }
-        if (commissionCents > 0) {
-          current.commissionCents.push(commissionCents);
-        }
-        if (referralFeePercent && referralFeePercent > 0) {
-          current.referralFeePercentages.push(referralFeePercent);
-        }
+    const key = payment.referral?.assignedAgent ? payment.referral.assignedAgent.toString() : 'unassigned';
+    const current = agentRevenueMap.get(key) ?? {
+      revenue: 0,
+      expected: 0,
+      closed: 0,
+      totalReferrals: agentReferralCount.get(key) ?? 0,
+      commissionCents: [],
+      commissionPercentages: [],
+      referralFeePercentages: [],
+      netCommissionCents: 0,
+      closedVolumeCents: 0
+    };
+    const {
+      contractPriceCents,
+      referralFeePercent,
+      commissionPercent,
+      commissionCents
+    } = resolveClosedDealCommercials(payment);
 
-        // Net commission = commission earned - referral fee paid (only for paid deals)
-        if (payment.status === 'paid' && commissionCents > 0) {
-          const paidReferralFeeCents = payment.receivedAmountCents ?? referralFeeCents;
-          current.netCommissionCents += commissionCents - paidReferralFeeCents;
-        }
-      }
+    current.closed += 1;
+    if (contractPriceCents > 0) {
+      current.closedVolumeCents += contractPriceCents;
+    }
+    if (commissionPercent > 0) {
+      current.commissionPercentages.push(commissionPercent);
+    }
+    if (commissionCents > 0) {
+      current.commissionCents.push(commissionCents);
+    }
+    if (referralFeePercent && referralFeePercent > 0) {
+      current.referralFeePercentages.push(referralFeePercent);
     }
     current.totalReferrals = agentReferralCount.get(key) ?? current.totalReferrals;
     agentRevenueMap.set(key, current);
@@ -3593,14 +3489,86 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     .filter((entry) => isAgentIncludedInLeaderboards(entry.id))
     .sort((a, b) => b.revenueCents - a.revenueCents);
 
-  const agentLostDeals = Array.from(agentLostDealsMap.entries())
-    .map(([key, value]) => ({
+  const agentLostDeals = Array.from(
+    new Set([...agentLostDealsMap.keys(), ...agentUnattributableLostMap.keys()])
+  )
+    .map((key) => ({
       id: key,
       name: key === 'unassigned' ? 'Unassigned Agent' : agentNameMap.get(key) ?? 'Unknown Agent',
-      referrals: value
+      referrals: agentLostDealsMap.get(key) ?? 0,
+      unattributableReferrals: agentUnattributableLostMap.get(key) ?? 0
     }))
     .filter((entry) => isAgentIncludedInLeaderboards(entry.id))
     .sort((a, b) => b.referrals - a.referrals);
+
+  // Lead-quality view: losses we did not charge to the agent, grouped by the MC and
+  // the lead source that sent them. Repeat "already had an agent" from one source is
+  // a source problem, not an agent problem.
+  const lostInTimeframe = referralsByNetwork.filter((referral) => {
+    if (referral.status !== 'Lost') return false;
+    const lostAt = referral.statusLastUpdated ?? referral.updatedAt ?? referral.createdAt;
+    return isWithinTimeframe(lostAt);
+  });
+
+  const unattributableByMcMap = new Map<string, number>();
+  const unattributableBySourceMap = new Map<string, number>();
+  const unattributableByReasonMap = new Map<string, number>();
+  let attributableLostCount = 0;
+  let unattributableLostCount = 0;
+  let classifiedLostCount = 0;
+
+  lostInTimeframe.forEach((referral) => {
+    if (referral.lostReason) {
+      classifiedLostCount += 1;
+    }
+    if (isAttributableLoss(referral)) {
+      attributableLostCount += 1;
+      return;
+    }
+    unattributableLostCount += 1;
+
+    const mcKey = referral.lender ? referral.lender.toString() : 'unassigned';
+    unattributableByMcMap.set(mcKey, (unattributableByMcMap.get(mcKey) ?? 0) + 1);
+
+    const sourceKey = normalizeOptionalText(referral.source) ?? 'Unknown source';
+    unattributableBySourceMap.set(sourceKey, (unattributableBySourceMap.get(sourceKey) ?? 0) + 1);
+
+    const reasonKey = referral.lostReason ?? 'other';
+    unattributableByReasonMap.set(reasonKey, (unattributableByReasonMap.get(reasonKey) ?? 0) + 1);
+  });
+
+  const sortByCountThenName = (
+    a: { count: number; name: string },
+    b: { count: number; name: string }
+  ) => b.count - a.count || a.name.localeCompare(b.name);
+
+  const lostAttribution = {
+    attributableCount: attributableLostCount,
+    unattributableCount: unattributableLostCount,
+    totalCount: attributableLostCount + unattributableLostCount,
+    classifiedCount: classifiedLostCount,
+    classifiedRatePercent: safePercent(
+      classifiedLostCount,
+      attributableLostCount + unattributableLostCount
+    ),
+    unattributableByMc: Array.from(unattributableByMcMap.entries())
+      .map(([id, count]) => ({
+        id,
+        name: id === 'unassigned' ? 'Unassigned MC' : lenderNameMap.get(id) ?? 'Unknown MC',
+        count
+      }))
+      .sort(sortByCountThenName),
+    unattributableBySource: Array.from(unattributableBySourceMap.entries())
+      .map(([name, count]) => ({ id: name, name, count }))
+      .sort(sortByCountThenName),
+    unattributableByReason: Array.from(unattributableByReasonMap.entries())
+      .map(([reason, count]) => ({
+        id: reason,
+        name: LOST_REASON_LABELS[reason as LostReason] ?? 'Other',
+        count
+      }))
+      .sort(sortByCountThenName)
+  };
 
   const agentCreatedMcAssignmentCount = new Map<string, number>();
   filteredReferrals.forEach((referral) => {
@@ -3725,7 +3693,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       referralIdToAgentKey.set(r._id.toString(), key);
       referralCountMap.set(key, (referralCountMap.get(key) ?? 0) + 1);
       const lostAt = r.statusLastUpdated ?? r.updatedAt ?? r.createdAt;
-      if (r.status === 'Lost' && isWithinTimeframe(lostAt)) {
+      // Only attributable losses feed the composite score: a borrower who was
+      // never reachable, or who already had an agent, is not the agent's miss.
+      if (isAttributableLoss(r) && isWithinTimeframe(lostAt)) {
         lostDealsMap.set(key, (lostDealsMap.get(key) ?? 0) + 1);
       }
       if (r.sla) {
@@ -3862,32 +3832,48 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       const isOutside = payment.agentAttribution === 'OUTSIDE_AGENT';
       if (!isOutside) {
         current.revenue += payment.receivedAmountCents ?? 0;
-        if (CLOSED_DEAL_STATUSES.has(payment.status)) {
-          current.closed += 1;
+        if (payment.status === 'paid') {
           const contractPriceCents =
             payment.contractPriceCents ?? payment.referral?.closedPriceCents ?? payment.referral?.estPurchasePriceCents ?? 0;
-          if (contractPriceCents > 0) current.closedVolumeCents += contractPriceCents;
-          const dealSide = resolveDealSideForMetrics(
-            payment.side,
-            payment.referral?.dealSide,
-            payment.referral?.clientType ?? null
-          );
-          if (dealSide === 'buy') {
-            current.afcEligibleDeals += 1;
-            if (payment.usedAfc) current.afcAttachedDeals += 1;
-          }
-          if (payment.status === 'paid') {
-            const commissionBps = payment.referral?.commissionBasisPoints ?? 0;
-            const flatFee = payment.commissionFlatFeeCents ?? 0;
-            const commissionCents = flatFee > 0
-              ? flatFee
-              : contractPriceCents > 0 ? (contractPriceCents * commissionBps) / 10000 : 0;
-            if (commissionCents > 0) {
-              const referralFeePaid = payment.receivedAmountCents ?? payment.referral?.referralFeeDueCents ?? 0;
-              current.netCommissionCents += commissionCents - referralFeePaid;
-            }
+          const commissionBps = payment.referral?.commissionBasisPoints ?? 0;
+          const flatFee = payment.commissionFlatFeeCents ?? 0;
+          const commissionCents = flatFee > 0
+            ? flatFee
+            : contractPriceCents > 0 ? (contractPriceCents * commissionBps) / 10000 : 0;
+          if (commissionCents > 0) {
+            const referralFeePaid = payment.receivedAmountCents ?? payment.referral?.referralFeeDueCents ?? 0;
+            current.netCommissionCents += commissionCents - referralFeePaid;
           }
         }
+      }
+      agentPerfMap.set(key, current);
+    });
+
+    bucketAllNetworkPayments.forEach((payment) => {
+      if (payment.agentAttribution === 'OUTSIDE_AGENT') return;
+      if (!CLOSED_DEAL_STATUSES.has(payment.status)) return;
+      if (!isDealClosedInWindow(dealClosingDateInput(payment), timeframeStart, timeframeEnd)) return;
+      const key = payment.referral?.assignedAgent?.toString() ?? 'unassigned';
+      const current = agentPerfMap.get(key) ?? {
+        revenue: 0,
+        closed: 0,
+        afcAttachedDeals: 0,
+        afcEligibleDeals: 0,
+        closedVolumeCents: 0,
+        netCommissionCents: 0
+      };
+      current.closed += 1;
+      const contractPriceCents =
+        payment.contractPriceCents ?? payment.referral?.closedPriceCents ?? payment.referral?.estPurchasePriceCents ?? 0;
+      if (contractPriceCents > 0) current.closedVolumeCents += contractPriceCents;
+      const dealSide = resolveDealSideForMetrics(
+        payment.side,
+        payment.referral?.dealSide,
+        payment.referral?.clientType ?? null
+      );
+      if (dealSide === 'buy') {
+        current.afcEligibleDeals += 1;
+        if (payment.usedAfc) current.afcAttachedDeals += 1;
       }
       agentPerfMap.set(key, current);
     });
@@ -4390,113 +4376,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       updatedAt: entry.preApprovalsUpdatedAt
     }));
 
-  // AGIT Dashboard Metrics: Filter referrals by agent designation === 'AGIT'
-  const agitReferrals = filteredReferrals.filter(
-    (referral) => getReferralDesignation(referral) === 'AGIT'
-  );
-  const agitReferralIds = new Set(agitReferrals.map((r) => r._id.toString()));
-  const agitPercentage = safePercent(agitReferrals.length, filteredReferrals.length);
-
-  const agitFilteredPayments = filteredPaymentsByNetwork.filter((payment) =>
-    agitReferralIds.has(payment.referral._id.toString())
-  );
-
-  // Lost referrals (status === 'Lost')
-  const agitLostReferrals = agitReferrals.filter(
-    (referral) => normalizeStatusKey(referral.status ?? '') === 'lost'
-  ).length;
-
-  // C-6: mirror Main dashboard's isClosedDealEligible (which additionally
-  // requires usedAssignedAgent === true).
-  // Cohort semantics: the numerator must count AGIT referrals from the cohort
-  // that ever closed (like dealsClosedForCloseRate), not payments whose
-  // metricDate happens to fall in the window — and dedupe by referral so a
-  // Both referral with two closed payments counts once.
-  const agitClosedReferralIds = new Set(
-    paymentsByNetwork
-      .filter(
-        (payment) =>
-          isClosedDealEligible(payment) &&
-          agitReferralIds.has(payment.referral._id.toString())
-      )
-      .map((payment) => payment.referral._id.toString())
-  );
-  const agitDealsClosed = agitClosedReferralIds.size;
-
-  const agitCloseRate = computeCohortCloseRate(agitDealsClosed, agitReferrals.length);
-
-  // Used AFC / AFC Attach Rate
-  const agitClosedOrPaidPayments = agitFilteredPayments.filter(
-    (payment) =>
-      payment.agentAttribution !== 'OUTSIDE_AGENT' &&
-      payment.usedAssignedAgent !== false &&
-      CLOSED_DEAL_STATUSES.has(payment.status) &&
-      resolveDealSideForMetrics(
-        payment.side,
-        payment.referral?.dealSide,
-        payment.referral?.clientType ?? null
-      ) === 'buy'
-  );
-
-  const agitUsedAfcCount = agitClosedOrPaidPayments.filter((payment) => payment.usedAfc).length;
-  const agitUsedAfcRate =
-    agitClosedOrPaidPayments.length === 0
-      ? 0
-      : (agitUsedAfcCount / agitClosedOrPaidPayments.length) * 100;
-
-  // Build AGIT referral rows for table display
-  const agitReferralRows = agitReferrals.map((referral) => {
-    const agentId = referral.assignedAgent?.toString() ?? null;
-    const mcId = referral.lender?.toString() ?? null;
-    return {
-      id: referral._id.toString(),
-      borrowerName: referral.borrower?.name ?? 'Unknown',
-      loanFileNumber: referral.loanFileNumber ?? null,
-      status: referral.status ?? 'New Lead',
-      agentId,
-      agentName: agentId ? agentNameMap.get(agentId) ?? null : null,
-      agentEmail: agentId ? agentEmailMap.get(agentId) ?? null : null,
-      agentPhone: agentId ? agentPhoneMap.get(agentId) ?? null : null,
-      mcId,
-      mcName: mcId ? lenderNameMap.get(mcId) ?? null : null,
-      mcEmail: mcId ? lenderEmailMap.get(mcId) ?? null : null,
-      mcPhone: mcId ? lenderPhoneMap.get(mcId) ?? null : null,
-      createdAt: referral.createdAt.toISOString(),
-      updatedAt: referral.updatedAt?.toISOString() ?? referral.createdAt.toISOString()
-    };
-  });
-
-  // Create a map of referral IDs to borrower names for deal rows
-  const agitReferralBorrowerMap = new Map<string, string>();
-  agitReferrals.forEach((referral) => {
-    agitReferralBorrowerMap.set(referral._id.toString(), referral.borrower?.name ?? 'Unknown');
-  });
-
-  // Build AGIT deal rows for table display
-  const agitDealRows = agitFilteredPayments.map((payment) => {
-    const agentId = payment.agentId?.toString() ?? payment.referral?.assignedAgent?.toString() ?? null;
-    const mcId = payment.referral?.lender?.toString() ?? null;
-    return {
-      id: payment._id.toString(),
-      referralId: payment.referral._id.toString(),
-      borrowerName: agitReferralBorrowerMap.get(payment.referral._id.toString()) ?? 'Unknown',
-      status: payment.status,
-      expectedAmountCents: payment.expectedAmountCents ?? 0,
-      receivedAmountCents: payment.receivedAmountCents ?? 0,
-      agentId,
-      agentName: agentId ? agentNameMap.get(agentId) ?? null : null,
-      mcId,
-      mcName: mcId ? lenderNameMap.get(mcId) ?? null : null,
-      mcEmail: mcId ? lenderEmailMap.get(mcId) ?? null : null,
-      mcPhone: mcId ? lenderPhoneMap.get(mcId) ?? null : null,
-      closingDate: payment.closingDate?.toISOString() ?? null,
-      usedAfc: payment.usedAfc ?? null,
-      referralStatus: payment.referral?.status ?? null,
-      usedAssignedAgent: payment.usedAssignedAgent ?? null,
-      agentAttribution: payment.agentAttribution ?? null
-    };
-  });
-
   // Period-over-period: compare against prior matching period per timeframe.
   let periodOverPeriod: {
     previous: { totalReferrals: number; dealsClosed: number; realizedRevenueCents: number; closeRate: number };
@@ -4518,14 +4397,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       if (!isClosedDealEligible(payment)) return false;
       return prevReferralIdSet.has(payment.referral._id.toString());
     });
-    // Previous-period deals closed must use the same definition as the current
-    // period's dealsClosedForSummary (closing date in window), not metricDate.
-    const prevDealsClosedByClosingDate = paymentsByNetwork.filter((payment) => {
-      if (!isClosedDealEligible(payment)) return false;
-      const closingDate = resolveClosingDate(payment);
-      if (closingDate === null || Number.isNaN(closingDate.getTime())) return false;
-      return closingDate >= previousStart && closingDate <= previousEnd;
-    });
+    // Previous-period deals closed use the same closing-date window as the card.
+    const prevDealsClosedByClosingDate = paymentsByNetwork.filter(
+      (payment) =>
+        isClosedDealEligible(payment) &&
+        isDealClosedInWindow(dealClosingDateInput(payment), previousStart, previousEnd)
+    );
     const prevRealized = paymentsByNetwork.reduce((sum, payment) => {
       const receivedDate = resolvePaymentReceivedDate(payment);
       if (!receivedDate) return sum;
@@ -4704,6 +4581,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       averageClosedDealAmount: agentAverageClosedDeal,
       netRevenue: agentNetRevenue,
       lostDeals: agentLostDeals,
+      lostAttribution,
       agentCreatedMcAssignments: agentCreatedMcLeaderboard,
       ahaLeaderboards,
       ahaOosLeaderboards
@@ -4734,17 +4612,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       missingAttributionReferrals,
       stalePipelineCount: staleReferrals.length,
       stalePipelineList
-    },
-    agit: {
-      agitReferrals: agitReferrals.length,
-      agitPercentage,
-      usedAfcCount: agitUsedAfcCount,
-      usedAfcRate: agitUsedAfcRate,
-      lostReferrals: agitLostReferrals,
-      closeRate: agitCloseRate,
-      dealsClosed: agitDealsClosed,
-      referralRows: agitReferralRows,
-      dealRows: agitDealRows
     }
   };
 
@@ -4753,7 +4620,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   response.headers.set('server-timing', `dashboard;dur=${durationMs}`);
   if (durationMs > 5_000) {
     console.warn(
-      `[dashboard] slow response: ${durationMs}ms role=${role ?? 'unknown'} timeframe=${timeframe.key} network=${context.networkFilter}`
+      `[dashboard] slow response: ${durationMs}ms role=${role ?? 'unknown'} timeframe=${timeframe.key} network=${serializeNetworkList(Array.from(context.networkFilter ?? []))}`
     );
   }
   return response;

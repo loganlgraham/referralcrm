@@ -41,7 +41,7 @@ function CenteredSpinner({ label }: { label?: string }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-surface-muted">
       <div className="text-center">
-        <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary-600" aria-hidden />
+        <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" aria-hidden />
         {label && <p className="mt-4 text-sm text-foreground-muted">{label}</p>}
       </div>
     </div>
@@ -147,9 +147,9 @@ function OnboardingInner() {
                   type="button"
                   onClick={() => setSelectedRole(option.value)}
                   className={cn(
-                    'group w-full rounded-md border p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40',
+                    'group w-full rounded-md border p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
                     isActive
-                      ? 'border-primary-500 bg-primary-50/70 shadow-sm'
+                      ? 'border-primary bg-primary-soft/70 shadow-sm'
                       : 'border-border bg-surface hover:border-border-strong hover:bg-surface-muted'
                   )}
                 >
@@ -157,7 +157,7 @@ function OnboardingInner() {
                     <span
                       className={cn(
                         'text-base font-semibold',
-                        isActive ? 'text-primary-700' : 'text-foreground'
+                        isActive ? 'text-primary' : 'text-foreground'
                       )}
                     >
                       {option.label}
@@ -166,7 +166,7 @@ function OnboardingInner() {
                       aria-hidden
                       className={cn(
                         'flex h-4 w-4 items-center justify-center rounded-full border-2 transition',
-                        isActive ? 'border-primary-600 bg-primary-600' : 'border-border-strong'
+                        isActive ? 'border-primary bg-primary' : 'border-border-strong'
                       )}
                     >
                       {isActive && <span className="h-1.5 w-1.5 rounded-full bg-surface-raised" />}

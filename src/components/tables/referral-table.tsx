@@ -21,19 +21,35 @@ import { toast } from 'sonner';
 import clsx from 'clsx';
 import { Clock } from 'lucide-react';
 
-import { REFERRAL_STATUSES, ReferralStatus, type ReferralTimeline } from '@/constants/referrals';
 import {
-  TERMINATED_REASON_OPTIONS,
-  type DealStatus,
-  type TerminatedReason,
-} from '@/constants/deals';
-import { formatCurrency, formatNumber, formatPhoneNumber } from '@/utils/formatters';
+  REFERRAL_STATUSES,
+  ReferralStatus,
+  getLostReasonOptions,
+  getReferralStatusLabel,
+  LOST_BEFORE_CONTACT_HINT,
+  type LostReason,
+  type ReferralTimeline
+} from '@/constants/referrals';
+import { type DealStatus } from '@/constants/deals';
+import { formatNumber, formatPhoneNumber } from '@/utils/formatters';
 import { buildGmailComposeUrl } from '@/utils/gmail';
-import { shouldDefaultEmailMcForAgentNotes } from '@/utils/referral-email-defaults';
 import { calculateTimelineDaysRemaining, formatTimelineCountdown } from '@/utils/timeline-countdown';
 import { mapDealStatusToReferralStatusDisplay } from '@/lib/latest-deal-referral-status';
+import type {
+  ReferralCounterparty,
+  ReferralLastActivity,
+  ReferralLatestDeal
+} from '@/lib/referral-activity';
 import { confirmCloseStatusDate } from '@/components/referrals/status-date-confirmation-toast';
+import { confirmReferralTermination } from '@/components/referrals/terminate-confirmation-toast';
+import {
+  collectUnderContractDeal,
+  submitUnderContractDeal,
+} from '@/components/referrals/deal-details-toast';
 import { StatusPill } from '@/components/ui/status-pill';
+import { AgentOriginMarker } from '@/components/referrals/agent-origin-marker';
+import { Button } from '@/components/ui/button';
+
 export interface ReferralRow {
   _id: string;
   createdAt: string;
@@ -54,6 +70,7 @@ export interface ReferralRow {
   stageOnTransfer?: string;
   initialNotes?: string;
   loanFileNumber: string;
+  loanType?: string;
   status: ReferralStatus;
   statusLastUpdated?: string | null;
   daysInStatus?: number;
@@ -77,6 +94,12 @@ export interface ReferralRow {
   autoUpdateRemindersEnabled?: boolean;
   hasAnyPayments?: boolean;
   hasAnyUsedAfcTrue?: boolean;
+  needsUpdate?: boolean;
+  statusChangedAt?: string | null;
+  referredAt?: string | null;
+  lastActivity?: ReferralLastActivity | null;
+  latestDeal?: ReferralLatestDeal | null;
+  counterparty?: ReferralCounterparty | null;
 }
 
 type TableMode = 'admin' | 'mc' | 'agent';
@@ -107,6 +130,9 @@ interface StatusSelectProps {
   side?: 'buy' | 'sell';
   compact?: boolean;
   roleMode?: TableMode;
+  borrowerName?: string;
+  /** Agent-created (agent→AFC) referrals collect no referral fee. */
+  isAgentOrigin?: boolean;
   onStatusResolved?: (nextStatus: ReferralStatus) => void;
 }
 
@@ -141,347 +167,28 @@ const extractStatusErrorMessage = (payload: StatusUpdateResponse | null): string
   return payload.error.message ?? firstFieldError ?? 'Unable to update status';
 };
 
-const parseNumericInput = (value: string): number => {
-  const numeric = Number.parseFloat(value.replace(/[^0-9.\-]/g, ''));
-  return Number.isFinite(numeric) ? numeric : Number.NaN;
-};
-
-const toCents = (value: string): number => {
-  const numeric = parseNumericInput(value);
-  if (!Number.isFinite(numeric) || numeric <= 0) {
-    return 0;
-  }
-  return Math.round(numeric * 100);
-};
-
-const formatCurrencyInput = (value: string): string => {
-  const sanitized = value.replace(/[^0-9.]/g, '');
-  if (!sanitized) {
-    return '';
-  }
-
-  const [wholeRaw, ...fractionSegments] = sanitized.split('.');
-  const normalizedWhole = wholeRaw.replace(/^0+(?=\d)/, '');
-  const wholeDigits = normalizedWhole || '0';
-  const groupedWhole = wholeDigits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  if (fractionSegments.length === 0) {
-    return groupedWhole;
-  }
-
-  const fraction = fractionSegments.join('').slice(0, 2);
-  return `${groupedWhole}.${fraction}`;
-};
-
-const dateStringToLocalISO = (dateString: string): string => {
-  if (!dateString) return '';
-  if (dateString.includes('T')) return dateString;
-  const [year, month, day] = dateString.split('-').map(Number);
-  return new Date(year, month - 1, day).toISOString();
-};
-
-interface UnderContractDealToastProps {
-  defaultSide?: 'buy' | 'sell';
-  onClose: () => void;
-  onSubmit: (payload: {
-    paymentPayload: Record<string, unknown>;
-    contractDetails: {
-      propertyAddress: string;
-      propertyCity: string;
-      propertyState: string;
-      propertyPostalCode: string;
-      contractPrice: number;
-      agentCommissionPercentage: number;
-      referralFeePercentage: number;
-      dealSide: 'buy' | 'sell';
-    };
-  }) => Promise<void>;
-}
-
-function UnderContractDealToast({ onClose, onSubmit, defaultSide = 'buy' }: UnderContractDealToastProps) {
-  const [expectedAmount, setExpectedAmount] = useState('');
-  const [expectedManuallyEdited, setExpectedManuallyEdited] = useState(false);
-  const [contractPrice, setContractPrice] = useState('');
-  const [commissionMode, setCommissionMode] = useState<'%' | '$'>('%');
-  const [commissionPercentage, setCommissionPercentage] = useState('');
-  const [commissionFlat, setCommissionFlat] = useState('');
-  const [referralFeePercentage, setReferralFeePercentage] = useState('');
-  const [propertyAddress, setPropertyAddress] = useState('');
-  const [propertyCity, setPropertyCity] = useState('');
-  const [propertyState, setPropertyState] = useState('');
-  const [propertyPostalCode, setPropertyPostalCode] = useState('');
-  const [closingDate, setClosingDate] = useState('');
-  const [underContractDate, setUnderContractDate] = useState('');
-  const [side, setSide] = useState<'buy' | 'sell'>(defaultSide);
-  const [usedAfc, setUsedAfc] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-
-  const handleDateInputClick = useCallback((event: React.MouseEvent<HTMLInputElement>) => {
-    try {
-      event.currentTarget.showPicker?.();
-    } catch {
-      // Fallback to native date input behavior for browsers without showPicker support.
-    }
-  }, []);
-
-  useEffect(() => {
-    if (expectedManuallyEdited) return;
-    const referral = parseNumericInput(referralFeePercentage);
-    if (!Number.isFinite(referral)) return;
-    if (commissionMode === '$') {
-      const flatFee = parseNumericInput(commissionFlat);
-      if (Number.isFinite(flatFee)) {
-        const computed = flatFee * (referral / 100);
-        if (Number.isFinite(computed)) {
-          setExpectedAmount(computed.toFixed(2));
-        }
-      }
-      return;
-    }
-    const contract = parseNumericInput(contractPrice);
-    const commission = parseNumericInput(commissionPercentage);
-    if (Number.isFinite(contract) && Number.isFinite(commission)) {
-      const computed = ((contract * commission) / 100) * (referral / 100);
-      if (Number.isFinite(computed)) {
-        setExpectedAmount(computed.toFixed(2));
-      }
-    }
-  }, [commissionFlat, commissionMode, commissionPercentage, contractPrice, expectedManuallyEdited, referralFeePercentage]);
-
-  useEffect(() => {
-    if (side === 'sell' && usedAfc) {
-      setUsedAfc(false);
-    }
-  }, [side, usedAfc]);
-
-  return (
-    <div className="w-[min(calc(100vw-1rem),40rem)] max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-lg border border-border bg-surface-raised p-4 shadow-xl">
-      <h3 className="text-sm font-semibold text-foreground">Add Deal Details</h3>
-      <p className="mt-1 text-xs text-foreground-subtle">Enter full deal info before moving referral to Under Contract.</p>
-      <form
-        className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2"
-        onSubmit={async (event) => {
-          event.preventDefault();
-          if (submitting) return;
-          if (!propertyAddress.trim() || !propertyCity.trim()) {
-            toast.error('Property address and city are required.');
-            return;
-          }
-          if (!/^[A-Za-z]{2}$/.test(propertyState.trim())) {
-            toast.error('Property state must be a 2-letter code.');
-            return;
-          }
-          if (!/^\d{5}(?:-\d{4})?$/.test(propertyPostalCode.trim())) {
-            toast.error('Enter a valid property ZIP code.');
-            return;
-          }
-          if (!contractPrice || parseNumericInput(contractPrice) <= 0) {
-            toast.error('Contract price is required.');
-            return;
-          }
-          if (!referralFeePercentage.trim()) {
-            toast.error('Referral fee % is required.');
-            return;
-          }
-          const referralFeeParsed = parseNumericInput(referralFeePercentage);
-          if (!Number.isFinite(referralFeeParsed) || referralFeeParsed < 0) {
-            toast.error('Enter a valid referral fee % (0 or greater).');
-            return;
-          }
-          const contractPriceCents = toCents(contractPrice);
-          const isFlatFeeMode = commissionMode === '$';
-          const commissionBasisPoints = isFlatFeeMode
-            ? null
-            : commissionPercentage
-            ? Math.round(parseNumericInput(commissionPercentage) * 100)
-            : null;
-          const commissionFlatFeeCents = isFlatFeeMode
-            ? (commissionFlat ? toCents(commissionFlat) : null)
-            : null;
-          const referralFeeBasisPoints = Math.round(referralFeeParsed * 100);
-          const expectedAmountCents = toCents(expectedAmount);
-          const computedExpectedAmountCents =
-            !expectedAmountCents && referralFeeBasisPoints
-              ? isFlatFeeMode
-                ? Math.round(((commissionFlatFeeCents ?? 0) * referralFeeBasisPoints) / 10_000)
-                : Math.round((contractPriceCents * (commissionBasisPoints ?? 0) * referralFeeBasisPoints) / 100_000_000)
-              : expectedAmountCents;
-          const finalExpectedAmountCents = computedExpectedAmountCents;
-
-          const agentCommissionPercentage = isFlatFeeMode
-            ? commissionFlatFeeCents != null && contractPriceCents > 0
-              ? (commissionFlatFeeCents / contractPriceCents) * 100
-              : 0
-            : (commissionBasisPoints ?? 0) / 100;
-          const referralFeePercentageValue = (referralFeeBasisPoints ?? 0) / 100;
-          const resolvedUnderContractDate = underContractDate
-            ? dateStringToLocalISO(underContractDate)
-            : new Date().toISOString();
-
-          setSubmitting(true);
-          try {
-            await onSubmit({
-              paymentPayload: {
-                status: 'under_contract',
-                expectedAmountCents: finalExpectedAmountCents,
-                receivedAmountCents: 0,
-                netReferralFeePaidCents: 0,
-                contractPriceCents,
-                commissionBasisPoints,
-                commissionFlatFeeCents,
-                referralFeeBasisPoints,
-                propertyAddress: propertyAddress.trim(),
-                propertyCity: propertyCity.trim(),
-                propertyState: propertyState.trim().toUpperCase(),
-                closingDate: closingDate ? dateStringToLocalISO(closingDate) : null,
-                underContractDate: resolvedUnderContractDate,
-                usedAfc: side === 'sell' ? false : usedAfc,
-                // Agent-entered deals always use the assigned agent.
-                usedAssignedAgent: true,
-                side,
-                terminatedReason: null,
-              },
-              contractDetails: {
-                propertyAddress: propertyAddress.trim(),
-                propertyCity: propertyCity.trim(),
-                propertyState: propertyState.trim().toUpperCase(),
-                propertyPostalCode: propertyPostalCode.trim(),
-                contractPrice: contractPriceCents / 100,
-                agentCommissionPercentage,
-                referralFeePercentage: referralFeePercentageValue,
-                dealSide: side,
-              },
-            });
-          } finally {
-            setSubmitting(false);
-          }
-        }}
-      >
-        <label className="text-xs font-medium text-foreground-muted">Contract price
-          <div className="relative mt-1">
-            <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-sm text-foreground-subtle">$</span>
-            <input
-              className="w-full rounded border border-border-strong py-1 pl-6 pr-2 text-sm"
-              inputMode="decimal"
-              value={contractPrice}
-              onChange={(e) => setContractPrice(formatCurrencyInput(e.target.value))}
-            />
-          </div>
-        </label>
-        <div className="text-xs font-medium text-foreground-muted">
-          <span>Commission</span>
-          <div className="mt-1 flex flex-wrap gap-2">
-            <button
-              type="button"
-              className={`rounded border px-2 py-1 text-xs font-semibold transition ${
-                commissionMode === '%'
-                  ? 'border-primary-500 bg-primary-600 text-white'
-                  : 'border-border-strong bg-surface-raised text-foreground-muted hover:bg-surface-muted'
-              }`}
-              onClick={() => setCommissionMode('%')}
-            >
-              %
-            </button>
-            <button
-              type="button"
-              className={`rounded border px-2 py-1 text-xs font-semibold transition ${
-                commissionMode === '$'
-                  ? 'border-primary-500 bg-primary-600 text-white'
-                  : 'border-border-strong bg-surface-raised text-foreground-muted hover:bg-surface-muted'
-              }`}
-              onClick={() => setCommissionMode('$')}
-            >
-              $
-            </button>
-            <input
-              className="w-full rounded border border-border-strong px-2 py-1 text-sm sm:flex-1"
-              value={commissionMode === '%' ? commissionPercentage : commissionFlat}
-              onChange={(event) => commissionMode === '%' ? setCommissionPercentage(event.target.value) : setCommissionFlat(event.target.value)}
-            />
-          </div>
-        </div>
-        <label className="text-xs font-medium text-foreground-muted">Referral fee %
-          <input className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm" value={referralFeePercentage} onChange={(e) => setReferralFeePercentage(e.target.value)} />
-        </label>
-        <label className="text-xs font-medium text-foreground-muted">Expected amount
-          <input className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm" value={expectedAmount} onChange={(e) => { setExpectedManuallyEdited(Boolean(e.target.value)); setExpectedAmount(e.target.value); }} />
-        </label>
-        <label className="text-xs font-medium text-foreground-muted">Under contract date
-          <input
-            type="date"
-            className="mt-1 w-full cursor-pointer rounded border border-border-strong px-2 py-1 text-sm"
-            value={underContractDate}
-            onClick={handleDateInputClick}
-            onChange={(e) => setUnderContractDate(e.target.value)}
-          />
-        </label>
-        <label className="text-xs font-medium text-foreground-muted">Closing date
-          <input
-            type="date"
-            className="mt-1 w-full cursor-pointer rounded border border-border-strong px-2 py-1 text-sm"
-            value={closingDate}
-            onClick={handleDateInputClick}
-            onChange={(e) => setClosingDate(e.target.value)}
-          />
-        </label>
-        <label className="text-xs font-medium text-foreground-muted sm:col-span-2">Property address
-          <input className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm" value={propertyAddress} onChange={(e) => setPropertyAddress(e.target.value)} />
-        </label>
-        <label className="text-xs font-medium text-foreground-muted">Property city
-          <input className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm" value={propertyCity} onChange={(e) => setPropertyCity(e.target.value)} />
-        </label>
-        <label className="text-xs font-medium text-foreground-muted">Property state
-          <input className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm uppercase" maxLength={2} value={propertyState} onChange={(e) => setPropertyState(e.target.value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 2))} />
-        </label>
-        <label className="text-xs font-medium text-foreground-muted">Property ZIP
-          <input className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm" value={propertyPostalCode} onChange={(e) => setPropertyPostalCode(e.target.value)} />
-        </label>
-        <label className="text-xs font-medium text-foreground-muted">Deal side
-          <select className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-sm" value={side} onChange={(e) => setSide(e.target.value as 'buy' | 'sell')}>
-            <option value="buy">Buy-side</option>
-            <option value="sell">Sell-side</option>
-          </select>
-        </label>
-        {side !== 'sell' && (
-          <div className="rounded border border-primary-500/40 bg-primary-600/5 px-3 py-2 sm:col-span-2">
-            <label className="flex items-center gap-2 text-sm font-semibold text-foreground">
-              <input
-                type="checkbox"
-                className="h-4 w-4 accent-brand"
-                checked={usedAfc}
-                onChange={(e) => setUsedAfc(e.target.checked)}
-              />
-              Used AFC
-            </label>
-            <p className="mt-1 text-xs text-foreground-muted">Check this when AFC handled this deal.</p>
-          </div>
-        )}
-        <div className="flex flex-col-reverse gap-2 sm:col-span-2 sm:flex-row sm:justify-end">
-          <button type="button" className="w-full rounded border border-border-strong px-3 py-1.5 text-xs font-semibold text-foreground-muted sm:w-auto" onClick={onClose} disabled={submitting}>Cancel</button>
-          <button type="submit" className="w-full rounded bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60 sm:w-auto" disabled={submitting}>{submitting ? 'Saving…' : 'Save deal & move status'}</button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
 function StatusSelect({
   referralId,
   value,
   dealStatusLabel,
   defaultSide = 'buy',
   side,
-  compact = false,
   roleMode,
+  borrowerName = 'this referral',
+  isAgentOrigin = false,
   onStatusResolved,
 }: StatusSelectProps) {
   const router = useRouter();
   const [status, setStatus] = useState<ReferralStatus>(value);
   const [loading, setLoading] = useState(false);
-  const [pendingTerminatedSelection, setPendingTerminatedSelection] = useState(false);
-  const [terminatedReason, setTerminatedReason] = useState<TerminatedReason | ''>('');
+  const [pendingLostSelection, setPendingLostSelection] = useState(false);
+  const [lostReason, setLostReason] = useState<LostReason | ''>('');
+  const [hideDealStage, setHideDealStage] = useState(false);
+  const lostReasonOptions = getLostReasonOptions({ isAgentOrigin });
 
   useEffect(() => {
     setStatus(value);
+    setHideDealStage(false);
   }, [value]);
 
   const applyResolvedStatus = useCallback(
@@ -492,45 +199,22 @@ function StatusSelect({
     [onStatusResolved]
   );
 
+  const resetLostPanel = () => {
+    setPendingLostSelection(false);
+    setLostReason('');
+  };
+
   const openUnderContractDealModal = () => {
-    const toastId = toast.custom((t) => (
-      <UnderContractDealToast
-        defaultSide={defaultSide}
-        onClose={() => toast.dismiss(t)}
-        onSubmit={async ({ paymentPayload, contractDetails }) => {
-          const paymentResponse = await fetch('/api/payments', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              referralId,
-              ...paymentPayload,
-            }),
-          });
-          if (!paymentResponse.ok) {
-            throw new Error('Unable to save deal details');
-          }
-          const statusResponse = await fetch(`/api/referrals/${referralId}/status`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              status: 'Under Contract',
-              source: 'referral_table',
-              side: contractDetails.dealSide,
-              contractDetails,
-              createNewDeal: false,
-            }),
-          });
-          if (!statusResponse.ok) {
-            throw new Error('Unable to move referral to Under Contract');
-          }
-          applyResolvedStatus('Under Contract');
-          router.refresh();
-          toast.dismiss(t);
-          toast.success('Deal saved and referral moved to Under Contract');
-        }}
-      />
-    ), { duration: Infinity, position: 'top-center' });
-    void toastId;
+    void collectUnderContractDeal({
+      defaultSide,
+      isAgentOrigin,
+      onSubmit: async (result) => {
+        await submitUnderContractDeal(referralId, result, 'referral_table');
+        applyResolvedStatus('Under Contract');
+        router.refresh();
+        toast.success('Deal saved and referral moved to Under Contract');
+      },
+    });
   };
 
   const handleChange = async (event: React.ChangeEvent<HTMLSelectElement>) => {
@@ -542,12 +226,65 @@ function StatusSelect({
       return;
     }
     if (nextStatus === 'Terminated') {
-      applyResolvedStatus(nextStatus);
-      setPendingTerminatedSelection(true);
+      const confirmation = await confirmReferralTermination({
+        borrowerName,
+        isAgentOrigin,
+      });
+      if (!confirmation.confirmed || !confirmation.resolvedStatus || !confirmation.terminatedReason) {
+        applyResolvedStatus(value);
+        return;
+      }
+      setLoading(true);
+      try {
+        const response = await fetch(`/api/referrals/${referralId}/status`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status: confirmation.resolvedStatus,
+            source: 'referral_table',
+            side,
+            terminatedReason: confirmation.terminatedReason,
+            lostReason: confirmation.resolvedStatus === 'Lost' ? confirmation.lostReason : null,
+            terminateDeal: true,
+          }),
+        });
+        const payload = (await response.json().catch(() => null)) as StatusUpdateResponse | null;
+        if (!response.ok) {
+          if (isReferralStatus(payload?.currentStatus)) {
+            applyResolvedStatus(payload.currentStatus);
+          } else {
+            applyResolvedStatus(value);
+          }
+          toast.error(extractStatusErrorMessage(payload));
+          router.refresh();
+          return;
+        }
+        const resolved = isReferralStatus(payload?.status)
+          ? payload.status
+          : confirmation.resolvedStatus;
+        applyResolvedStatus(resolved);
+        setHideDealStage(true);
+        toast.success('Referral status updated');
+        router.refresh();
+      } catch (error) {
+        console.error(error);
+        toast.error('Unable to update status');
+        applyResolvedStatus(value);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+    if (nextStatus === 'Lost') {
+      // Keep the prior status in the select while collecting the loss reason.
+      setPendingLostSelection(true);
+      setLostReason('');
       return;
     }
 
+    let closedUsedAfc: boolean | undefined;
     if (nextStatus === 'Closed' && roleMode === 'agent') {
+      const askUsedAfc = side !== 'sell';
       const confirmation = await confirmCloseStatusDate({
         initialDateIso: null,
         canSendClosedEmails: false,
@@ -555,12 +292,17 @@ function StatusSelect({
         canSendAgentNpsEmail: false,
         defaultSendAgentNpsEmail: false,
         showEmailPreference: false,
+        askUsedAfc,
+        defaultUsedAfc: true,
       });
       if (!confirmation.confirmed) {
         applyResolvedStatus(value);
         return;
       }
       closingDateIso = confirmation.closingDateIso;
+      if (askUsedAfc && typeof confirmation.usedAfc === 'boolean') {
+        closedUsedAfc = confirmation.usedAfc;
+      }
     }
 
     applyResolvedStatus(nextStatus);
@@ -578,6 +320,7 @@ function StatusSelect({
           closingDate: closingDateIso,
           sendClosedEmails: nextStatus === 'Closed' && roleMode === 'agent',
           sendAgentNpsEmail: nextStatus === 'Closed' && roleMode === 'agent',
+          ...(typeof closedUsedAfc === 'boolean' ? { usedAfc: closedUsedAfc } : {}),
         })
       });
 
@@ -618,40 +361,45 @@ function StatusSelect({
         value={status}
         onChange={handleChange}
         disabled={loading}
-        className="w-full rounded border border-border bg-surface-raised px-2 py-1 text-sm text-foreground-muted shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
+        className="w-full rounded-lg border border-border bg-surface-raised px-2 py-1 text-sm text-foreground-muted shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25"
       >
         {REFERRAL_STATUSES.map((item) => (
           <option key={item} value={item}>
-            {item}
+            {getReferralStatusLabel(item, { isAgentOrigin })}
           </option>
         ))}
       </select>
-      {pendingTerminatedSelection && (
-        <div className="space-y-2 rounded border border-border bg-surface-muted p-2">
+      {pendingLostSelection && (
+        <div className="space-y-2 rounded-lg border border-border bg-surface-muted p-2">
           <label className="block text-xs font-semibold text-foreground-muted">
-            Termination reason
+            Why was this lost?
             <select
-              value={terminatedReason}
-              onChange={(event) => setTerminatedReason(event.target.value as TerminatedReason | '')}
-              className="mt-1 w-full rounded border border-border-strong px-2 py-1 text-xs shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
+              value={lostReason}
+              onChange={(event) => setLostReason(event.target.value as LostReason | '')}
+              className="mt-1 w-full rounded-lg border border-border-strong/70 px-2 py-1 text-xs shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25"
               disabled={loading}
             >
               <option value="">Select reason</option>
-              {TERMINATED_REASON_OPTIONS.map((option) => (
+              {lostReasonOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
               ))}
             </select>
           </label>
+          {!isAgentOrigin && (
+            <p className="text-xs text-foreground-subtle">
+              {LOST_BEFORE_CONTACT_HINT}
+            </p>
+          )}
           <div className="flex gap-2">
             <button
               type="button"
-              className="rounded bg-primary-600 hover:bg-primary-700 px-2 py-1 text-xs font-semibold text-white disabled:opacity-60"
+              className="rounded bg-primary hover:bg-primary-hover px-2 py-1 text-xs font-semibold text-white disabled:opacity-60"
               disabled={loading}
               onClick={async () => {
-                if (!terminatedReason) {
-                  toast.error('Termination reason is required.');
+                if (!lostReason) {
+                  toast.error('Please choose why this referral was lost.');
                   return;
                 }
                 setLoading(true);
@@ -660,23 +408,34 @@ function StatusSelect({
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                      status: 'Terminated',
+                      status: 'Lost',
                       source: 'referral_table',
                       side,
-                      terminatedReason,
+                      lostReason,
                     }),
                   });
+                  const payload = (await response.json().catch(() => null)) as StatusUpdateResponse | null;
                   if (!response.ok) {
-                    throw new Error('Failed to update status');
+                    if (isReferralStatus(payload?.currentStatus)) {
+                      applyResolvedStatus(payload.currentStatus);
+                    } else {
+                      applyResolvedStatus(value);
+                    }
+                    toast.error(extractStatusErrorMessage(payload));
+                    resetLostPanel();
+                    router.refresh();
+                    return;
                   }
-                  setPendingTerminatedSelection(false);
-                  setTerminatedReason('');
-                  applyResolvedStatus('Terminated');
+                  const nextStatus = isReferralStatus(payload?.status) ? payload.status : 'Lost';
+                  applyResolvedStatus(nextStatus);
+                  resetLostPanel();
                   toast.success('Referral status updated');
+                  router.refresh();
                 } catch (error) {
                   console.error(error);
                   toast.error('Unable to update status');
                   applyResolvedStatus(value);
+                  resetLostPanel();
                 } finally {
                   setLoading(false);
                 }
@@ -686,11 +445,10 @@ function StatusSelect({
             </button>
             <button
               type="button"
-              className="rounded border border-border-strong px-2 py-1 text-xs font-semibold text-foreground-muted"
+              className="rounded-lg border border-border-strong/70 px-2 py-1 text-xs font-semibold text-foreground-muted"
               disabled={loading}
               onClick={() => {
-                setPendingTerminatedSelection(false);
-                setTerminatedReason('');
+                resetLostPanel();
                 applyResolvedStatus(value);
               }}
             >
@@ -699,24 +457,186 @@ function StatusSelect({
           </div>
         </div>
       )}
-      {dealStatusLabel && dealStatusLabel !== status && dealStatusLabel !== 'Terminated' && (
+      {!pendingLostSelection &&
+        !hideDealStage &&
+        dealStatusLabel &&
+        dealStatusLabel !== status &&
+        dealStatusLabel !== 'Terminated' && (
         <p className="text-xs text-foreground-subtle">Deal stage: {dealStatusLabel}</p>
       )}
     </div>
   );
 }
 
-function SideStatusPill({ label, status }: { label: string; status?: ReferralStatus | null }) {
+function SideStatusPill({
+  label,
+  status,
+  isAgentOrigin = false,
+}: {
+  label: string;
+  status?: ReferralStatus | null;
+  isAgentOrigin?: boolean;
+}) {
   return (
-    <div className="rounded border border-border bg-surface-muted px-2 py-1">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-foreground-subtle">{label}</p>
-      <p className="text-xs font-medium text-foreground-muted">{status ?? '—'}</p>
+    <div className="rounded-lg border border-border bg-surface-muted px-2 py-1">
+      <p className="text-eyebrow text-foreground-subtle">{label}</p>
+      <p className="text-xs font-medium text-foreground-muted">
+        {status ? getReferralStatusLabel(status, { isAgentOrigin }) : '—'}
+      </p>
+    </div>
+  );
+}
+
+function NoteComposer({
+  referralId,
+  mcEmail,
+}: {
+  referralId: string;
+  mcEmail?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+  const hasMcEmail = Boolean(mcEmail);
+  const [emailMc, setEmailMc] = useState(() => hasMcEmail);
+
+  const reset = () => {
+    setNote('');
+    setEmailMc(hasMcEmail);
+    setOpen(false);
+  };
+
+  const handleSubmit = async () => {
+    if (!note.trim()) {
+      toast.error('Add a note before saving');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/referrals/${referralId}/notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          content: note.trim(),
+          emailTargets: emailMc && hasMcEmail ? ['mc'] : undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save note');
+      }
+
+      const payload = (await response.json()) as NoteActivityResponse;
+      const emailSummary =
+        Array.isArray(payload.emailedTargets) && payload.emailedTargets.length > 0
+          ? ' Email sent to MC.'
+          : '';
+      toast.success(`Note saved.${emailSummary}`.trim());
+
+      if (payload.deliveryFailed && emailMc && hasMcEmail) {
+        const message = (() => {
+          switch (payload.deliveryFailureReason) {
+            case 'missing_configuration':
+              return 'Note saved, but email delivery is disabled. Set RESEND_API_KEY and EMAIL_FROM environment variables to enable email notifications.';
+            case 'no_recipients':
+              return 'Note saved, but no MC recipient with a valid email address was available.';
+            default:
+              return 'Note was saved, but the email could not be delivered.';
+          }
+        })();
+        toast.error(message);
+      }
+      reset();
+    } catch (error) {
+      console.error(error);
+      toast.error('Unable to save note');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="text-sm font-medium text-primary hover:underline"
+      >
+        Add note
+      </button>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <textarea
+        value={note}
+        onChange={(event) => setNote(event.target.value)}
+        rows={3}
+        className="w-full rounded-lg border border-border px-2 py-1 text-sm text-foreground-muted shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/25"
+        placeholder="Capture quick context for this referral"
+        disabled={saving}
+      />
+      <button
+        type="button"
+        role="switch"
+        aria-checked={emailMc}
+        aria-label="Email MC"
+        onClick={() => {
+          if (!saving && hasMcEmail) {
+            setEmailMc((prev) => !prev);
+          }
+        }}
+        disabled={saving || !hasMcEmail}
+        className={`inline-flex items-center gap-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+          saving || !hasMcEmail
+            ? 'cursor-not-allowed text-foreground-subtle'
+            : 'cursor-pointer text-foreground-muted'
+        }`}
+      >
+        <span
+          className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${
+            saving || !hasMcEmail
+              ? 'bg-surface-subtle'
+              : emailMc
+                ? 'bg-primary'
+                : 'bg-surface-subtle'
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-surface-raised shadow transition ${
+              emailMc ? 'translate-x-4' : 'translate-x-1'
+            }`}
+          />
+        </span>
+        <span>Email MC</span>
+      </button>
+      <div className="flex gap-2 text-sm">
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={saving}
+          className="inline-flex items-center rounded bg-primary px-3 py-1 font-semibold text-white shadow-sm transition hover:bg-primary-hover-dark disabled:cursor-not-allowed disabled:opacity-70"
+        >
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+        <button
+          type="button"
+          onClick={reset}
+          disabled={saving}
+          className="inline-flex items-center rounded-lg border border-border px-3 py-1 font-semibold text-foreground-muted transition hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-70"
+        >
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }
 
 function AgentBothStatusCell({ row }: { row: ReferralRow }) {
   const assignedSide = row.viewerAssignedSide ?? 'buy';
+  const isAgentOrigin = row.origin === 'agent';
   const [buyStatus, setBuyStatus] = useState<ReferralStatus>(row.buyStatus ?? row.status);
   const [sellStatus, setSellStatus] = useState<ReferralStatus>(row.sellStatus ?? row.status);
 
@@ -730,13 +650,11 @@ function AgentBothStatusCell({ row }: { row: ReferralRow }) {
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-2">
-        <SideStatusPill label="Buy" status={buyStatus} />
-        <SideStatusPill label="Sell" status={sellStatus} />
+        <SideStatusPill label="Buy" status={buyStatus} isAgentOrigin={isAgentOrigin} />
+        <SideStatusPill label="Sell" status={sellStatus} isAgentOrigin={isAgentOrigin} />
       </div>
-      <div className="rounded border border-primary-500/20 bg-primary-600/5 p-2">
-        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-primary-700">
-          My side: {assignedSide}
-        </p>
+      <div className="rounded-lg border border-primary/20 bg-primary/5 p-2">
+        <p className="text-eyebrow mb-1 text-primary">My side: {assignedSide}</p>
         <StatusSelect
           referralId={row._id}
           value={assignedStatus}
@@ -744,6 +662,8 @@ function AgentBothStatusCell({ row }: { row: ReferralRow }) {
           side={assignedSide}
           compact
           roleMode="agent"
+          borrowerName={row.borrowerName}
+          isAgentOrigin={isAgentOrigin}
           onStatusResolved={(nextStatus) => {
             if (assignedSide === 'sell') {
               setSellStatus(nextStatus);
@@ -787,140 +707,6 @@ function normalizeStatusForSort({
   return label.toLocaleLowerCase();
 }
 
-function NoteComposer({
-  referralId,
-  mcEmail,
-  hasAnyPayments = false,
-  hasAnyUsedAfcTrue = false
-}: {
-  referralId: string;
-  mcEmail?: string;
-  hasAnyPayments?: boolean;
-  hasAnyUsedAfcTrue?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const [note, setNote] = useState('');
-  const [saving, setSaving] = useState(false);
-  const hasMcEmail = Boolean(mcEmail);
-  const defaultEmailMc =
-    hasMcEmail &&
-    shouldDefaultEmailMcForAgentNotes({
-      hasAnyPayments,
-      hasAnyUsedAfcTrue
-    });
-  const [emailMc, setEmailMc] = useState(() => defaultEmailMc);
-
-  const reset = () => {
-    setNote('');
-    setEmailMc(defaultEmailMc);
-    setOpen(false);
-  };
-
-  const handleSubmit = async () => {
-    if (!note.trim()) {
-      toast.error('Add a note before saving');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const response = await fetch(`/api/referrals/${referralId}/notes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content: note.trim(),
-          emailTargets: emailMc && hasMcEmail ? ['mc'] : undefined
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to save note');
-      }
-
-      const payload = (await response.json()) as NoteActivityResponse;
-      const emailSummary =
-        Array.isArray(payload.emailedTargets) && payload.emailedTargets.length > 0
-          ? ' Email sent to MC.'
-          : '';
-      toast.success(`Note saved.${emailSummary}`.trim());
-
-      if (payload.deliveryFailed && emailMc && hasMcEmail) {
-        const message = (() => {
-          switch (payload.deliveryFailureReason) {
-            case 'missing_configuration':
-              return 'Note saved, but email delivery is disabled. Set RESEND_API_KEY and EMAIL_FROM environment variables to enable email notifications.';
-            case 'no_recipients':
-              return 'Note saved, but no MC recipient with a valid email address was available.';
-            default:
-              return 'Note was saved, but the email could not be delivered.';
-          }
-        })();
-        toast.error(message);
-      }
-      reset();
-    } catch (error) {
-      console.error(error);
-      toast.error('Unable to save note');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="text-sm font-medium text-primary-700 hover:underline"
-      >
-        Add note
-      </button>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      <textarea
-        value={note}
-        onChange={(event) => setNote(event.target.value)}
-        rows={3}
-        className="w-full rounded border border-border px-2 py-1 text-sm text-foreground-muted shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/25"
-        placeholder="Capture quick context for this referral"
-        disabled={saving}
-      />
-      <label className={`flex items-center gap-2 text-xs font-medium ${hasMcEmail ? 'text-foreground-muted' : 'text-foreground-subtle'}`}>
-        <input
-          type="checkbox"
-          className="h-4 w-4 accent-brand"
-          checked={emailMc}
-          onChange={(event) => setEmailMc(event.target.checked)}
-          disabled={saving || !hasMcEmail}
-        />
-        Email MC
-      </label>
-      <div className="flex gap-2 text-sm">
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={saving}
-          className="inline-flex items-center rounded bg-primary-600 px-3 py-1 font-semibold text-white shadow-sm transition hover:bg-primary-600-dark disabled:cursor-not-allowed disabled:opacity-70"
-        >
-          {saving ? 'Saving…' : 'Save'}
-        </button>
-        <button
-          type="button"
-          onClick={reset}
-          disabled={saving}
-          className="inline-flex items-center rounded border border-border px-3 py-1 font-semibold text-foreground-muted transition hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-70"
-        >
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
-}
-
-
 function SortButton({ 
   sortKey, 
   label, 
@@ -950,7 +736,9 @@ function SortButton({
     <button
       type="button"
       onClick={handleClick}
-      className="flex items-center gap-1 text-left"
+      // Buttons don't inherit text-transform, so the eyebrow casing on the
+      // header cell has to be restated here or sortable columns read title case.
+      className="flex items-center gap-1 text-left uppercase"
     >
       <span>{label}</span>
       <span className="text-[10px] text-foreground-subtle">{icon}</span>
@@ -1001,20 +789,16 @@ function buildColumns(
       const { _id, borrowerName, borrowerPhone, borrowerEmail, urgentTaskCount } = row.original;
       return (
         <div className="flex flex-col">
-          <div className="flex items-center gap-2">
-            {showAgentOriginIndicator && row.original.origin === 'agent' ? (
-              <span
-                className="inline-block h-2.5 w-2.5 rounded-full bg-foreground-muted"
-                aria-label="Agent-created referral"
-                title="Agent-created referral"
-              />
-            ) : null}
-            <Link href={listParams ? `/referrals/${_id}?${listParams}` : `/referrals/${_id}`} className="font-medium text-primary-700">
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href={listParams ? `/referrals/${_id}?${listParams}` : `/referrals/${_id}`} className="font-medium text-primary">
               {borrowerName}
             </Link>
+            {showAgentOriginIndicator && row.original.origin === 'agent' ? (
+              <AgentOriginMarker size="sm" />
+            ) : null}
             {mode === 'admin' && (urgentTaskCount ?? 0) > 0 ? (
               <span
-                className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800"
+                className="inline-flex items-center rounded-full bg-danger-soft px-2 py-0.5 text-xs font-medium text-danger"
                 title={`${urgentTaskCount} overdue or due today`}
               >
                 {urgentTaskCount}
@@ -1026,7 +810,7 @@ function buildColumns(
               href={buildGmailComposeUrl(borrowerEmail)}
               target="_blank"
               rel="noreferrer"
-              className="text-xs text-primary-700 hover:underline"
+              className="text-xs text-primary hover:underline"
             >
               Email
             </a>
@@ -1034,7 +818,7 @@ function buildColumns(
           {borrowerPhone ? (
             <a
               href={`tel:${borrowerPhone.replace(/[^0-9+]/g, '')}`}
-              className="text-xs text-primary-700 hover:underline"
+              className="text-xs text-primary hover:underline"
             >
               {formatPhoneNumber(borrowerPhone)}
             </a>
@@ -1049,7 +833,9 @@ function buildColumns(
   const createdColumn: ColumnDef<ReferralRow> = {
     header: sortableHeader('Created', 'createdAt', currentSortBy, currentSortDirection, onSortChange),
     accessorKey: 'createdAt',
-    cell: ({ row }) => new Date(row.original.createdAt).toLocaleDateString(),
+    cell: ({ row }) => (
+      <span className="text-numeric">{new Date(row.original.createdAt).toLocaleDateString()}</span>
+    ),
   };
 
   const lastUpdatedColumn: ColumnDef<ReferralRow> = {
@@ -1057,7 +843,11 @@ function buildColumns(
     accessorKey: 'updatedAt',
     cell: ({ row }) => {
       const updatedAt = row.original.updatedAt;
-      return updatedAt ? new Date(updatedAt).toLocaleDateString() : '—';
+      return (
+        <span className="text-numeric">
+          {updatedAt ? new Date(updatedAt).toLocaleDateString() : '—'}
+        </span>
+      );
     },
   };
 
@@ -1072,22 +862,93 @@ function buildColumns(
     cell: ({ row }) => renderTimelineCountdown(row.original),
   };
 
+  const agentColumn: ColumnDef<ReferralRow> = {
+    header: sortableHeader('Agent', 'assignedAgentName', currentSortBy, currentSortDirection, onSortChange),
+    accessorKey: 'assignedAgentName',
+    cell: ({ row }) => {
+      const { assignedAgentName, assignedAgentEmail, assignedAgentPhone, autoUpdateRemindersEnabled } = row.original;
+      if (!assignedAgentName && !assignedAgentPhone && !assignedAgentEmail) {
+        return 'Unassigned';
+      }
+      return (
+        <div className="flex flex-col text-sm">
+          <div className="flex items-center gap-1.5">
+            <span className="font-medium text-foreground-muted">{assignedAgentName || 'Unassigned'}</span>
+            {autoUpdateRemindersEnabled && (
+              <span title="Auto reminders enabled">
+                <Clock
+                  className="h-3.5 w-3.5 text-foreground-subtle"
+                  aria-label="Auto reminders enabled"
+                />
+              </span>
+            )}
+          </div>
+          {assignedAgentEmail && (
+            <a
+              href={buildGmailComposeUrl(assignedAgentEmail)}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-primary hover:underline"
+            >
+              Email
+            </a>
+          )}
+          {assignedAgentPhone && (
+            <a
+              href={`tel:${assignedAgentPhone.replace(/[^0-9+]/g, '')}`}
+              className="text-xs text-primary hover:underline"
+            >
+              {formatPhoneNumber(assignedAgentPhone)}
+            </a>
+          )}
+        </div>
+      );
+    }
+  };
+
+  const lenderMcColumn: ColumnDef<ReferralRow> = {
+    header: sortableHeader('Lender/MC', 'lenderName', currentSortBy, currentSortDirection, onSortChange),
+    accessorKey: 'lenderName',
+    cell: ({ row }) => {
+      const { lenderName, lenderEmail, lenderPhone } = row.original;
+      if (!lenderName && !lenderPhone && !lenderEmail) {
+        return 'Pending';
+      }
+      return (
+        <div className="flex flex-col text-sm">
+          <span className="font-medium text-foreground-muted">{lenderName || 'Pending'}</span>
+          {lenderEmail && (
+            <a
+              href={buildGmailComposeUrl(lenderEmail)}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-primary hover:underline"
+            >
+              Email
+            </a>
+          )}
+          {lenderPhone && (
+            <a
+              href={`tel:${lenderPhone.replace(/[^0-9+]/g, '')}`}
+              className="text-xs text-primary hover:underline"
+            >
+              {formatPhoneNumber(lenderPhone)}
+            </a>
+          )}
+        </div>
+      );
+    }
+  };
+
   if (mode === 'agent') {
     return [
       borrowerColumn,
       {
         header: sortableHeader('Loan File #', 'loanFileNumber', currentSortBy, currentSortDirection, onSortChange),
-        accessorKey: 'loanFileNumber'
+        accessorKey: 'loanFileNumber',
+        cell: ({ row }) => <span className="text-numeric">{row.original.loanFileNumber}</span>
       },
       timelineColumn,
-      {
-        header: sortableHeader('Pre-approval', 'preApprovalAmountCents', currentSortBy, currentSortDirection, onSortChange),
-        accessorKey: 'preApprovalAmountCents',
-        cell: ({ row }) =>
-          row.original.preApprovalAmountCents
-            ? formatCurrency(row.original.preApprovalAmountCents)
-            : '—'
-      },
       {
         header: sortableHeader('Status', 'status', currentSortBy, currentSortDirection, onSortChange),
         accessorKey: 'status',
@@ -1104,6 +965,8 @@ function buildColumns(
               side={row.original.viewerAssignedSide ?? undefined}
               defaultSide={row.original.viewerAssignedSide === 'sell' ? 'sell' : 'buy'}
               roleMode="agent"
+              borrowerName={row.original.borrowerName}
+              isAgentOrigin={row.original.origin === 'agent'}
             />
           );
         },
@@ -1115,13 +978,13 @@ function buildColumns(
           <NoteComposer
             referralId={row.original._id}
             mcEmail={row.original.lenderEmail}
-            hasAnyPayments={row.original.hasAnyPayments}
-            hasAnyUsedAfcTrue={row.original.hasAnyUsedAfcTrue}
           />
         ),
         enableSorting: false,
       },
-      createdColumn
+      lenderMcColumn,
+      createdColumn,
+      lastUpdatedColumn,
     ];
   }
 
@@ -1130,7 +993,8 @@ function buildColumns(
       borrowerColumn,
       {
         header: sortableHeader('Loan File #', 'loanFileNumber', currentSortBy, currentSortDirection, onSortChange),
-        accessorKey: 'loanFileNumber'
+        accessorKey: 'loanFileNumber',
+        cell: ({ row }) => <span className="text-numeric">{row.original.loanFileNumber}</span>
       },
       timelineColumn,
       {
@@ -1142,8 +1006,8 @@ function buildColumns(
               <span className="font-medium text-foreground-muted">{row.original.assignedAgentName || 'Unassigned'}</span>
               {row.original.autoUpdateRemindersEnabled && (
                 <span title="Auto reminders enabled">
-                  <Clock 
-                    className="h-3.5 w-3.5 text-foreground-subtle" 
+                  <Clock
+                    className="h-3.5 w-3.5 text-foreground-subtle"
                     aria-label="Auto reminders enabled"
                   />
                 </span>
@@ -1154,7 +1018,7 @@ function buildColumns(
                 href={buildGmailComposeUrl(row.original.assignedAgentEmail)}
                 target="_blank"
                 rel="noreferrer"
-                className="text-xs text-primary-700 hover:underline"
+                className="text-xs text-primary hover:underline"
               >
                 Email
               </a>
@@ -1162,7 +1026,7 @@ function buildColumns(
             {row.original.assignedAgentPhone && (
               <a
                 href={`tel:${row.original.assignedAgentPhone.replace(/[^0-9+]/g, '')}`}
-                className="text-xs text-primary-700 hover:underline"
+                className="text-xs text-primary hover:underline"
               >
                 {formatPhoneNumber(row.original.assignedAgentPhone)}
               </a>
@@ -1181,96 +1045,23 @@ function buildColumns(
     ];
   }
 
-  const agentColumn: ColumnDef<ReferralRow> = {
-    header: sortableHeader('Agent', 'assignedAgentName', currentSortBy, currentSortDirection, onSortChange),
-    accessorKey: 'assignedAgentName',
-    cell: ({ row }) => {
-      const { assignedAgentName, assignedAgentEmail, assignedAgentPhone, autoUpdateRemindersEnabled } = row.original;
-      if (!assignedAgentName && !assignedAgentPhone && !assignedAgentEmail) {
-        return 'Unassigned';
-      }
-      return (
-        <div className="flex flex-col text-sm">
-          <div className="flex items-center gap-1.5">
-            <span className="font-medium text-foreground-muted">{assignedAgentName || 'Unassigned'}</span>
-            {autoUpdateRemindersEnabled && (
-              <span title="Auto reminders enabled">
-                <Clock 
-                  className="h-3.5 w-3.5 text-foreground-subtle" 
-                  aria-label="Auto reminders enabled"
-                />
-              </span>
-            )}
-          </div>
-          {assignedAgentEmail && (
-            <a
-              href={buildGmailComposeUrl(assignedAgentEmail)}
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs text-primary-700 hover:underline"
-            >
-              Email
-            </a>
-          )}
-          {assignedAgentPhone && (
-            <a
-              href={`tel:${assignedAgentPhone.replace(/[^0-9+]/g, '')}`}
-              className="text-xs text-primary-700 hover:underline"
-            >
-              {formatPhoneNumber(assignedAgentPhone)}
-            </a>
-          )}
-        </div>
-      );
-    }
-  };
-
   const adminColumns: ColumnDef<ReferralRow>[] = [
     borrowerColumn,
     {
       header: sortableHeader('Loan File #', 'loanFileNumber', currentSortBy, currentSortDirection, onSortChange),
-      accessorKey: 'loanFileNumber'
+      accessorKey: 'loanFileNumber',
+      cell: ({ row }) => <span className="text-numeric">{row.original.loanFileNumber}</span>
     },
     timelineColumn,
     {
       header: sortableHeader('Status', 'status', currentSortBy, currentSortDirection, onSortChange),
       accessorKey: 'status',
-      cell: ({ row }) => <StatusBadge status={row.original.dealStatusLabel ?? row.original.status} />,
+      cell: ({ row }) => (
+        <StatusBadge status={row.original.dealStatusLabel ?? row.original.status} />
+      ),
     },
     ...(hideAgentColumn ? [] : [agentColumn]),
-    {
-      header: sortableHeader('Lender/MC', 'lenderName', currentSortBy, currentSortDirection, onSortChange),
-      accessorKey: 'lenderName',
-      cell: ({ row }) => {
-        const { lenderName, lenderEmail, lenderPhone } = row.original;
-        if (!lenderName && !lenderPhone && !lenderEmail) {
-          return '—';
-        }
-        return (
-          <div className="flex flex-col text-sm">
-            <span className="font-medium text-foreground-muted">{lenderName || 'Unassigned'}</span>
-            {lenderEmail && (
-              <a
-                href={buildGmailComposeUrl(lenderEmail)}
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs text-primary-700 hover:underline"
-              >
-                Email
-              </a>
-            )}
-            {lenderPhone && (
-              <a
-                href={`tel:${lenderPhone.replace(/[^0-9+]/g, '')}`}
-                className="text-xs text-primary-700 hover:underline"
-              >
-                {formatPhoneNumber(lenderPhone)}
-              </a>
-            )}
-          </div>
-        );
-      }
-    },
+    lenderMcColumn,
     createdColumn,
     lastUpdatedColumn
   ];
@@ -1284,11 +1075,19 @@ function referralDetailHref(row: ReferralRow, listParams: string) {
   return listParams ? `/referrals/${row._id}?${listParams}` : `/referrals/${row._id}`;
 }
 
-function MobileField({ label, children }: { label: string; children: ReactNode }) {
+function MobileField({
+  label,
+  numeric,
+  children
+}: {
+  label: string;
+  numeric?: boolean;
+  children: ReactNode;
+}) {
   return (
     <div className="space-y-1">
-      <p className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">{label}</p>
-      <div className="text-sm text-foreground">{children}</div>
+      <p className="text-eyebrow text-foreground-subtle">{label}</p>
+      <div className={clsx('text-sm text-foreground', numeric && 'text-numeric')}>{children}</div>
     </div>
   );
 }
@@ -1328,17 +1127,13 @@ function ReferralMobileStack({
               <div className={`bg-surface-muted px-4 pt-4 ${row.clientType === 'Both' ? 'pb-3' : 'pb-3'}`}>
                 <div className={`flex ${row.clientType === 'Both' ? 'flex-col gap-3' : 'items-start justify-between gap-3'}`}>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      {showOrigin && row.origin === 'agent' ? (
-                        <span
-                          className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-foreground-muted"
-                          aria-label="Agent-created referral"
-                          title="Agent-created referral"
-                        />
-                      ) : null}
-                      <Link href={href} className="text-base font-semibold text-foreground break-words hover:text-primary-700">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link href={href} className="text-base font-semibold text-foreground break-words hover:text-primary-hover">
                         {row.borrowerName}
                       </Link>
+                      {showOrigin && row.origin === 'agent' ? (
+                        <AgentOriginMarker size="sm" />
+                      ) : null}
                     </div>
                     <div className="mt-1 flex items-center gap-3">
                       {row.borrowerEmail ? (
@@ -1346,7 +1141,7 @@ function ReferralMobileStack({
                           href={buildGmailComposeUrl(row.borrowerEmail)}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-xs text-primary-700 hover:underline"
+                          className="text-xs text-primary hover:underline"
                         >
                           Email
                         </a>
@@ -1354,7 +1149,7 @@ function ReferralMobileStack({
                       {row.borrowerPhone ? (
                         <a
                           href={`tel:${row.borrowerPhone.replace(/[^0-9+]/g, '')}`}
-                          className="text-xs text-primary-700 hover:underline"
+                          className="text-xs text-primary hover:underline"
                         >
                           {formatPhoneNumber(row.borrowerPhone)}
                         </a>
@@ -1372,6 +1167,8 @@ function ReferralMobileStack({
                         side={row.viewerAssignedSide ?? undefined}
                         defaultSide={row.viewerAssignedSide === 'sell' ? 'sell' : 'buy'}
                         roleMode="agent"
+                        borrowerName={row.borrowerName}
+                        isAgentOrigin={row.origin === 'agent'}
                       />
                     )}
                   </div>
@@ -1381,25 +1178,47 @@ function ReferralMobileStack({
               {/* Details zone */}
               <div className="px-4 py-3 space-y-3">
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                  <MobileField label="Loan file #">{row.loanFileNumber}</MobileField>
+                  <MobileField label="Loan file #" numeric>{row.loanFileNumber}</MobileField>
                   <MobileField label="Timeline">{timelineText}</MobileField>
-                  <MobileField label="Pre-approval">
-                    {row.preApprovalAmountCents ? (
-                      <span className="font-semibold text-foreground">{formatCurrency(row.preApprovalAmountCents)}</span>
-                    ) : '—'}
+                  <MobileField label="Lender / MC">
+                    {!row.lenderName && !row.lenderPhone && !row.lenderEmail ? (
+                      'Pending'
+                    ) : (
+                      <div className="flex flex-col gap-1">
+                        <span className="font-medium text-foreground-muted">{row.lenderName || 'Pending'}</span>
+                        {row.lenderEmail ? (
+                          <a
+                            href={buildGmailComposeUrl(row.lenderEmail)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs text-primary hover:underline w-fit"
+                          >
+                            Email
+                          </a>
+                        ) : null}
+                        {row.lenderPhone ? (
+                          <a
+                            href={`tel:${row.lenderPhone.replace(/[^0-9+]/g, '')}`}
+                            className="text-xs text-primary hover:underline w-fit"
+                          >
+                            {formatPhoneNumber(row.lenderPhone)}
+                          </a>
+                        ) : null}
+                      </div>
+                    )}
                   </MobileField>
-                  <MobileField label="Created">{new Date(row.createdAt).toLocaleDateString()}</MobileField>
+                  <MobileField label="Created" numeric>
+                    {new Date(row.createdAt).toLocaleDateString()}
+                  </MobileField>
+                  <MobileField label="Last updated" numeric>
+                    {row.updatedAt ? new Date(row.updatedAt).toLocaleDateString() : '—'}
+                  </MobileField>
                 </div>
 
                 {/* Notes zone */}
                 <div className="border-t border-border pt-3">
                   <MobileField label="Notes">
-                    <NoteComposer
-                      referralId={row._id}
-                      mcEmail={row.lenderEmail}
-                      hasAnyPayments={row.hasAnyPayments}
-                      hasAnyUsedAfcTrue={row.hasAnyUsedAfcTrue}
-                    />
+                    <NoteComposer referralId={row._id} mcEmail={row.lenderEmail} />
                   </MobileField>
                 </div>
               </div>
@@ -1415,19 +1234,15 @@ function ReferralMobileStack({
             <MobileField label="Borrower">
               <div className="flex flex-col gap-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  {showOrigin && row.origin === 'agent' ? (
-                    <span
-                      className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-foreground-muted"
-                      aria-label="Agent-created referral"
-                      title="Agent-created referral"
-                    />
-                  ) : null}
-                  <Link href={href} className="font-medium text-primary-700 break-words">
+                  <Link href={href} className="font-medium text-primary break-words">
                     {row.borrowerName}
                   </Link>
+                  {showOrigin && row.origin === 'agent' ? (
+                    <AgentOriginMarker size="sm" />
+                  ) : null}
                   {mode === 'admin' && (row.urgentTaskCount ?? 0) > 0 ? (
                     <span
-                      className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800"
+                      className="inline-flex items-center rounded-full bg-danger-soft px-2 py-0.5 text-xs font-medium text-danger"
                       title={`${row.urgentTaskCount} overdue or due today`}
                     >
                       {row.urgentTaskCount}
@@ -1439,7 +1254,7 @@ function ReferralMobileStack({
                     href={buildGmailComposeUrl(row.borrowerEmail)}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-xs text-primary-700 hover:underline w-fit"
+                    className="text-xs text-primary hover:underline w-fit"
                   >
                     Email
                   </a>
@@ -1447,7 +1262,7 @@ function ReferralMobileStack({
                 {row.borrowerPhone ? (
                   <a
                     href={`tel:${row.borrowerPhone.replace(/[^0-9+]/g, '')}`}
-                    className="text-xs text-primary-700 hover:underline w-fit"
+                    className="text-xs text-primary hover:underline w-fit"
                   >
                     {formatPhoneNumber(row.borrowerPhone)}
                   </a>
@@ -1457,7 +1272,7 @@ function ReferralMobileStack({
               </div>
             </MobileField>
 
-            <MobileField label="Loan file #">{row.loanFileNumber}</MobileField>
+            <MobileField label="Loan file #" numeric>{row.loanFileNumber}</MobileField>
             <MobileField label="Timeline">{timelineText}</MobileField>
 
             {mode === 'mc' ? (
@@ -1479,7 +1294,7 @@ function ReferralMobileStack({
                         href={buildGmailComposeUrl(row.assignedAgentEmail)}
                         target="_blank"
                         rel="noreferrer"
-                        className="text-xs text-primary-700 hover:underline w-fit"
+                        className="text-xs text-primary hover:underline w-fit"
                       >
                         Email
                       </a>
@@ -1487,7 +1302,7 @@ function ReferralMobileStack({
                     {row.assignedAgentPhone ? (
                       <a
                         href={`tel:${row.assignedAgentPhone.replace(/[^0-9+]/g, '')}`}
-                        className="text-xs text-primary-700 hover:underline w-fit"
+                        className="text-xs text-primary hover:underline w-fit"
                       >
                         {formatPhoneNumber(row.assignedAgentPhone)}
                       </a>
@@ -1497,7 +1312,9 @@ function ReferralMobileStack({
                 <MobileField label="Status">
                   <StatusBadge status={row.dealStatusLabel ?? row.status} />
                 </MobileField>
-                <MobileField label="Created">{new Date(row.createdAt).toLocaleDateString()}</MobileField>
+                <MobileField label="Created" numeric>
+                  {new Date(row.createdAt).toLocaleDateString()}
+                </MobileField>
               </>
             ) : null}
 
@@ -1527,7 +1344,7 @@ function ReferralMobileStack({
                             href={buildGmailComposeUrl(row.assignedAgentEmail)}
                             target="_blank"
                             rel="noreferrer"
-                            className="text-xs text-primary-700 hover:underline w-fit"
+                            className="text-xs text-primary hover:underline w-fit"
                           >
                             Email
                           </a>
@@ -1535,7 +1352,7 @@ function ReferralMobileStack({
                         {row.assignedAgentPhone ? (
                           <a
                             href={`tel:${row.assignedAgentPhone.replace(/[^0-9+]/g, '')}`}
-                            className="text-xs text-primary-700 hover:underline w-fit"
+                            className="text-xs text-primary hover:underline w-fit"
                           >
                             {formatPhoneNumber(row.assignedAgentPhone)}
                           </a>
@@ -1546,16 +1363,16 @@ function ReferralMobileStack({
                 ) : null}
                 <MobileField label="Lender / MC">
                   {!row.lenderName && !row.lenderPhone && !row.lenderEmail ? (
-                    '—'
+                    'Pending'
                   ) : (
                     <div className="flex flex-col gap-1">
-                      <span className="font-medium text-foreground-muted">{row.lenderName || 'Unassigned'}</span>
+                      <span className="font-medium text-foreground-muted">{row.lenderName || 'Pending'}</span>
                       {row.lenderEmail ? (
                         <a
                           href={buildGmailComposeUrl(row.lenderEmail)}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-xs text-primary-700 hover:underline w-fit"
+                          className="text-xs text-primary hover:underline w-fit"
                         >
                           Email
                         </a>
@@ -1563,7 +1380,7 @@ function ReferralMobileStack({
                       {row.lenderPhone ? (
                         <a
                           href={`tel:${row.lenderPhone.replace(/[^0-9+]/g, '')}`}
-                          className="text-xs text-primary-700 hover:underline w-fit"
+                          className="text-xs text-primary hover:underline w-fit"
                         >
                           {formatPhoneNumber(row.lenderPhone)}
                         </a>
@@ -1571,8 +1388,10 @@ function ReferralMobileStack({
                     </div>
                   )}
                 </MobileField>
-                <MobileField label="Created">{new Date(row.createdAt).toLocaleDateString()}</MobileField>
-                <MobileField label="Last updated">
+                <MobileField label="Created" numeric>
+                  {new Date(row.createdAt).toLocaleDateString()}
+                </MobileField>
+                <MobileField label="Last updated" numeric>
                   {row.updatedAt ? new Date(row.updatedAt).toLocaleDateString() : '—'}
                 </MobileField>
               </>
@@ -1689,9 +1508,11 @@ export function ReferralTable({
               {headerGroup.headers.map((header) => (
                 <th
                   key={header.id}
-                  className={`px-4 py-3 text-xs font-semibold uppercase tracking-wide text-foreground-subtle ${
+                  className={clsx(
+                    'text-eyebrow px-4 text-foreground-subtle',
+                    mode === 'admin' ? 'py-2' : 'py-3',
                     header.column.id === 'actions' ? 'text-right' : 'text-left'
-                  }`}
+                  )}
                 >
                   {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                 </th>
@@ -1705,9 +1526,11 @@ export function ReferralTable({
               {row.getVisibleCells().map((cell) => (
                 <td
                   key={cell.id}
-                  className={`px-4 py-3 text-sm text-foreground-muted ${
-                    cell.column.id === 'actions' ? 'text-right' : ''
-                  }`}
+                  className={clsx(
+                    'px-4 text-sm text-foreground-muted',
+                    mode === 'admin' ? 'py-1.5' : 'py-3',
+                    cell.column.id === 'actions' && 'text-right'
+                  )}
                 >
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </td>
@@ -1777,11 +1600,11 @@ export function ReferralSummary({
 
   return (
     <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <dl className={clsx('grid gap-4', columnClass)}>
+      <dl className={clsx('grid gap-2', columnClass)}>
         {metrics.map((metric) => (
-          <div key={metric.label}>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-foreground-subtle">{metric.label}</dt>
-            <dd className="mt-1 text-2xl font-semibold text-foreground">{metric.value}</dd>
+          <div key={metric.label} className="rounded-lg bg-surface-muted px-3 py-2">
+            <dt className="text-xs text-foreground-subtle">{metric.label}</dt>
+            <dd className="text-numeric mt-0.5 text-base font-semibold text-foreground">{metric.value}</dd>
           </div>
         ))}
       </dl>

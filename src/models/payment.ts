@@ -61,6 +61,12 @@ const paymentSchema = new Schema(
     notes: String,
     feeBreakdownEmailSentAt: { type: Date, default: null },
     feeBreakdownEmailSentBy: { type: String, default: null },
+    feeBreakdownVerificationStatus: {
+      type: String,
+      enum: ['pending', 'confirmed', 'disputed', null],
+      default: null,
+    },
+    feeBreakdownVerifiedAt: { type: Date, default: null },
     closingDatePushbackCount: { type: Number, default: 0 },
     closingDatePushbacks: {
       type: [

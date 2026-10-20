@@ -4,9 +4,9 @@ export const dynamic = 'force-dynamic';
 
 import Link from 'next/link';
 import { FormEvent, Suspense, useMemo, useState } from 'react';
-import { buildGmailComposeUrl } from '@/utils/gmail';
 import { signIn } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
+import { AuthBrandLockup } from '@/components/brand/AuthBrandLockup';
 import { AuthShell, AuthHeading } from '@/components/layout/auth-shell';
 import { Button } from '@/components/ui/button';
 import { Field } from '@/components/ui/field';
@@ -99,19 +99,8 @@ function LoginForm() {
   };
 
   return (
-    <AuthShell
-      hero={{
-        eyebrow: 'AFC · AHA',
-        title: 'Referral relationships, coordinated in one workspace.',
-        description:
-          'Manage referrals, follow-ups, and lender partnerships with the tools your teams already trust.',
-      }}
-    >
-      <AuthHeading
-        eyebrow="AFC · AHA"
-        title="Sign in to Referrio"
-        description="Use your Referrio credentials to sign in."
-      />
+    <AuthShell brand={<AuthBrandLockup />}>
+      <AuthHeading title="Sign in" />
 
       {displayProviderError && (
         <div className="rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-[hsl(var(--danger))]">
@@ -145,7 +134,7 @@ function LoginForm() {
             <span className="flex justify-end">
               <Link
                 href="/reset-password"
-                className="font-medium text-primary-700 no-underline hover:underline"
+                className="text-sm font-medium text-primary no-underline hover:underline"
               >
                 Forgot password?
               </Link>
@@ -156,7 +145,7 @@ function LoginForm() {
             id="password"
             type="password"
             autoComplete="current-password"
-            placeholder="Enter your password"
+            placeholder="Password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
           />
@@ -171,22 +160,10 @@ function LoginForm() {
         Don&apos;t have an account?{' '}
         <Link
           href="/signup"
-          className="font-medium text-primary-700 no-underline hover:underline"
+          className="font-medium text-primary no-underline hover:underline"
         >
           Sign up
         </Link>
-      </p>
-
-      <p className="text-center text-xs text-foreground-subtle">
-        Need help?{' '}
-        <a
-          href={buildGmailComposeUrl('logan.graham@americanfinancing.net')}
-          target="_blank"
-          rel="noreferrer"
-          className="font-medium text-primary-700 no-underline hover:underline"
-        >
-          Contact support
-        </a>
       </p>
     </AuthShell>
   );

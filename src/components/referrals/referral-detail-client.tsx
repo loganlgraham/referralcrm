@@ -10,18 +10,43 @@ import { ReferralHeader } from '@/components/referrals/referral-header';
 import { ReferralNotes } from '@/components/referrals/referral-notes';
 import { ReferralTimeline } from '@/components/referrals/referral-timeline';
 import type { Contact } from '@/components/referrals/contact-assignment';
-import { normalizeReferralStatus, type ReferralStatus, REFERRAL_TIMELINE_OPTIONS, REFERRAL_TIMELINE_VALUES } from '@/constants/referrals';
+import {
+  REFERRAL_STATUSES,
+  REFERRAL_TIMELINE_OPTIONS,
+  REFERRAL_TIMELINE_VALUES,
+  type ReferralStatus
+} from '@/constants/referrals';
 import { ReferralDeals } from '@/components/referrals/referral-deals';
+import { StatusChanger } from '@/components/referrals/status-changer';
+import { AgentActivityCard } from '@/components/referrals/agent-activity-card';
+import { AgentDealsCard, type DealStageExtras } from '@/components/referrals/agent-deals-card';
+import { AgentContextRail, AgentDetailHeader } from '@/components/referrals/agent-referral-detail';
+import {
+  collectUnderContractDeal,
+  editDealDetails,
+  submitUnderContractDeal
+} from '@/components/referrals/deal-details-toast';
+import type { DealStatus } from '@/constants/deals';
 import { getReferralDealsVisibility } from '@/components/referrals/deal-visibility';
 import { getLatestDealReferralStatuses } from '@/lib/latest-deal-referral-status';
 import type { ReferralPayment } from '@/types/referral-payment';
-import { formatCurrency, formatDateMST } from '@/utils/formatters';
-import Link from 'next/link';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { formatDateMST } from '@/utils/formatters';
+import { cn } from '@/lib/cn';
+import { Button } from '@/components/ui/button';
+import { Modal } from '@/components/ui/modal';
+import { inputFieldClasses } from '@/components/ui/input';
+import { RailCard, RailFactList, railTextButtonClasses } from '@/components/referrals/referral-rail';
+import { PreApprovalField } from '@/components/referrals/pre-approval-field';
+import { collectIntakeDetails } from '@/components/referrals/intake-details-toast';
+import {
+  formatCurrencyInputDisplay,
+  sanitizeCurrencyInput,
+  type DetailDraft,
+  type ReferralClientType,
+  type TransferStage
+} from '@/components/referrals/referral-detail-draft';
 
 type ReferralSource = string;
-type ReferralClientType = 'Seller' | 'Buyer' | 'Both';
-type TransferStage = 'Pre-approval TBD' | 'Pre-approved';
 
 interface ReferralContact {
   _id?: string | null;
@@ -41,6 +66,8 @@ interface ReferralDetailNote {
   hiddenFromAgent?: boolean;
   hiddenFromMc?: boolean;
   emailedTargets?: ('agent' | 'mc' | 'admin')[];
+  pinned?: boolean;
+  pinnedAt?: string | null;
 }
 
 interface ReferralDetail {
@@ -124,24 +151,6 @@ interface FinancialState {
   dealSide?: 'buy' | 'sell';
 }
 
-interface DetailDraft {
-  borrowerFirstName: string;
-  borrowerLastName: string;
-  borrowerEmail: string;
-  borrowerPhone: string;
-  loanFileNumber: string;
-  source: ReferralSource;
-  endorser: string;
-  clientType: ReferralClientType;
-  lookingInZip: string;
-  borrowerCurrentAddress: string;
-  stageOnTransfer: TransferStage;
-  loanType: string;
-  preApprovalAmount: string;
-  timeline: 'asap' | '1-3_months' | '3-6_months' | '6-12_months' | '12+_months' | 'not_specified';
-  referralDate: string;
-}
-
 const DETAIL_FIELD_KEYS: (keyof DetailDraft)[] = [
   'borrowerFirstName',
   'borrowerLastName',
@@ -220,49 +229,6 @@ const centsToCurrencyInput = (value?: number | null) => {
   }
   const amount = value / 100;
   return Number.isInteger(amount) ? amount.toString() : amount.toFixed(2);
-};
-
-const sanitizeCurrencyInput = (value: string) => {
-  if (!value) {
-    return '';
-  }
-  const stripped = value.replace(/[^0-9.]/g, '');
-  if (!stripped) {
-    return '';
-  }
-
-  const [integerPart = '', ...decimalParts] = stripped.split('.');
-  const decimalPart = decimalParts.join('').slice(0, 2);
-  const normalizedInteger = integerPart.replace(/^0+(?=\d)/, '');
-  const hasDecimal = decimalParts.length > 0;
-  const safeInteger = normalizedInteger || (integerPart.length > 0 ? '0' : '');
-
-  if (!hasDecimal) {
-    return safeInteger;
-  }
-
-  const integerPortion = safeInteger || '0';
-  return decimalPart.length > 0 ? `${integerPortion}.${decimalPart}` : `${integerPortion}.`;
-};
-
-const formatCurrencyInputDisplay = (value: string) => {
-  if (!value) {
-    return '';
-  }
-
-  const [integerPart = '', decimalPart] = value.split('.');
-  const hasDecimal = decimalPart !== undefined;
-  const sanitizedInteger = integerPart.replace(/[^0-9]/g, '');
-  const integerValue = sanitizedInteger ? Number(sanitizedInteger) : 0;
-  const formattedInteger = sanitizedInteger
-    ? new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(integerValue)
-    : '';
-
-  if (!hasDecimal) {
-    return formattedInteger;
-  }
-
-  return decimalPart !== undefined ? `${formattedInteger}.${decimalPart}` : formattedInteger;
 };
 
 // Convert ISO date string to datetime-local format (YYYY-MM-DDTHH:mm)
@@ -577,6 +543,31 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     referral.sellSideAgent,
     sellSideAgentContact,
   ]);
+  const viewerSide: 'buy' | 'sell' = referral.viewerAssignedSide ?? primarySide;
+  const otherSide: 'buy' | 'sell' = viewerSide === 'sell' ? 'buy' : 'sell';
+  const otherSideAgentContact = useMemo(() => {
+    if (referral.clientType !== 'Both') {
+      return null;
+    }
+    const buyContact = buySideAgentContact ?? mapReferralContact(referral.buySideAgent);
+    const sellContact = sellSideAgentContact ?? mapReferralContact(referral.sellSideAgent);
+    const otherContact = otherSide === 'sell' ? sellContact : buyContact;
+    const viewerContact = otherSide === 'sell' ? buyContact : sellContact;
+    if (!otherContact) {
+      return null;
+    }
+    if (otherContact.id && viewerContact?.id && otherContact.id === viewerContact.id) {
+      return null;
+    }
+    return otherContact;
+  }, [
+    buySideAgentContact,
+    otherSide,
+    referral.buySideAgent,
+    referral.clientType,
+    referral.sellSideAgent,
+    sellSideAgentContact,
+  ]);
   const handleDealCreated = useCallback((deal: ReferralPayment) => {
     if (!deal?._id) {
       return;
@@ -652,6 +643,136 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   }, []);
   const [deleting, setDeleting] = useState(false);
 
+  const handleAgentStatusChanged = useCallback(
+    (next: ReferralStatus, payload?: Record<string, unknown>) => {
+      const statusLastUpdated =
+        typeof payload?.statusLastUpdated === 'string' ? payload.statusLastUpdated : new Date().toISOString();
+      const daysInStatus = typeof payload?.daysInStatus === 'number' ? payload.daysInStatus : 0;
+
+      setFinancials((previous) => (previous.status === next ? previous : { ...previous, status: next }));
+      setReferral((previous) => ({ ...previous, status: next, statusLastUpdated, daysInStatus }));
+      void mutate(activityFeedKey);
+    },
+    [activityFeedKey, mutate]
+  );
+
+  /** Adding a deal is the same flow as picking Under Contract: collect the deal, then move the status. */
+  const handleAgentAddDeal = useCallback(async () => {
+    const saved = await collectUnderContractDeal({
+      defaultSide: primarySide === 'sell' ? 'sell' : 'buy',
+      isAgentOrigin,
+      onSubmit: (result) => submitUnderContractDeal(referralId, result, 'referral_detail')
+    });
+    if (!saved) {
+      return;
+    }
+    handleAgentStatusChanged('Under Contract');
+    router.refresh();
+    toast.success('Deal saved and referral moved to Under Contract');
+  }, [handleAgentStatusChanged, isAgentOrigin, primarySide, referralId, router]);
+
+  const handleAgentDealStage = useCallback(
+    async (
+      deal: ReferralPayment,
+      nextStatus: DealStatus,
+      extras: DealStageExtras = {}
+    ): Promise<boolean> => {
+      try {
+        const response = await fetch('/api/payments', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: deal._id, status: nextStatus, ...extras }),
+        });
+
+        if (!response.ok) {
+          toast.error('Unable to update deal stage');
+          return false;
+        }
+
+        const patchResult = (await response.json()) as {
+          status?: DealStatus;
+          closingDate?: string | null;
+          referralStatus?: ReferralStatus | null;
+          referralStatusLastUpdated?: string | null;
+        };
+
+        handleDealUpdated(
+          {
+            ...deal,
+            status: patchResult.status ?? nextStatus,
+            closingDate: patchResult.closingDate ?? extras.closingDate ?? deal.closingDate ?? null,
+            usedAfc: extras.usedAfc ?? deal.usedAfc,
+            terminatedReason:
+              nextStatus === 'terminated' ? extras.terminatedReason ?? null : deal.terminatedReason,
+            updatedAt: new Date().toISOString(),
+          },
+          {
+            referralStatus: patchResult.referralStatus,
+            referralStatusLastUpdated: patchResult.referralStatusLastUpdated,
+          }
+        );
+        void mutate(activityFeedKey);
+        toast.success('Deal stage updated');
+        return true;
+      } catch (error) {
+        console.error(error);
+        toast.error('Something went wrong while updating the deal');
+        return false;
+      }
+    },
+    [activityFeedKey, handleDealUpdated, mutate]
+  );
+
+  /** The toast owns the save so a failed PATCH keeps the entered values on screen. */
+  const handleAgentDealEdit = useCallback(
+    async (deal: ReferralPayment) => {
+      await editDealDetails({
+        deal,
+        isAgentOrigin,
+        onSubmit: async (payload) => {
+          const response = await fetch('/api/payments', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: deal._id, ...payload }),
+          });
+
+          if (!response.ok) {
+            throw new Error('Unable to update deal');
+          }
+
+          const patchResult = (await response.json()) as {
+            status?: DealStatus;
+            expectedAmountCents?: number;
+            netReferralFeePaidCents?: number;
+            closingDate?: string | null;
+            referralStatus?: ReferralStatus | null;
+            referralStatusLastUpdated?: string | null;
+          };
+
+          handleDealUpdated(
+            {
+              ...deal,
+              ...payload,
+              expectedAmountCents: patchResult.expectedAmountCents ?? payload.expectedAmountCents,
+              netReferralFeePaidCents:
+                patchResult.netReferralFeePaidCents ?? deal.netReferralFeePaidCents,
+              closingDate: patchResult.closingDate ?? payload.closingDate,
+              status: patchResult.status ?? deal.status,
+              updatedAt: new Date().toISOString(),
+            },
+            {
+              referralStatus: patchResult.referralStatus,
+              referralStatusLastUpdated: patchResult.referralStatusLastUpdated,
+            }
+          );
+          void mutate(activityFeedKey);
+          toast.success('Deal updated');
+        },
+      });
+    },
+    [activityFeedKey, handleDealUpdated, isAgentOrigin, mutate]
+  );
+
   const normalizedDetailDraft = useMemo(() => normalizeDetailDraft(detailsDraft), [detailsDraft]);
   const normalizedCurrentDetails = useMemo(
     () => normalizeDetailDraft(createDetailDraft(referral)),
@@ -693,11 +814,10 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     return referral.lookingInZip ?? '';
   }, [referral.lookingInZips, referral.lookingInZip]);
 
-  const canDelete =
-    (viewerRole === 'admin' && referral.origin === 'admin') ||
-    (viewerRole === 'agent' && referral.origin === 'agent');
+  const canDelete = viewerRole === 'admin' && referral.origin === 'admin';
   const canEditDetails = viewerRole !== 'viewer';
-  const canEditBorrowerContact = viewerRole === 'admin' || viewerRole === 'manager';
+  const canEditBorrowerContact =
+    viewerRole === 'admin' || viewerRole === 'manager' || (viewerRole === 'agent' && isAgentOrigin);
 
   useEffect(() => {
     setReferral(initialReferral);
@@ -883,10 +1003,9 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     }
   };
 
-  const handleDetailsSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    const normalizedDraft = normalizeDetailDraft(detailsDraft);
+  /** Shared by the inline details form and the intake toast; `true` means the caller can close its editor. */
+  const saveDetails = async (draft: DetailDraft): Promise<boolean> => {
+    const normalizedDraft = normalizeDetailDraft(draft);
     const normalizedCurrent = normalizedCurrentDetails;
     const hasExistingPreApproval = Boolean(normalizedCurrent.preApprovalAmount);
     let preApprovalAmountValue: number | undefined;
@@ -901,52 +1020,51 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
     
     if (!standardFieldsChanged && !referralDateChanged) {
       toast.info('No changes to save');
-      setIsEditingDetails(false);
-      return;
+      return true;
     }
 
     if (!normalizedDraft.loanFileNumber && !isAgentOrigin) {
       toast.error('Loan file number is required.');
-      return;
+      return false;
     }
     if (canEditSourceAndEndorser && !normalizedDraft.endorser) {
       toast.error('Endorser is required.');
-      return;
+      return false;
     }
     const parsedZips = parseZipList(normalizedDraft.lookingInZip);
     if (parsedZips.length === 0) {
       toast.error('Add at least one 5-digit ZIP code.');
-      return;
+      return false;
     }
     if (!normalizedDraft.borrowerCurrentAddress) {
       toast.error('Borrower current address is required.');
-      return;
+      return false;
     }
     if (!normalizedDraft.stageOnTransfer) {
       toast.error('Stage on transfer is required.');
-      return;
+      return false;
     }
     if (canEditBorrowerContact && borrowerFieldsChanged) {
       if (!normalizedDraft.borrowerFirstName) {
         toast.error('Borrower first name is required.');
-        return;
+        return false;
       }
       if (!normalizedDraft.borrowerLastName) {
         toast.error('Borrower last name is required.');
-        return;
+        return false;
       }
       if (!normalizedDraft.borrowerEmail) {
         toast.error('Borrower email is required.');
-        return;
+        return false;
       }
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
       if (!emailRegex.test(normalizedDraft.borrowerEmail)) {
         toast.error('Enter a valid borrower email.');
-        return;
+        return false;
       }
       if (!normalizedDraft.borrowerPhone || normalizedDraft.borrowerPhone.replace(/\D+/g, '').length < 7) {
         toast.error('Enter a valid borrower phone number.');
-        return;
+        return false;
       }
     }
 
@@ -954,7 +1072,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       preApprovalAmountValue = Number.parseFloat(normalizedDraft.preApprovalAmount);
       if (Number.isNaN(preApprovalAmountValue) || preApprovalAmountValue < 0) {
         toast.error('Enter a valid pre-approval amount.');
-        return;
+        return false;
       }
     } else if (hasExistingPreApproval) {
       preApprovalAmountValue = 0;
@@ -996,8 +1114,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
 
     if (Object.keys(payload).length === 0) {
       toast.info('No changes to save');
-      setIsEditingDetails(false);
-      return;
+      return true;
     }
 
     setSavingDetails(true);
@@ -1111,7 +1228,6 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
       
       // Update details draft with the normalized draft (which includes updated referralDate)
       setDetailsDraft(normalizedDraft);
-      setIsEditingDetails(false);
       toast.success('Referral details updated');
       
       // Mutate activity feed in background
@@ -1125,12 +1241,29 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
           router.refresh();
         });
       }, 100);
+      return true;
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : 'Unable to update referral details');
+      return false;
     } finally {
       setSavingDetails(false);
     }
+  };
+
+  const handleDetailsSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (await saveDetails(detailsDraft)) {
+      setIsEditingDetails(false);
+    }
+  };
+
+  const handleEditIntake = () => {
+    void collectIntakeDetails({
+      initialDraft: createDetailDraft(referral),
+      canEditBorrowerContact,
+      onSubmit: saveDetails
+    });
   };
 
   const handleFinancialsChange = (snapshot: {
@@ -1364,394 +1497,434 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   const showNav = (viewerRole === 'admin' || viewerRole === 'manager') && (prevReferralId || nextReferralId);
   const buildNavHref = (id: string) => listParams ? `/referrals/${id}?${listParams}` : `/referrals/${id}`;
 
+  const isAgentLayout = viewerRole === 'agent';
+  const agentTimelineLabel =
+    referral.timeline === 'not_specified'
+      ? null
+      : REFERRAL_TIMELINE_OPTIONS.find((option) => option.value === referral.timeline)?.label ?? null;
+
   return (
-    <div className="space-y-8">
-      {showNav && (
-        <nav className="flex items-center justify-end gap-3" aria-label="Referral navigation">
-          {prevReferralId ? (
-            <Link
-              href={buildNavHref(prevReferralId)}
-              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-foreground-subtle transition hover:bg-surface-subtle hover:text-foreground-muted"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-              Prev
-            </Link>
-          ) : (
-            <span className="inline-flex items-center gap-1 px-2 py-1 text-xs text-foreground-subtle">
-              <ChevronLeft className="h-3.5 w-3.5" />
-              Prev
-            </span>
-          )}
-          {nextReferralId ? (
-            <Link
-              href={buildNavHref(nextReferralId)}
-              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-foreground-subtle transition hover:bg-surface-subtle hover:text-foreground-muted"
-            >
-              Next
-              <ChevronRight className="h-3.5 w-3.5" />
-            </Link>
-          ) : (
-            <span className="inline-flex items-center gap-1 px-2 py-1 text-xs text-foreground-subtle">
-              Next
-              <ChevronRight className="h-3.5 w-3.5" />
-            </span>
-          )}
-        </nav>
-      )}
-      <ReferralHeader
-        referral={headerReferral}
-        viewerRole={viewerRole}
-        latestDealStatus={latestDealReferralStatuses.overall}
-        latestBuyDealStatus={latestDealReferralStatuses.buy}
-        latestSellDealStatus={latestDealReferralStatuses.sell}
-        onFinancialsChange={handleFinancialsChange}
-        buySideAgentContact={buySideAgentContact}
-        sellSideAgentContact={sellSideAgentContact}
-        mcContact={mcContact}
-        onBuySideAgentContactChange={handleBuySideAgentContactChange}
-        onSellSideAgentContactChange={handleSellSideAgentContactChange}
-        onMcContactChange={handleMcContactChange}
-      />
-      <section className="space-y-4 rounded-card bg-surface-raised p-6 shadow-sm ring-1 ring-border">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-muted">Referral details</h2>
-            <p className="text-xs text-foreground-subtle">Key context provided at intake.</p>
+    <div className="space-y-6">
+      {isAgentLayout ? (
+        <>
+          <AgentDetailHeader
+            borrowerName={referral.borrower.name}
+            clientType={referral.clientType ?? 'Buyer'}
+            preApprovalAmountCents={financials.preApprovalAmountCents}
+            lookingIn={lookingInZipDisplay}
+            loanType={referral.loanType}
+            referredAt={referral.referralDate ?? referral.createdAt}
+            status={effectiveHeaderStatus}
+            isAgentOrigin={isAgentOrigin}
+            daysInStatus={referral.daysInStatus}
+            propertyAddress={formatFullAddress(
+              headerReferral.propertyAddress,
+              headerReferral.propertyCity,
+              headerReferral.propertyState,
+              headerReferral.propertyPostalCode
+            )}
+            loanFileNumber={referral.loanFileNumber}
+            borrowerEmail={referral.borrower.email}
+            borrowerPhone={referral.borrower.phone}
+            backHref={listParams ? `/referrals?${listParams}` : '/referrals'}
+          />
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+            <div className="flex min-w-0 flex-col gap-4">
+              <section className="rounded-card border border-border-strong/60 bg-surface px-5 py-[18px] shadow-card">
+                <div className="flex flex-wrap items-baseline justify-between gap-3">
+                  <h2 className="text-base font-bold tracking-[-0.02em] text-foreground">Where are they now?</h2>
+                  {referral.statusLastUpdated ? (
+                    <p className="text-[13px] text-foreground-subtle">
+                      Updated <span className="text-numeric">{formatDateMST(referral.statusLastUpdated)}</span>
+                    </p>
+                  ) : null}
+                </div>
+                <div className="mt-3.5">
+                  <StatusChanger
+                    referralId={referralId}
+                    status={financials.status}
+                    statuses={REFERRAL_STATUSES}
+                    isAgentOrigin={isAgentOrigin}
+                    side={primarySide}
+                    mode="chips"
+                    promptMode="toast"
+                    borrowerName={referral.borrower.name}
+                    showPreApproval={false}
+                    onStatusChanged={handleAgentStatusChanged}
+                  />
+                </div>
+              </section>
+              <AgentActivityCard
+                key={referralId}
+                referralId={referralId}
+                notes={notes}
+                agentContact={{
+                  name: primaryAgentContact?.name ?? null,
+                  email: primaryAgentContact?.email ?? null
+                }}
+                mcContact={{ name: mcContact?.name ?? null, email: mcContact?.email ?? null }}
+                adminContacts={referral.adminContacts ?? []}
+                hasAnyPayments={noteEmailDefaultSummary.hasAnyPayments}
+                hasAnyUsedAfcTrue={noteEmailDefaultSummary.hasAnyUsedAfcTrue}
+              />
+              <AgentDealsCard
+                deals={visibleReferralDeals}
+                hiddenOutsideAgentCount={hiddenOutsideAgentCount}
+                onStageChange={handleAgentDealStage}
+                onEdit={(deal) => void handleAgentDealEdit(deal)}
+                onAddDeal={() => void handleAgentAddDeal()}
+                canAddDeal={Boolean(referral.viewerAssignedSide)}
+                borrowerName={referral.borrower.name}
+                isAgentOrigin={isAgentOrigin}
+              />
+            </div>
+            <AgentContextRail
+              mc={mcContact}
+              otherAgentLabel={otherSide === 'sell' ? 'Sell-side agent' : 'Buy-side agent'}
+              otherAgent={otherSideAgentContact}
+              clientType={referral.clientType ?? 'Buyer'}
+              loanType={referral.loanType}
+              preApprovalAmountCents={financials.preApprovalAmountCents}
+              lookingIn={lookingInZipDisplay}
+              stageOnTransfer={referral.stageOnTransfer}
+              timelineLabel={agentTimelineLabel}
+              createdAt={referral.createdAt}
+              currentAddress={referral.borrowerCurrentAddress}
+              borrowerEmail={referral.borrower.email}
+              borrowerPhone={referral.borrower.phone}
+              onEditIntake={canEditDetails ? handleEditIntake : undefined}
+            />
           </div>
-          {canEditDetails && !isEditingDetails && (
-            <button
-              type="button"
-              onClick={startEditingDetails}
-              className="rounded-md border border-border px-3 py-1.5 text-sm font-semibold text-foreground-muted transition hover:bg-surface-subtle"
+        </>
+      ) : (
+        <ReferralHeader
+          referral={headerReferral}
+          viewerRole={viewerRole}
+          latestDealStatus={latestDealReferralStatuses.overall}
+          latestBuyDealStatus={latestDealReferralStatuses.buy}
+          latestSellDealStatus={latestDealReferralStatuses.sell}
+          onFinancialsChange={handleFinancialsChange}
+          buySideAgentContact={buySideAgentContact}
+          sellSideAgentContact={sellSideAgentContact}
+          mcContact={mcContact}
+          onBuySideAgentContactChange={handleBuySideAgentContactChange}
+          onSellSideAgentContactChange={handleSellSideAgentContactChange}
+          onMcContactChange={handleMcContactChange}
+          backHref={listParams ? `/referrals?${listParams}` : '/referrals'}
+          showNav={Boolean(showNav)}
+          prevHref={prevReferralId ? buildNavHref(prevReferralId) : null}
+          nextHref={nextReferralId ? buildNavHref(nextReferralId) : null}
+          canDelete={canDelete}
+          deleting={deleting}
+          onDelete={handleDeleteReferral}
+          railSlot={
+            <RailCard
+              title="Intake details"
+              description="Key context provided at intake."
+              action={
+                canEditDetails ? (
+                  <button type="button" onClick={startEditingDetails} className={railTextButtonClasses}>
+                    Edit
+                  </button>
+                ) : null
+              }
             >
-              Edit details
-            </button>
-          )}
-        </div>
-        {isEditingDetails ? (
-          <form onSubmit={handleDetailsSubmit} className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {canEditBorrowerContact && (
-                <>
-                  <label className="space-y-1 text-sm font-medium text-foreground-muted">
-                    <span>Borrower First Name</span>
-                    <input
-                      name="borrowerFirstName"
-                      value={detailsDraft.borrowerFirstName}
-                      onChange={handleDetailInputChange('borrowerFirstName')}
-                      required
-                      disabled={savingDetails}
-                      className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-                    />
-                  </label>
-                  <label className="space-y-1 text-sm font-medium text-foreground-muted">
-                    <span>Borrower Last Name</span>
-                    <input
-                      name="borrowerLastName"
-                      value={detailsDraft.borrowerLastName}
-                      onChange={handleDetailInputChange('borrowerLastName')}
-                      required
-                      disabled={savingDetails}
-                      className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-                    />
-                  </label>
-                  <label className="space-y-1 text-sm font-medium text-foreground-muted">
-                    <span>Borrower Email</span>
-                    <input
-                      type="email"
-                      name="borrowerEmail"
-                      value={detailsDraft.borrowerEmail}
-                      onChange={handleDetailInputChange('borrowerEmail')}
-                      required
-                      disabled={savingDetails}
-                      className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-                    />
-                  </label>
-                  <label className="space-y-1 text-sm font-medium text-foreground-muted">
-                    <span>Borrower Phone</span>
-                    <input
-                      type="tel"
-                      name="borrowerPhone"
-                      value={detailsDraft.borrowerPhone}
-                      onChange={handleDetailInputChange('borrowerPhone')}
-                      required
-                      disabled={savingDetails}
-                      className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-                    />
-                  </label>
-                </>
-              )}
-              <label className="space-y-1 text-sm font-medium text-foreground-muted">
-                <span>Loan File #</span>
-                <input
-                  name="loanFileNumber"
-                  value={detailsDraft.loanFileNumber}
-                  onChange={handleDetailInputChange('loanFileNumber')}
-                  required
-                  disabled={savingDetails}
-                  className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-                />
-              </label>
-              <label className="space-y-1 text-sm font-medium text-foreground-muted">
-                <span>Loan Type</span>
-                <input
-                  name="loanType"
-                  value={detailsDraft.loanType}
-                  onChange={handleDetailInputChange('loanType')}
-                  disabled={savingDetails}
-                  className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-                />
-              </label>
-              <label className="space-y-1 text-sm font-medium text-foreground-muted">
-                <span>Pre-approval Amount</span>
-                <div className="relative">
-                  <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-foreground-subtle">
-                    $
-                  </span>
-                  <input
-                    name="preApprovalAmount"
-                    value={formatCurrencyInputDisplay(detailsDraft.preApprovalAmount)}
-                    onChange={handlePreApprovalChange}
-                    disabled={savingDetails}
-                    className="mt-1 w-full rounded border border-border-strong px-3 py-2 pl-7 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-                    inputMode="decimal"
-                    placeholder="300,000"
+              <RailFactList
+                leading={
+                  <PreApprovalField
+                    variant="fact"
+                    referralId={referralId}
+                    amountCents={financials.preApprovalAmountCents}
+                    onSaved={(details) =>
+                      handleFinancialsChange({
+                        status: financials.status,
+                        preApprovalAmountCents: details.preApprovalAmountCents,
+                        referralFeeDueCents: details.referralFeeDueCents
+                      })
+                    }
                   />
-                </div>
-              </label>
-              {canViewSourceAndEndorser && (
-                <>
-                  <label className="space-y-1 text-sm font-medium text-foreground-muted">
-                    <span>Source</span>
-                    <input
-                      name="source"
-                      value={detailsDraft.source}
-                      onChange={handleDetailInputChange('source')}
-                      disabled={savingDetails || !canEditSourceAndEndorser}
-                      className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-                    />
-                  </label>
-                  <label className="space-y-1 text-sm font-medium text-foreground-muted">
-                    <span>Endorser</span>
-                    <input
-                      name="endorser"
-                      value={detailsDraft.endorser}
-                      onChange={handleDetailInputChange('endorser')}
-                      disabled={savingDetails || !canEditSourceAndEndorser}
-                      className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-                    />
-                  </label>
-                </>
-              )}
-              <label className="space-y-1 text-sm font-medium text-foreground-muted">
-                <span>Client Type</span>
-                <select
-                  name="clientType"
-                  value={detailsDraft.clientType}
-                  onChange={handleDetailInputChange('clientType')}
-                  disabled={savingDetails}
-                  className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-                >
-                  <option value="Buyer">Buyer</option>
-                  <option value="Seller">Seller</option>
-                  <option value="Both">Both</option>
-                </select>
-              </label>
-              <label className="space-y-1 text-sm font-medium text-foreground-muted">
-                <span>Looking In (Zip)</span>
-                <input
-                  name="lookingInZip"
-                  value={detailsDraft.lookingInZip}
-                  onChange={handleDetailInputChange('lookingInZip')}
-                  required
-                  disabled={savingDetails}
-                  className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-                />
-              </label>
-              <label className="space-y-1 text-sm font-medium text-foreground-muted">
-                <span>Stage on Transfer</span>
-                <select
-                  name="stageOnTransfer"
-                  value={detailsDraft.stageOnTransfer}
-                  onChange={handleDetailInputChange('stageOnTransfer')}
-                  disabled={savingDetails}
-                  className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-                >
-                  <option value="Pre-approval TBD">Pre-approval TBD</option>
-                  <option value="Pre-approved">Pre-approved</option>
-                </select>
-              </label>
-              <label className="space-y-1 text-sm font-medium text-foreground-muted">
-                <span>Timeline</span>
-                <select
-                  name="timeline"
-                  value={detailsDraft.timeline}
-                  onChange={handleDetailInputChange('timeline')}
-                  disabled={savingDetails}
-                  className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-                >
-                  {REFERRAL_TIMELINE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {viewerRole === 'admin' && (
-                <label className="space-y-1 text-sm font-medium text-foreground-muted">
-                  <span>Referral date (historical)</span>
-                  <input
-                    type="datetime-local"
-                    name="referralDate"
-                    value={detailsDraft.referralDate}
-                    onChange={handleDetailInputChange('referralDate')}
-                    disabled={savingDetails}
-                    className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-                  />
-                </label>
-              )}
-              <label className="space-y-1 text-sm font-medium text-foreground-muted sm:col-span-2 lg:col-span-3">
-                <span>Borrower Current Address</span>
-                <input
-                  name="borrowerCurrentAddress"
-                  value={detailsDraft.borrowerCurrentAddress}
-                  onChange={handleDetailInputChange('borrowerCurrentAddress')}
-                  required
-                  disabled={savingDetails}
-                  className="mt-1 w-full rounded border border-border-strong px-3 py-2 text-sm shadow-sm focus:border-primary-500 focus:outline-none"
-                />
-              </label>
-            </div>
-            <div className="flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={cancelEditingDetails}
-                disabled={savingDetails}
-                className="rounded-md border border-border px-3 py-1.5 text-sm font-semibold text-foreground-muted transition hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={savingDetails || !detailsChanged}
-                className="rounded-md bg-primary-600 px-4 py-1.5 text-sm font-semibold text-white shadow transition hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {savingDetails ? 'Saving…' : 'Save changes'}
-              </button>
-            </div>
-          </form>
-        ) : (
-          <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="space-y-1">
-              <dt className="text-xs uppercase text-foreground-subtle">Loan File #</dt>
-              <dd className="text-sm font-semibold text-foreground">{referral.loanFileNumber || '—'}</dd>
-            </div>
-            <div className="space-y-1">
-              <dt className="text-xs uppercase text-foreground-subtle">Loan Type</dt>
-              <dd className="text-sm text-foreground-muted">{referral.loanType?.trim() ? referral.loanType : '—'}</dd>
-            </div>
-            <div className="space-y-1">
-              <dt className="text-xs uppercase text-foreground-subtle">Pre-approval Amount</dt>
-              <dd className="text-sm text-foreground-muted">
-                {referral.preApprovalAmountCents ? formatCurrency(referral.preApprovalAmountCents) : '—'}
-              </dd>
-            </div>
-            {canViewSourceAndEndorser && (
-              <>
-                <div className="space-y-1">
-                  <dt className="text-xs uppercase text-foreground-subtle">Source</dt>
-                  <dd className="text-sm text-foreground-muted">{referral.source ?? '—'}</dd>
-                </div>
-                <div className="space-y-1">
-                  <dt className="text-xs uppercase text-foreground-subtle">Endorser</dt>
-                  <dd className="text-sm text-foreground-muted">{referral.endorser?.trim() ? referral.endorser : '—'}</dd>
-                </div>
-              </>
-            )}
-            <div className="space-y-1">
-              <dt className="text-xs uppercase text-foreground-subtle">Client Type</dt>
-              <dd className="text-sm text-foreground-muted">{referral.clientType ?? '—'}</dd>
-            </div>
-            <div className="space-y-1">
-              <dt className="text-xs uppercase text-foreground-subtle">Looking In (Zip)</dt>
-              <dd className="text-sm text-foreground-muted">{lookingInZipDisplay ? lookingInZipDisplay : '—'}</dd>
-            </div>
-            <div className="space-y-1">
-              <dt className="text-xs uppercase text-foreground-subtle">Stage on Transfer</dt>
-              <dd className="text-sm text-foreground-muted">{referral.stageOnTransfer?.trim() ? referral.stageOnTransfer : '—'}</dd>
-            </div>
-            <div className="space-y-1">
-              <dt className="text-xs uppercase text-foreground-subtle">Timeline</dt>
-              <dd className="text-sm text-foreground-muted">
-                {referral.timeline && REFERRAL_TIMELINE_OPTIONS.find((opt) => opt.value === referral.timeline)
-                  ? REFERRAL_TIMELINE_OPTIONS.find((opt) => opt.value === referral.timeline)?.label
-                  : '—'}
-              </dd>
-            </div>
-            <div className="space-y-1">
-              <dt className="text-xs uppercase text-foreground-subtle">Entered into CRM</dt>
-              <dd className="text-sm text-foreground-muted">{formatDateMST(referral.createdAt)}</dd>
-            </div>
-            {viewerRole === 'admin' && (
-              <div className="space-y-1">
-                <dt className="text-xs uppercase text-foreground-subtle">Referral date (historical)</dt>
-                <dd className="text-sm text-foreground-muted">
-                  {referral.referralDate ? formatDateMST(referral.referralDate) : '—'}
-                </dd>
-              </div>
-            )}
-            <div className="space-y-1 sm:col-span-2 lg:col-span-3">
-              <dt className="text-xs uppercase text-foreground-subtle">Borrower Current Address</dt>
-              <dd className="text-sm text-foreground-muted">
-                {referral.borrowerCurrentAddress?.trim() ? referral.borrowerCurrentAddress : '—'}
-              </dd>
-            </div>
-          </dl>
-        )}
-      </section>
-      <ReferralNotes
-        referralId={referralId}
-        initialNotes={notes}
-        viewerRole={viewerRole}
-        agentContact={{
-          name: primaryAgentContact?.name ?? null,
-          email: primaryAgentContact?.email ?? null
-        }}
-        mcContact={{
-          name: mcContact?.name ?? null,
-          email: mcContact?.email ?? null
-        }}
-        adminContacts={referral.adminContacts ?? []}
-        hasAnyPayments={noteEmailDefaultSummary.hasAnyPayments}
-        hasAnyUsedAfcTrue={noteEmailDefaultSummary.hasAnyUsedAfcTrue}
-      />
-      <ReferralDeals
-        referralId={referralId}
-        deals={visibleReferralDeals}
-        onDealCreated={handleDealCreated}
-        onDealUpdated={handleDealUpdated}
-        onDealDeleted={handleDealDeleted}
-        viewerRole={viewerRole}
-        viewerAssignedSide={referral.viewerAssignedSide ?? null}
-        referralOrigin={referral.origin}
-        feeBreakdownAutoSendEnabled={referral.feeBreakdownAutoSendEnabled as boolean | undefined}
-        hiddenOutsideAgentCount={hiddenOutsideAgentCount}
-        assignedAgentDesignation={referral.assignedAgent?.ahaDesignation}
-        defaultSide={referral.viewerAssignedSide === 'sell' ? 'sell' : 'buy'}
-      />
-      {viewerRole === 'admin' ? <ReferralTimeline referralId={referralId} /> : null}
-      {canDelete && (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={handleDeleteReferral}
-            disabled={deleting}
-            className="rounded-lg border border-rose-200 bg-rose-500/10 px-3 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {deleting ? 'Deleting…' : 'Delete referral'}
-          </button>
-        </div>
+                }
+                facts={[
+                  { label: 'Loan type', value: referral.loanType?.trim() || null },
+                  { label: 'Client type', value: referral.clientType ?? null },
+                  ...(canViewSourceAndEndorser
+                    ? [
+                        { label: 'Source', value: referral.source ?? null },
+                        { label: 'Endorser', value: referral.endorser?.trim() || null }
+                      ]
+                    : []),
+                  { label: 'Looking in', value: lookingInZipDisplay || null, numeric: true },
+                  { label: 'Stage on transfer', value: referral.stageOnTransfer?.trim() || null },
+                  { label: 'Timeline', value: agentTimelineLabel },
+                  { label: 'Entered CRM', value: formatDateMST(referral.createdAt), numeric: true },
+                  ...(viewerRole === 'admin'
+                    ? [
+                        {
+                          label: 'Referral date (historical)',
+                          value: referral.referralDate ? formatDateMST(referral.referralDate) : null,
+                          numeric: true
+                        }
+                      ]
+                    : []),
+                  {
+                    label: 'Current address',
+                    value: referral.borrowerCurrentAddress?.trim() || null,
+                    className: 'col-span-2'
+                  }
+                ]}
+              />
+            </RailCard>
+          }
+        >
+          <ReferralNotes
+            key={referralId}
+            referralId={referralId}
+            initialNotes={notes}
+            viewerRole={viewerRole}
+            agentContact={{
+              name: primaryAgentContact?.name ?? null,
+              email: primaryAgentContact?.email ?? null
+            }}
+            mcContact={{
+              name: mcContact?.name ?? null,
+              email: mcContact?.email ?? null
+            }}
+            adminContacts={referral.adminContacts ?? []}
+            hasAnyPayments={noteEmailDefaultSummary.hasAnyPayments}
+            hasAnyUsedAfcTrue={noteEmailDefaultSummary.hasAnyUsedAfcTrue}
+          />
+          <ReferralDeals
+            referralId={referralId}
+            deals={visibleReferralDeals}
+            onDealCreated={handleDealCreated}
+            onDealUpdated={handleDealUpdated}
+            onDealDeleted={handleDealDeleted}
+            viewerRole={viewerRole}
+            viewerAssignedSide={referral.viewerAssignedSide ?? null}
+            referralOrigin={referral.origin}
+            feeBreakdownAutoSendEnabled={referral.feeBreakdownAutoSendEnabled as boolean | undefined}
+            hiddenOutsideAgentCount={hiddenOutsideAgentCount}
+            assignedAgentDesignation={referral.assignedAgent?.ahaDesignation}
+            defaultSide={referral.viewerAssignedSide === 'sell' ? 'sell' : 'buy'}
+            borrowerName={referral.borrower.name}
+          />
+          {viewerRole === 'admin' ? <ReferralTimeline referralId={referralId} /> : null}
+        </ReferralHeader>
       )}
+      {!isAgentLayout ? (
+        <Modal
+          isOpen={isEditingDetails}
+          onClose={cancelEditingDetails}
+          title="Edit intake details"
+          description="Update the context captured when this referral came in."
+          size="md"
+          footer={
+            <>
+              <Button type="button" variant="secondary" onClick={cancelEditingDetails} disabled={savingDetails}>
+                Cancel
+              </Button>
+              <Button type="submit" form="referral-details-form" disabled={!detailsChanged} loading={savingDetails}>
+                {savingDetails ? 'Saving…' : 'Save changes'}
+              </Button>
+            </>
+          }
+        >
+          <form id="referral-details-form" onSubmit={handleDetailsSubmit} className="space-y-4 px-5 py-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          {canEditBorrowerContact && (
+            <>
+              <label className="space-y-1 text-xs font-medium text-foreground-muted">
+                <span>Borrower First Name</span>
+                <input
+                  name="borrowerFirstName"
+                  value={detailsDraft.borrowerFirstName}
+                  onChange={handleDetailInputChange('borrowerFirstName')}
+                  required
+                  disabled={savingDetails}
+                  className={cn(inputFieldClasses, 'mt-1')}
+                />
+              </label>
+              <label className="space-y-1 text-xs font-medium text-foreground-muted">
+                <span>Borrower Last Name</span>
+                <input
+                  name="borrowerLastName"
+                  value={detailsDraft.borrowerLastName}
+                  onChange={handleDetailInputChange('borrowerLastName')}
+                  required
+                  disabled={savingDetails}
+                  className={cn(inputFieldClasses, 'mt-1')}
+                />
+              </label>
+              <label className="space-y-1 text-xs font-medium text-foreground-muted">
+                <span>Borrower Email</span>
+                <input
+                  type="email"
+                  name="borrowerEmail"
+                  value={detailsDraft.borrowerEmail}
+                  onChange={handleDetailInputChange('borrowerEmail')}
+                  required
+                  disabled={savingDetails}
+                  className={cn(inputFieldClasses, 'mt-1')}
+                />
+              </label>
+              <label className="space-y-1 text-xs font-medium text-foreground-muted">
+                <span>Borrower Phone</span>
+                <input
+                  type="tel"
+                  name="borrowerPhone"
+                  value={detailsDraft.borrowerPhone}
+                  onChange={handleDetailInputChange('borrowerPhone')}
+                  required
+                  disabled={savingDetails}
+                  className={cn(inputFieldClasses, 'mt-1')}
+                />
+              </label>
+            </>
+          )}
+          <label className="space-y-1 text-xs font-medium text-foreground-muted">
+            <span>Loan File #</span>
+            <input
+              name="loanFileNumber"
+              value={detailsDraft.loanFileNumber}
+              onChange={handleDetailInputChange('loanFileNumber')}
+              required
+              disabled={savingDetails}
+              className={cn(inputFieldClasses, 'mt-1')}
+            />
+          </label>
+          <label className="space-y-1 text-xs font-medium text-foreground-muted">
+            <span>Loan Type</span>
+            <input
+              name="loanType"
+              value={detailsDraft.loanType}
+              onChange={handleDetailInputChange('loanType')}
+              disabled={savingDetails}
+              className={cn(inputFieldClasses, 'mt-1')}
+            />
+          </label>
+          <label className="space-y-1 text-xs font-medium text-foreground-muted">
+            <span>Pre-approval Amount</span>
+            <div className="relative">
+              <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-foreground-subtle">
+                $
+              </span>
+              <input
+                name="preApprovalAmount"
+                value={formatCurrencyInputDisplay(detailsDraft.preApprovalAmount)}
+                onChange={handlePreApprovalChange}
+                disabled={savingDetails}
+                className={cn(inputFieldClasses, 'mt-1 pl-7 tabular-nums')}
+                inputMode="decimal"
+                placeholder="300,000"
+              />
+            </div>
+          </label>
+          {canViewSourceAndEndorser && (
+            <>
+              <label className="space-y-1 text-xs font-medium text-foreground-muted">
+                <span>Source</span>
+                <input
+                  name="source"
+                  value={detailsDraft.source}
+                  onChange={handleDetailInputChange('source')}
+                  disabled={savingDetails || !canEditSourceAndEndorser}
+                  className={cn(inputFieldClasses, 'mt-1')}
+                />
+              </label>
+              <label className="space-y-1 text-xs font-medium text-foreground-muted">
+                <span>Endorser</span>
+                <input
+                  name="endorser"
+                  value={detailsDraft.endorser}
+                  onChange={handleDetailInputChange('endorser')}
+                  disabled={savingDetails || !canEditSourceAndEndorser}
+                  className={cn(inputFieldClasses, 'mt-1')}
+                />
+              </label>
+            </>
+          )}
+          <label className="space-y-1 text-xs font-medium text-foreground-muted">
+            <span>Client Type</span>
+            <select
+              name="clientType"
+              value={detailsDraft.clientType}
+              onChange={handleDetailInputChange('clientType')}
+              disabled={savingDetails}
+              className={cn(inputFieldClasses, 'mt-1')}
+            >
+              <option value="Buyer">Buyer</option>
+              <option value="Seller">Seller</option>
+              <option value="Both">Both</option>
+            </select>
+          </label>
+          <label className="space-y-1 text-xs font-medium text-foreground-muted">
+            <span>Looking In (Zip)</span>
+            <input
+              name="lookingInZip"
+              value={detailsDraft.lookingInZip}
+              onChange={handleDetailInputChange('lookingInZip')}
+              required
+              disabled={savingDetails}
+              className={cn(inputFieldClasses, 'mt-1')}
+            />
+          </label>
+          <label className="space-y-1 text-xs font-medium text-foreground-muted">
+            <span>Stage on Transfer</span>
+            <select
+              name="stageOnTransfer"
+              value={detailsDraft.stageOnTransfer}
+              onChange={handleDetailInputChange('stageOnTransfer')}
+              disabled={savingDetails}
+              className={cn(inputFieldClasses, 'mt-1')}
+            >
+              <option value="Pre-approval TBD">Pre-approval TBD</option>
+              <option value="Pre-approved">Pre-approved</option>
+            </select>
+          </label>
+          <label className="space-y-1 text-xs font-medium text-foreground-muted">
+            <span>Timeline</span>
+            <select
+              name="timeline"
+              value={detailsDraft.timeline}
+              onChange={handleDetailInputChange('timeline')}
+              disabled={savingDetails}
+              className={cn(inputFieldClasses, 'mt-1')}
+            >
+              {REFERRAL_TIMELINE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {viewerRole === 'admin' && (
+            <label className="space-y-1 text-xs font-medium text-foreground-muted">
+              <span>Referral date (historical)</span>
+              <input
+                type="datetime-local"
+                name="referralDate"
+                value={detailsDraft.referralDate}
+                onChange={handleDetailInputChange('referralDate')}
+                disabled={savingDetails}
+                className={cn(inputFieldClasses, 'mt-1')}
+              />
+            </label>
+          )}
+          <label className="space-y-1 text-xs font-medium text-foreground-muted sm:col-span-2">
+            <span>Borrower Current Address</span>
+            <input
+              name="borrowerCurrentAddress"
+              value={detailsDraft.borrowerCurrentAddress}
+              onChange={handleDetailInputChange('borrowerCurrentAddress')}
+              required
+              disabled={savingDetails}
+              className={cn(inputFieldClasses, 'mt-1')}
+            />
+          </label>
+        </div>
+      </form>
+        </Modal>
+      ) : null}
     </div>
   );
 }

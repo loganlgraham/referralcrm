@@ -82,7 +82,7 @@ export function Modal({
         {(title || eyebrow || description) && (
           <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
             <div className="min-w-0 space-y-1">
-              {eyebrow && <p className="text-eyebrow text-primary-700">{eyebrow}</p>}
+              {eyebrow && <p className="text-eyebrow text-primary">{eyebrow}</p>}
               {title && (
                 <h2 id="modal-title" className="text-base font-semibold tracking-tight text-foreground">
                   {title}
@@ -95,7 +95,7 @@ export function Modal({
             <button
               type="button"
               onClick={onClose}
-              className="ml-auto rounded-md p-1.5 text-foreground-subtle transition hover:bg-surface-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              className="ml-auto rounded-md p-1.5 text-foreground-subtle transition hover:bg-surface-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-label="Close"
             >
               <X className="h-5 w-5" />

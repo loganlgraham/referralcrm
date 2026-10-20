@@ -1,6 +1,7 @@
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
+import { AfcFollowUpCta } from '@/components/mortgage/afc-follow-up-cta';
 import { MortgageCalculator } from '@/components/mortgage/mortgage-calculator';
 import { getCurrentSession } from '@/lib/auth';
 
@@ -17,8 +18,9 @@ export default async function MortgageCalculatorPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <MortgageCalculator />
+      <AfcFollowUpCta notesHint="Introduced after reviewing payment scenarios in the mortgage calculator." />
     </div>
   );
 }

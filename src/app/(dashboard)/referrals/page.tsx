@@ -2,12 +2,17 @@ export const dynamic = 'force-dynamic';
 
 import { Metadata } from 'next';
 import Link from 'next/link';
-import { PlusIcon } from 'lucide-react';
+import { PlusIcon, Send } from 'lucide-react';
 import { ReferralTable, ReferralRow, ReferralSummary } from '@/components/tables/referral-table';
 import { Pagination } from '@/components/tables/pagination';
 import { getCurrentSession } from '@/lib/auth';
 import { getReferrals } from '@/lib/server/referrals';
 import { Filters } from '@/components/forms/referral-filters';
+import { PageHeader } from '@/components/ui/page-header';
+import { EmptyState } from '@/components/ui/empty-state';
+import { buttonClasses } from '@/components/ui/button';
+import { AgentReferralList } from '@/components/referrals/agent-referral-list';
+import { parseNetworkList } from '@/utils/network-filter';
 
 export const metadata: Metadata = {
   title: 'Referrals | Referral CRM'
@@ -43,7 +48,7 @@ export default async function ReferralsPage({
     agent: searchParams.agent?.toString(),
     zip: searchParams.zip?.toString(),
     search: searchParams.search?.toString() ?? null,
-    ahaBucket: ahaBucketParam === 'AHA' || ahaBucketParam === 'AHA_OOS' || ahaBucketParam === 'AGIT' ? ahaBucketParam : null,
+    ahaBucket: parseNetworkList(ahaBucketParam).join(',') || null,
     agentReferrals: role === 'admin' && agentReferrals !== 'all' ? agentReferrals : null,
     timeline: searchParams.timeline?.toString() ?? null,
     sortBy,
@@ -62,37 +67,51 @@ export default async function ReferralsPage({
   const showAgentOriginIndicator = tableMode === 'admin' && agentReferrals === 'all';
   const showAddReferralButton = role !== 'mc';
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground">
-            {tableMode === 'agent' ? 'My referrals' : 'Referrals'}
-          </h1>
-          <p className="text-sm text-foreground-subtle">
-            {tableMode === 'agent'
-              ? 'Review your leads, update their status, and capture quick notes as you work each opportunity.'
-              : tableMode === 'mc'
-              ? 'Keep tabs on the borrowers you have handed off and collaborate with partnered agents.'
-              : 'Track every lead from intake through close.'}
-          </p>
-        </div>
-        {showAddReferralButton && (
-          <Link
-            href="/referrals/new"
-            className="inline-flex items-center justify-center gap-2 rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-primary-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-          >
-            <PlusIcon className="h-4 w-4" />
-            {role === 'admin' ? 'Add Referral' : 'Add Referral for AFC'}
+  if (tableMode === 'agent') {
+    return hasReferrals ? (
+      <AgentReferralList
+        rows={items}
+        page={data?.page ?? 1}
+        pageSize={data?.pageSize ?? pageSize}
+        total={data?.total ?? items.length}
+      />
+    ) : (
+      <EmptyState
+        icon={<Send className="h-4 w-4" aria-hidden />}
+        title="No referrals yet"
+        description="When you have a buyer ready for financing, introduce them to AFC and we will pair them with a mortgage consultant."
+        action={
+          <Link href="/referrals/new" className={buttonClasses({ size: 'sm' })}>
+            Introduce a client to AFC
           </Link>
-        )}
-      </div>
+        }
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Pipeline"
+        title="Referrals"
+        description={
+          tableMode === 'mc'
+            ? 'Keep tabs on the borrowers you have handed off and collaborate with partnered agents.'
+            : 'Track every lead from intake through close.'
+        }
+        actions={
+          role === 'admin' ? (
+            <Link href="/referrals/new" className={buttonClasses()}>
+              <PlusIcon className="h-4 w-4" aria-hidden />
+              Add referral
+            </Link>
+          ) : null
+        }
+      />
       <Filters mode={tableMode} />
       {hasReferrals ? (
         <div className="space-y-4">
-          {tableMode !== 'admin' && (
-            <ReferralSummary summary={summary} mode={tableMode === 'agent' ? 'agent' : 'mc'} />
-          )}
+          {tableMode === 'mc' && <ReferralSummary summary={summary} mode="mc" />}
           <ReferralTable
             data={items}
             mode={tableMode}
@@ -108,9 +127,18 @@ export default async function ReferralsPage({
           />
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-border-strong bg-surface-raised p-10 text-center text-sm text-foreground-subtle">
-          No referrals yet. Add your first referral to get started.
-        </div>
+        <EmptyState
+          icon={<Send className="h-4 w-4" aria-hidden />}
+          title="No referrals yet"
+          description="Add your first referral to get started."
+          action={
+            showAddReferralButton ? (
+              <Link href="/referrals/new" className={buttonClasses({ size: 'sm' })}>
+                {role === 'admin' ? 'Add referral' : 'Introduce a client to AFC'}
+              </Link>
+            ) : null
+          }
+        />
       )}
     </div>
   );

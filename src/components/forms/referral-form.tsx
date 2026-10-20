@@ -1,12 +1,15 @@
 'use client';
 
 import { ChangeEvent, FocusEvent, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { useSession } from 'next-auth/react';
 import { REFERRAL_TIMELINE_VALUES, REFERRAL_TIMELINE_OPTIONS } from '@/constants/referrals';
 import { formatPhoneInput } from '@/utils/formatters';
+import { Button } from '@/components/ui/button';
+import { Input, Textarea } from '@/components/ui/input';
+import { FieldGrid, FieldGroup, FieldLabel, selectFieldClasses } from '@/components/ui/field-group';
 
 const STAGE_OPTIONS = ['Pre-approval TBD', 'Pre-approved'] as const;
 const CLIENT_TYPE_OPTIONS = [
@@ -33,7 +36,7 @@ const referralSchema = z.object({
   lookingInZip: z
     .string()
     .regex(zipListPattern, 'Enter one or more 5-digit ZIP codes separated by commas'),
-  borrowerCurrentAddress: z.string().min(1, 'Add the borrower\'s current address'),
+  borrowerCurrentAddress: z.string().optional(),
   stageOnTransfer: z.enum(STAGE_OPTIONS),
   loanFileNumber: z.string().optional(),
   initialNotes: z.string().optional(),
@@ -44,11 +47,6 @@ const referralSchema = z.object({
     .optional(),
   timeline: z.enum(REFERRAL_TIMELINE_VALUES).optional(),
 });
-
-const inputClasses =
-  'mt-2 w-full rounded-lg border border-border-strong/80 bg-surface-raised px-3 py-2 text-sm text-foreground shadow-sm transition focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1 focus:ring-offset-white';
-
-const labelClasses = 'flex flex-col text-sm font-medium text-foreground-muted';
 
 // Use the robust formatPhoneInput utility which handles various formats including paste events
 
@@ -90,6 +88,7 @@ const handleCurrencyBlur = (event: FocusEvent<HTMLInputElement>) => {
 
 export function ReferralForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { data: session } = useSession();
   const [loading, setLoading] = useState(false);
   const [borrowerPhone, setBorrowerPhone] = useState('');
@@ -102,6 +101,11 @@ export function ReferralForm() {
   const userRole = session?.user?.role ?? null;
   const isAgent = userRole === 'agent';
   const isAdmin = userRole === 'admin';
+  const prefillZip = (() => {
+    const zip = searchParams.get('zip')?.trim() ?? '';
+    return /^\d{5}$/u.test(zip) ? zip : '';
+  })();
+  const prefillNotes = searchParams.get('notes')?.trim() ?? '';
 
   const parseZipList = (value: string): string[] =>
     Array.from(
@@ -157,9 +161,13 @@ export function ReferralForm() {
       borrowerPhone: (formData.get('borrowerPhone')?.toString() ?? '').trim(),
       source: (formData.get('source')?.toString() ?? '').trim(),
       endorser: (formData.get('endorser')?.toString() ?? '').trim(),
-      clientType: (formData.get('clientType')?.toString() as ClientTypeOption) || 'Buyer',
+      clientType: isAgent
+        ? ('Buyer' as ClientTypeOption)
+        : ((formData.get('clientType')?.toString() as ClientTypeOption) || 'Buyer'),
       lookingInZip: (formData.get('lookingInZip')?.toString() ?? '').trim(),
-      borrowerCurrentAddress: (formData.get('borrowerCurrentAddress')?.toString() ?? '').trim(),
+      borrowerCurrentAddress: isAgent
+        ? ''
+        : (formData.get('borrowerCurrentAddress')?.toString() ?? '').trim(),
       stageOnTransfer,
       loanFileNumber: (formData.get('loanFileNumber')?.toString() ?? '').trim(),
       initialNotes: formData.get('initialNotes')?.toString(),
@@ -199,6 +207,10 @@ export function ReferralForm() {
         toast.error('Add a loan file number');
         return;
       }
+      if (!result.data.borrowerCurrentAddress?.trim()) {
+        toast.error("Add the borrower's current address");
+        return;
+      }
     }
 
     const body: Record<string, unknown> = {
@@ -206,10 +218,10 @@ export function ReferralForm() {
       borrowerLastName: result.data.borrowerLastName,
       borrowerEmail: result.data.borrowerEmail,
       borrowerPhone: result.data.borrowerPhone,
-      clientType: result.data.clientType,
+      clientType: isAgent ? 'Buyer' : result.data.clientType,
       lookingInZip: zipList[0],
       lookingInZips: zipList,
-      borrowerCurrentAddress: result.data.borrowerCurrentAddress,
+      borrowerCurrentAddress: isAgent ? '' : (result.data.borrowerCurrentAddress?.trim() ?? ''),
       stageOnTransfer: result.data.stageOnTransfer,
     };
 
@@ -265,7 +277,11 @@ export function ReferralForm() {
       }
 
       const { id } = (await response.json()) as { id: string };
-      toast.success('Referral created');
+      toast.success(
+        isAgent
+          ? 'Thanks — we got your intro. Check your email for confirmation, and we’ll email again when an MC is paired.'
+          : 'Referral created'
+      );
       router.push(`/referrals/${id}`);
     } catch (error) {
       console.error(error);
@@ -295,235 +311,198 @@ export function ReferralForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8">
-      <div className="overflow-hidden rounded-3xl border border-border/80 bg-surface-raised/95 shadow-xl shadow-slate-200/70 ring-1 ring-border">
-        <div className="border-b border-border/80 bg-gradient-to-r from-slate-50 to-slate-100 px-6 py-6 sm:px-8">
-          <h1 className="text-2xl font-semibold text-foreground">Start a new referral</h1>
-          <p className="mt-2 max-w-2xl text-sm text-foreground-muted">
-            {isAgent
-              ? 'Share your client’s details so our mortgage consultants can connect quickly and keep you in the loop.'
-              : "Capture the borrower's details, context, and pre-approval information so teammates can jump in without missing a beat."}
-          </p>
-        </div>
-
-        <div className="space-y-8 px-6 py-6 sm:px-8 sm:py-8">
-          <fieldset className="space-y-4">
-            <legend className="text-sm font-semibold uppercase tracking-wide text-foreground-subtle">
-              Borrower information
-            </legend>
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className={labelClasses}>
-                First name
-                <input
-                  name="borrowerFirstName"
-                  required
-                  autoComplete="given-name"
-                  className={inputClasses}
-                />
-              </label>
-              <label className={labelClasses}>
-                Last name
-                <input
-                  name="borrowerLastName"
-                  required
-                  autoComplete="family-name"
-                  className={inputClasses}
-                />
-              </label>
-              <label className={labelClasses}>
-                Email
-                <input
-                  name="borrowerEmail"
-                  type="email"
-                  required
-                  autoComplete="email"
-                  className={inputClasses}
-                />
-              </label>
-              <label className={labelClasses}>
-                Phone
-                <input
-                  name="borrowerPhone"
-                  required
-                  inputMode="tel"
-                  maxLength={14}
-                  pattern="\d{3}-\d{3}-\d{4}"
-                  value={borrowerPhone}
-                  onChange={handlePhoneChange}
-                  onPaste={handlePhonePaste}
-                  className={inputClasses}
-                  placeholder="555-123-4567"
-                />
-              </label>
-            </div>
-          </fieldset>
-
-          <fieldset className="space-y-4">
-            <legend className="text-sm font-semibold uppercase tracking-wide text-foreground-subtle">
-              Referral details
-            </legend>
-            <div className="grid gap-4 md:grid-cols-2">
-              {isAdmin && (
-                <>
-                  <label className={labelClasses}>
-                    Source
-                    <input
-                      name="source"
-                      placeholder="e.g. Past client, Open house"
-                      className={inputClasses}
-                      value={isAdmin ? sourceValue : undefined}
-                      onChange={isAdmin ? handleSourceChange : undefined}
-                      list={isAdmin && sourceHistory.length > 0 ? 'source-history' : undefined}
-                    />
-                    {isAdmin && sourceHistory.length > 0 ? (
-                      <datalist id="source-history">
-                        {sourceHistory.map((entry) => (
-                          <option key={entry} value={entry} />
-                        ))}
-                      </datalist>
-                    ) : null}
-                  </label>
-                  <label className={labelClasses}>
-                    Endorser
-                    <input
-                      name="endorser"
-                      placeholder="Who sent this referral?"
-                      className={inputClasses}
-                      value={isAdmin ? endorserValue : undefined}
-                      onChange={isAdmin ? handleEndorserChange : undefined}
-                      list={isAdmin && endorserHistory.length > 0 ? 'endorser-history' : undefined}
-                    />
-                    {isAdmin && endorserHistory.length > 0 ? (
-                      <datalist id="endorser-history">
-                        {endorserHistory.map((entry) => (
-                          <option key={entry} value={entry} />
-                        ))}
-                      </datalist>
-                    ) : null}
-                  </label>
-                </>
-              )}
-              <label className={labelClasses}>
-                Client type
-                <select
-                  name="clientType"
-                  defaultValue="Buyer"
-                  className={inputClasses}
-                >
-                  {CLIENT_TYPE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {!isAgent && (
-                <>
-                  <label className={labelClasses}>
-                    Stage on transfer
-                    <select
-                      name="stageOnTransfer"
-                      value={selectedStage}
-                      onChange={handleStageChange}
-                      className={inputClasses}
-                    >
-                      {stageOptions.map((stage) => (
-                        <option key={stage} value={stage}>
-                          {stage}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className={labelClasses}>
-                    Loan file number
-                    <input name="loanFileNumber" required className={inputClasses} />
-                  </label>
-                  <label className={labelClasses}>
-                    Loan type
-                    <input name="loanType" placeholder="Conventional, FHA, VA…" className={inputClasses} />
-                  </label>
-                  <label className={labelClasses}>
-                    Pre-approval amount
-                    <div className="relative mt-2">
-                      <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-sm text-foreground-subtle">
-                        $
-                      </span>
-                      <input
-                        name="preApprovalAmount"
-                        type="text"
-                        inputMode="numeric"
-                        pattern="[0-9,]*"
-                        className={`${inputClasses} pl-7`}
-                        placeholder="300,000"
-                        onFocus={handleCurrencyFocus}
-                        onBlur={handleCurrencyBlur}
-                      />
-                    </div>
-                  </label>
-                </>
-              )}
-              <label className={labelClasses}>
-                Looking in (ZIP)
-                <input
-                  name="lookingInZip"
-                  required
-                  autoComplete="postal-code"
-                  placeholder="e.g. 80202, 80216, 80021"
-                  className={inputClasses}
-                />
-              </label>
-              <label className={labelClasses}>
-                Timeline
-                <select name="timeline" className={inputClasses} defaultValue="not_specified">
-                  {REFERRAL_TIMELINE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className={`${labelClasses} md:col-span-2`}>
-                Borrower current address
-                <input
-                  name="borrowerCurrentAddress"
-                  required
-                  autoComplete="street-address"
-                  className={inputClasses}
-                />
-              </label>
-            </div>
-          </fieldset>
-
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-semibold uppercase tracking-wide text-foreground-subtle">
-              Notes for the team
-            </legend>
-            <p className="text-xs text-foreground-subtle">
-              These notes will land in the referral's conversation thread so everyone has the same
-              context from the start.
-            </p>
-            <textarea
-              name="initialNotes"
-              rows={4}
-              className={`${inputClasses} min-h-[120px] resize-y`}
-              placeholder="Share helpful context, deadlines, or next steps"
+    <form onSubmit={handleSubmit} className="space-y-5">
+      <FieldGroup title="Borrower information">
+        <FieldGrid>
+          <label className="block space-y-1.5">
+            <FieldLabel label="First name" />
+            <Input name="borrowerFirstName" required autoComplete="given-name" />
+          </label>
+          <label className="block space-y-1.5">
+            <FieldLabel label="Last name" />
+            <Input name="borrowerLastName" required autoComplete="family-name" />
+          </label>
+          <label className="block space-y-1.5">
+            <FieldLabel label="Email" />
+            <Input name="borrowerEmail" type="email" required autoComplete="email" />
+          </label>
+          <label className="block space-y-1.5">
+            <FieldLabel label="Phone" />
+            <Input
+              name="borrowerPhone"
+              required
+              inputMode="tel"
+              maxLength={14}
+              pattern="\d{3}-\d{3}-\d{4}"
+              value={borrowerPhone}
+              onChange={handlePhoneChange}
+              onPaste={handlePhonePaste}
+              className="text-numeric"
+              placeholder="555-123-4567"
             />
-          </fieldset>
-        </div>
+          </label>
+        </FieldGrid>
+      </FieldGroup>
 
-        <div className="flex flex-col gap-4 border-t border-border/80 bg-surface-muted/80 px-6 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8">
-          <p className="text-sm text-foreground-muted">
-            Double-check the details before saving. You can always fine-tune anything after the
-            referral is created.
-          </p>
-          <button
-            type="submit"
-            disabled={loading}
-            className="inline-flex items-center justify-center rounded-full bg-primary-600 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-brand/20 transition hover:bg-primary-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {loading ? 'Creating…' : 'Create referral'}
-          </button>
-        </div>
+      <FieldGroup title="Referral details">
+        <FieldGrid>
+          {isAdmin && (
+            <>
+              <label className="block space-y-1.5">
+                <FieldLabel label="Source" />
+                <Input
+                  name="source"
+                  placeholder="e.g. Past client, Open house"
+                  value={sourceValue}
+                  onChange={handleSourceChange}
+                  list={sourceHistory.length > 0 ? 'source-history' : undefined}
+                />
+                {sourceHistory.length > 0 ? (
+                  <datalist id="source-history">
+                    {sourceHistory.map((entry) => (
+                      <option key={entry} value={entry} />
+                    ))}
+                  </datalist>
+                ) : null}
+              </label>
+              <label className="block space-y-1.5">
+                <FieldLabel label="Endorser" />
+                <Input
+                  name="endorser"
+                  placeholder="Who sent this referral?"
+                  value={endorserValue}
+                  onChange={handleEndorserChange}
+                  list={endorserHistory.length > 0 ? 'endorser-history' : undefined}
+                />
+                {endorserHistory.length > 0 ? (
+                  <datalist id="endorser-history">
+                    {endorserHistory.map((entry) => (
+                      <option key={entry} value={entry} />
+                    ))}
+                  </datalist>
+                ) : null}
+              </label>
+            </>
+          )}
+          {!isAgent && (
+            <label className="block space-y-1.5">
+              <FieldLabel label="Client type" />
+              <select name="clientType" defaultValue="Buyer" className={selectFieldClasses}>
+                {CLIENT_TYPE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {!isAgent && (
+            <>
+              <label className="block space-y-1.5">
+                <FieldLabel label="Stage on transfer" />
+                <select
+                  name="stageOnTransfer"
+                  value={selectedStage}
+                  onChange={handleStageChange}
+                  className={selectFieldClasses}
+                >
+                  {stageOptions.map((stage) => (
+                    <option key={stage} value={stage}>
+                      {stage}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block space-y-1.5">
+                <FieldLabel label="Loan file number" />
+                <Input name="loanFileNumber" required className="text-numeric" />
+              </label>
+              <label className="block space-y-1.5">
+                <FieldLabel label="Loan type" />
+                <Input name="loanType" placeholder="Conventional, FHA, VA…" />
+              </label>
+              <label className="block space-y-1.5">
+                <FieldLabel label="Pre-approval amount" />
+                <div className="relative">
+                  <span
+                    aria-hidden
+                    className="text-numeric pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-foreground-subtle"
+                  >
+                    $
+                  </span>
+                  <Input
+                    name="preApprovalAmount"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9,]*"
+                    className="text-numeric pl-7 font-medium"
+                    placeholder="300,000"
+                    onFocus={handleCurrencyFocus}
+                    onBlur={handleCurrencyBlur}
+                  />
+                </div>
+              </label>
+            </>
+          )}
+          <label className="block space-y-1.5">
+            <FieldLabel label="Looking in (ZIP)" />
+            <Input
+              name="lookingInZip"
+              required
+              autoComplete="postal-code"
+              placeholder="e.g. 80202, 80216, 80021"
+              className="text-numeric"
+              defaultValue={prefillZip}
+            />
+          </label>
+          <label className="block space-y-1.5">
+            <FieldLabel label="Timeline" />
+            <select name="timeline" className={selectFieldClasses} defaultValue="not_specified">
+              {REFERRAL_TIMELINE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {!isAgent && (
+            <label className="block space-y-1.5 sm:col-span-2">
+              <FieldLabel label="Borrower current address" />
+              <Input name="borrowerCurrentAddress" required autoComplete="street-address" />
+            </label>
+          )}
+        </FieldGrid>
+      </FieldGroup>
+
+      <FieldGroup
+        title="Notes for the team"
+        description={
+          isAgent
+            ? 'Share anything that helps the mortgage consultant — budget range, urgency, special circumstances, and your preferred MC if you have one.'
+            : "These notes will land in the referral's conversation thread so everyone has the same context from the start."
+        }
+      >
+        <Textarea
+          name="initialNotes"
+          rows={4}
+          className="min-h-[120px] resize-y"
+          placeholder={
+            isAgent
+              ? 'e.g. Preferred MC: Jordan Smith. First-time buyer, hoping to close before school starts…'
+              : 'Share helpful context, deadlines, or next steps'
+          }
+          defaultValue={prefillNotes}
+        />
+      </FieldGroup>
+
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-foreground-muted">
+          Double-check the details before saving. You can always fine-tune anything after the
+          referral is created.
+        </p>
+        <Button type="submit" size="lg" loading={loading} className="shrink-0">
+          {loading ? 'Creating…' : 'Create referral'}
+        </Button>
       </div>
     </form>
   );

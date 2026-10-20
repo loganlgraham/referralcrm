@@ -32,6 +32,110 @@ export function normalizeReferralStatus(status?: string | null): ReferralStatus 
   return REFERRAL_STATUSES.includes(status as ReferralStatus) ? (status as ReferralStatus) : null;
 }
 
+const TERMINAL_REFERRAL_STATUS_KEYS = new Set(['closed', 'lost', 'terminated']);
+
+/** Closed, lost, and terminated referrals no longer need a follow-up task. */
+export function isTerminalReferralStatus(value: unknown): boolean {
+  const key = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_');
+  return TERMINAL_REFERRAL_STATUS_KEYS.has(key);
+}
+
+/**
+ * Display label for a referral status. Agent-created referrals share the same
+ * pipeline names; origin is shown separately (Via agent). The unused options
+ * argument is kept so existing call sites do not need a rewrite.
+ */
+export function getReferralStatusLabel(
+  status: string,
+  _options?: { isAgentOrigin?: boolean }
+): string {
+  return normalizeReferralStatus(status) ?? status;
+}
+
+export const LOST_REASON_VALUES = [
+  'never_connected',
+  'already_had_agent',
+  'chose_other_agent_precontact',
+  'not_qualified',
+  'no_longer_buying',
+  'out_of_area',
+  'already_transacted',
+  'duplicate_or_invalid',
+  'chose_other_agent_postcontact',
+  'unresponsive_after_contact',
+  'service_issue',
+  'other'
+] as const;
+
+export type LostReason = (typeof LOST_REASON_VALUES)[number];
+
+export const LOST_REASON_LABELS: Record<LostReason, string> = {
+  never_connected: 'Never able to reach the borrower',
+  already_had_agent: 'Already working with someone else',
+  chose_other_agent_precontact: 'Went with someone else before we connected',
+  not_qualified: 'Not qualified to buy',
+  no_longer_buying: 'No longer buying / timeline changed',
+  out_of_area: 'Looking outside our area',
+  already_transacted: 'Already bought or sold',
+  duplicate_or_invalid: 'Duplicate or bad contact info',
+  chose_other_agent_postcontact: 'Went with someone else after we connected',
+  unresponsive_after_contact: 'Went quiet after we connected',
+  service_issue: 'Service or responsiveness issue',
+  other: 'Other'
+};
+
+export const LOST_BEFORE_CONTACT_HINT =
+  'Losses that happened before anyone could reach the borrower are left out of the connected-loss count.';
+
+/**
+ * Whether a loss for this reason counts against the assigned agent. The policy
+ * lives here rather than on the referral document so it can be retuned without a
+ * migration and without rewriting history.
+ */
+export const LOST_REASON_COUNTS_AGAINST_AGENT: Record<LostReason, boolean> = {
+  never_connected: false,
+  already_had_agent: false,
+  chose_other_agent_precontact: false,
+  not_qualified: false,
+  no_longer_buying: false,
+  out_of_area: false,
+  already_transacted: false,
+  duplicate_or_invalid: false,
+  chose_other_agent_postcontact: true,
+  unresponsive_after_contact: true,
+  service_issue: true,
+  other: true
+};
+
+/** Pre-contact reasons first: the common case when a referral is lost early. */
+export const LOST_REASON_OPTIONS: { value: LostReason; label: string }[] = LOST_REASON_VALUES.map(
+  (value) => ({ value, label: LOST_REASON_LABELS[value] })
+);
+
+/**
+ * One shared list for every origin. The unused options argument is kept so
+ * existing call sites do not need a rewrite.
+ */
+export function getLostReasonOptions(_options?: {
+  isAgentOrigin?: boolean;
+}): { value: LostReason; label: string }[] {
+  return LOST_REASON_OPTIONS;
+}
+
+export const LOST_REASON_SOURCE_VALUES = ['reported', 'inferred'] as const;
+
+export type LostReasonSource = (typeof LOST_REASON_SOURCE_VALUES)[number];
+
+export function normalizeLostReason(reason?: string | null): LostReason | null {
+  if (!reason) {
+    return null;
+  }
+  return LOST_REASON_VALUES.includes(reason as LostReason) ? (reason as LostReason) : null;
+}
+
 export const DEFAULT_AGENT_COMMISSION_BPS = 300;
 export const DEFAULT_REFERRAL_FEE_BPS = 2500;
 

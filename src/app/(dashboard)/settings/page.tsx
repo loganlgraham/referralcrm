@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 
 export default function SettingsPage() {
   return (
-    <div className="max-w-3xl">
+    <div className="max-w-5xl">
       <SettingsForm />
     </div>
   );

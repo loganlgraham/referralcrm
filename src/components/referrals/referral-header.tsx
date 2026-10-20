@@ -1,22 +1,34 @@
 'use client';
 
-import { type ChangeEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  type ChangeEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState
+} from 'react';
 import { useSWRConfig } from 'swr';
 import { differenceInDays } from 'date-fns';
-import { formatInTimeZone } from 'date-fns-tz';
 import { toast } from 'sonner';
-import { SLA_TIME_ZONE } from '@/utils/sla-insights';
+import { formatDateMST } from '@/utils/formatters';
+import { Badge } from '@/components/ui/badge';
+import { selectFieldClasses } from '@/components/ui/field-group';
 
-import { ReferralStatus, REFERRAL_STATUSES, normalizeReferralStatus } from '@/constants/referrals';
+import {
+  ReferralStatus,
+  REFERRAL_STATUSES,
+  getReferralStatusLabel,
+  normalizeReferralStatus
+} from '@/constants/referrals';
 import { StatusChanger } from '@/components/referrals/status-changer';
 import { SLAWidget } from '@/components/referrals/sla-widget';
-import { ContactAssignment, type Contact } from '@/components/referrals/contact-assignment';
-import { CopyButton } from '@/components/common/copy-button';
-import { EmailActivityLink } from '@/components/common/email-activity-link';
-import { PhoneActivityLink } from '@/components/common/phone-activity-link';
-import { RequestUpdateButton } from '@/components/referrals/request-update-button';
-import { AutoReminderToggle } from '@/components/referrals/auto-reminder-toggle';
+import type { Contact } from '@/components/referrals/contact-assignment';
 import { AdminTasksCard } from '@/components/referrals/admin-tasks-card';
+import { AdminDetailHeader } from '@/components/referrals/admin-referral-detail';
+import { TeamCard } from '@/components/referrals/team-card';
+import { RailCard, railCardClasses, railTitleClasses } from '@/components/referrals/referral-rail';
 
 type ViewerRole = 'admin' | 'manager' | 'agent' | 'mc' | 'viewer' | string;
 type AhaBucketValue = '' | 'AHA' | 'AHA_OOS';
@@ -49,78 +61,6 @@ const isNonEmptyString = (value: unknown): value is string =>
 
 const asNullableString = (value: unknown): string | null | undefined =>
   typeof value === 'string' || value == null ? value : undefined;
-
-const extractFirstName = (name?: string | null, fallback = ''): string => {
-  if (typeof name !== 'string') return fallback;
-  const trimmed = name.trim();
-  if (!trimmed) return fallback;
-  const [first] = trimmed.split(/\s+/);
-  return first || fallback;
-};
-
-const buildBorrowerFirstName = (referral: any): string => {
-  const borrower = referral?.borrower ?? {};
-  return (
-    extractFirstName(borrower.firstName, '') ||
-    extractFirstName(borrower.name, '') ||
-    'there'
-  );
-};
-
-const buildIntroClipboardTemplate = (
-  referral: any,
-  buyingAgent: Contact | null,
-  sellingAgent: Contact | null,
-  mcContact: Contact | null
-): string => {
-  const borrowerFirstName = buildBorrowerFirstName(referral);
-  const isSellerOnly = referral.clientType === 'Seller';
-  const buyerFullName = buyingAgent?.name ?? 'your buying agent';
-  const buyerPhone = buyingAgent?.phone ?? 'Not provided';
-  const buyerEmail = buyingAgent?.email ?? 'Not provided';
-  const buyerFirstName = extractFirstName(buyingAgent?.name, 'your buying agent');
-  const sellerFullName = sellingAgent?.name ?? 'your selling agent';
-  const sellerPhone = sellingAgent?.phone ?? 'Not provided';
-  const sellerEmail = sellingAgent?.email ?? 'Not provided';
-  const sellerFirstName = extractFirstName(sellingAgent?.name, 'your selling agent');
-  const mcFirstName = extractFirstName(mcContact?.name, 'me');
-
-  const buyingAgentBlock = [buyerFullName, buyerPhone, buyerEmail].join('\n');
-  const sellingAgentBlock = [sellerFullName, sellerPhone, sellerEmail].join('\n');
-
-  if (isSellerOnly) {
-    const agentsIntro = `${sellerFullName}, a local and trusted Real Estate Specialist who will be assisting you with selling your home.`;
-
-    return (
-      `Hi ${borrowerFirstName},\n\n` +
-      'I want to thank you again for your interest in our Agent Concierge Program. This program is tailored to support clients like you as you navigate the home-selling process with American Financing and to connect you with top-tier local agents.\n\n' +
-      `I'm excited to introduce you to ${agentsIntro}\n\n` +
-      `Below are ${sellerFirstName}'s contact details. You can expect them to reach out to you shortly:\n\n` +
-      'Selling Agent\n' +
-      `${sellingAgentBlock}\n\n` +
-      `If, at any point, you have trouble reaching ${sellerFirstName} or are not fully satisfied with the services provided, please don't hesitate to contact me. We are committed to supporting you every step of the way.\n\n` +
-      'Thank you once again, and best of luck with your home sale!\n\n---'
-    );
-  }
-
-  const agentsIntro = buyingAgent && sellingAgent
-    ? `${buyerFullName} and ${sellerFullName}, both local and trusted Real Estate Specialists who will be assisting you with your home purchase.`
-    : `${buyerFullName}, a local and trusted Real Estate Specialist who will be assisting you with your home purchase.`;
-
-  const dualAgents = Boolean(buyingAgent && sellingAgent);
-
-  return (
-    `Hi ${borrowerFirstName},\n\n` +
-    'I want to thank you again for your interest in our Agent Concierge Program. This program is tailored to support clients like you as you navigate the home-buying and selling process with American Financing and to connect you with top-tier local agents.\n\n' +
-    `I'm excited to introduce you to ${agentsIntro}\n\n` +
-    `Below are ${dualAgents ? `${buyerFirstName} and ${sellerFirstName}` : buyerFirstName}'s contact details. You can expect them to reach out to you shortly:\n\n` +
-    'Buying Agent\n' +
-    `${buyingAgentBlock}\n\n` +
-    (dualAgents ? `Selling Agent\n${sellingAgentBlock}\n\n` : '') +
-    `If, at any point, you have trouble reaching ${dualAgents ? `${buyerFirstName} or ${sellerFirstName}` : buyerFirstName} or are not fully satisfied with the services provided, please don't hesitate to contact ${mcFirstName} or me. We are committed to supporting you every step of the way.\n\n` +
-    'Thank you once again, and happy home shopping!\n\n---'
-  );
-};
 
 interface FinancialSnapshot {
   status: ReferralStatus;
@@ -180,6 +120,18 @@ type ReferralHeaderProps = {
   onBuySideAgentContactChange?: (contact: Contact | null) => void;
   onSellSideAgentContactChange?: (contact: Contact | null) => void;
   onMcContactChange?: (contact: Contact | null) => void;
+  /** Where the breadcrumb's "Referrals" link points (preserves list filters). */
+  backHref?: string;
+  showNav?: boolean;
+  prevHref?: string | null;
+  nextHref?: string | null;
+  canDelete?: boolean;
+  deleting?: boolean;
+  onDelete?: () => void;
+  /** Main-column content rendered under the status card (notes, deals, activity). */
+  children?: ReactNode;
+  /** Rail content rendered after "Who's on it" (intake details). */
+  railSlot?: ReactNode;
 };
 
 export function ReferralHeader({
@@ -198,6 +150,15 @@ export function ReferralHeader({
   onBuySideAgentContactChange,
   onSellSideAgentContactChange,
   onMcContactChange,
+  backHref = '/referrals',
+  showNav = false,
+  prevHref = null,
+  nextHref = null,
+  canDelete = false,
+  deleting = false,
+  onDelete,
+  children,
+  railSlot,
 }: ReferralHeaderProps) {
   const { mutate } = useSWRConfig();
   const isAgentOrigin = referral.origin === 'agent';
@@ -224,15 +185,6 @@ export function ReferralHeader({
   const [referralFeeBasisPoints, setReferralFeeBasisPoints] = useState<number | undefined>(
     referral.referralFeeBasisPoints
   );
-  const [sendingIntroductions, setSendingIntroductions] = useState(false);
-  const [introNotes, setIntroNotes] = useState('');
-  const [cleanedNotes, setCleanedNotes] = useState('');
-  const [showPreview, setShowPreview] = useState(false);
-  const [cleaningNotes, setCleaningNotes] = useState(false);
-  const [introEmailStatus, setIntroEmailStatus] = useState<{
-    summary: string;
-    sentAt: Date;
-  } | null>(null);
   const [dealSide, setDealSide] = useState<'buy' | 'sell'>(
     referral.dealSide === 'sell' ? 'sell' : 'buy'
   );
@@ -249,13 +201,8 @@ export function ReferralHeader({
   const [auditEntries, setAuditEntries] = useState<any[]>(Array.isArray(referral.audit) ? referral.audit : []);
   const [ahaBucket, setAhaBucket] = useState<AhaBucketValue>((referral.ahaBucket as AhaBucketValue) ?? '');
   const [savingBucket, setSavingBucket] = useState(false);
-  const activityFeedKey = `/api/referrals/${referral._id}/activities`;
-  const onFinancialsChangeRef = useRef(onFinancialsChange);
-  onFinancialsChangeRef.current = onFinancialsChange;
-
-  // Only status + side pipeline labels: layout sync so local `status` matches `referral.status` before the
-  // useEffect below calls onFinancialsChange (avoids pushing stale status after parent updates from deal PATCH).
-  // Do not layout-sync money/address here — that caused maximum update depth with onFinancialsChange → setFinancials.
+  // Local copies only mirror props; never push them back up via onFinancialsChange from an effect —
+  // the parent rewrites `referral` from that snapshot, which ping-pongs with these sync effects.
   useLayoutEffect(() => {
     const nextStatus = normalizeReferralStatus(referral.status);
     if (nextStatus) {
@@ -323,43 +270,6 @@ export function ReferralHeader({
     setAhaBucket((referral.ahaBucket as AhaBucketValue) ?? '');
   }, [referral.ahaBucket]);
 
-  useEffect(() => {
-    const normalizedState = propertyState
-      ? propertyState
-      : referral.propertyState
-      ? String(referral.propertyState).toUpperCase()
-      : '';
-    onFinancialsChangeRef.current?.({
-      status,
-      preApprovalAmountCents: preApprovalAmountCents ?? 0,
-      contractPriceCents,
-      referralFeeDueCents: referralFeeDueCents ?? 0,
-      commissionBasisPoints,
-      referralFeeBasisPoints,
-      propertyAddress: propertyAddress ?? referral.propertyAddress ?? undefined,
-      propertyCity: propertyCity ?? referral.propertyCity ?? undefined,
-      propertyState: normalizedState || undefined,
-      propertyPostalCode: propertyPostalCode ?? referral.propertyPostalCode ?? undefined,
-      dealSide,
-    });
-  }, [
-    commissionBasisPoints,
-    contractPriceCents,
-    preApprovalAmountCents,
-    propertyAddress,
-    propertyCity,
-    propertyPostalCode,
-    propertyState,
-    dealSide,
-    referral.propertyAddress,
-    referral.propertyCity,
-    referral.propertyPostalCode,
-    referral.propertyState,
-    referralFeeBasisPoints,
-    referralFeeDueCents,
-    status,
-  ]);
-
   const allowDraftPreview = draftContract.hasUnsavedChanges && status === 'Under Contract';
   const normalizedReferralState = referral.propertyState
     ? String(referral.propertyState).toUpperCase()
@@ -401,7 +311,6 @@ export function ReferralHeader({
       ? savedDisplayAddress
       : propertyAddress ?? referral.propertyAddress;
 
-  const isAgentView = viewerRole === 'agent';
   const showSlaWidget = viewerRole !== 'agent' && referral.origin !== 'agent';
   const fallbackAgentContact: Contact | null = referral.assignedAgent
     ? {
@@ -478,7 +387,6 @@ export function ReferralHeader({
     sellSideAgentContact ??
     fallbackSellSideContact ??
     (canUseAssignedForSellSide ? fallbackAgentContact : null);
-  const effectiveAgentContact = primarySide === 'sell' ? effectiveSellSideContact : effectiveBuySideContact;
   const effectiveMcContact = mcContact ?? fallbackMcContact;
   const nonAgentRolesCanAssignReferralAgent =
     viewerRole === 'admin' || viewerRole === 'manager' || viewerRole === 'mc';
@@ -492,13 +400,14 @@ export function ReferralHeader({
     nonAgentRolesCanAssignReferralAgent ||
     (viewerRole === 'agent' &&
       (primarySide === 'buy' ? !fallbackBuySideContact : !fallbackSellSideContact));
-  const canAssignMc =
-    viewerRole === 'admin' ||
-    viewerRole === 'manager' ||
-    (viewerRole === 'agent' && !fallbackMcContact);
+  const canAssignMc = viewerRole === 'admin';
   const canEditBucket = viewerRole === 'admin' || viewerRole === 'manager';
   const showBucketSummary =
     viewerRole !== 'agent' && viewerRole !== 'admin' && viewerRole !== 'mc';
+  const pendingMcHelper =
+    viewerRole === 'agent' && isAgentOrigin
+      ? 'AFC has received your intro — thank you! You’ll get an email once you’re paired with a mortgage consultant.'
+      : undefined;
 
   const locationLabel = useMemo(() => {
     const zips = Array.isArray(referral.lookingInZips)
@@ -522,137 +431,12 @@ export function ReferralHeader({
     return locationLabel ? `Looking in ${locationLabel}` : 'Pending location';
   }, [effectivePropertyAddress, locationLabel, savedDisplayAddress, savedStreet]);
 
+  const showAgentCcField = !isAgentOrigin;
+  const showMcCcField = referral.clientType !== 'Seller';
+
   const borrowerName = referral.borrower?.name ?? 'Borrower';
   const borrowerEmail = referral.borrower?.email?.trim() ?? '';
   const borrowerPhone = referral.borrower?.phone?.trim() ?? '';
-  const hasBorrowerContact = Boolean(borrowerEmail || borrowerPhone);
-
-  const handlePreviewIntroductions = async () => {
-    if (!introNotes.trim()) {
-      // No notes to clean up, show preview with empty notes
-      setCleanedNotes('');
-      setShowPreview(true);
-      return;
-    }
-
-    setCleaningNotes(true);
-    try {
-      const response = await fetch(`/api/referrals/${referral._id}/cleanup-notes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notes: introNotes }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        // If cleanup fails, use original notes
-        setCleanedNotes(introNotes);
-        toast.error('Could not clean up notes, using original text.');
-      } else {
-        setCleanedNotes(payload.cleanedNotes || introNotes);
-      }
-      setShowPreview(true);
-    } catch (error) {
-      console.error('Failed to clean up notes', error);
-      setCleanedNotes(introNotes);
-      setShowPreview(true);
-    } finally {
-      setCleaningNotes(false);
-    }
-  };
-
-  const handleConfirmSend = async () => {
-    setSendingIntroductions(true);
-    setShowPreview(false);
-    try {
-      const response = await fetch(`/api/referrals/${referral._id}/send-emails`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notes: cleanedNotes }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        const message = typeof payload?.error === 'string' ? payload.error : 'Unable to send intro emails right now.';
-        throw new Error(message);
-      }
-
-      const sent = Array.isArray(payload?.sent) ? payload.sent : [];
-      const skipped = Array.isArray(payload?.skipped) ? payload.skipped : [];
-      const errors = Array.isArray(payload?.errors) ? payload.errors : [];
-
-      const summaryParts: string[] = [];
-      if (sent.length > 0) {
-        summaryParts.push(`Sent to ${sent.join(', ')}`);
-      }
-      if (skipped.length > 0) {
-        summaryParts.push(`Skipped ${skipped.join(', ')} (missing email)`);
-      }
-      if (errors.length > 0) {
-        summaryParts.push(`Failed for ${errors.join(', ')}`);
-      }
-
-      const summary = summaryParts.join('. ');
-      if (errors.length > 0) {
-        toast.error(summary || 'Some emails could not be sent.');
-      } else if (sent.length > 0) {
-        toast.success(summary || 'Intro emails sent.');
-      } else {
-        toast.info(summary || 'No emails were sent.');
-      }
-
-      void mutate(activityFeedKey);
-
-      const clipboardContent = buildIntroClipboardTemplate(
-        referral,
-        effectiveBuySideContact,
-        effectiveSellSideContact,
-        effectiveMcContact
-      );
-
-      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-        navigator.clipboard.writeText(clipboardContent).catch((error) => {
-          console.error('Failed to copy intro email to clipboard', error);
-        });
-      }
-
-      setIntroEmailStatus({
-        summary: summary || 'Intro emails sent.',
-        sentAt: new Date(),
-      });
-      setIntroNotes('');
-      setCleanedNotes('');
-    } catch (error) {
-      console.error('Failed to send intro emails', error);
-      toast.error(error instanceof Error ? error.message : 'Unable to send intro emails right now.');
-    } finally {
-      setSendingIntroductions(false);
-    }
-  };
-
-  const handleCancelPreview = () => {
-    setShowPreview(false);
-    setCleanedNotes('');
-  };
-
-  const handleRecopyIntroEmail = async () => {
-    try {
-      const clipboardContent = buildIntroClipboardTemplate(
-        referral,
-        effectiveBuySideContact,
-        effectiveSellSideContact,
-        effectiveMcContact
-      );
-
-      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(clipboardContent);
-        toast.success('Intro email template copied to clipboard');
-      } else {
-        toast.error('Clipboard access is not available');
-      }
-    } catch (error) {
-      console.error('Failed to copy intro email to clipboard', error);
-      toast.error('Failed to copy intro email template to clipboard');
-    }
-  };
 
   const handleContractDraftChangeInternal = useCallback(
     (draft: ContractDraftSnapshot) => {
@@ -953,143 +737,113 @@ export function ReferralHeader({
   const viewerAssignedStatus = viewerAssignedSide === 'sell' ? sellStatusLabel : buyStatusLabel;
   const oppositeSide = viewerAssignedSide === 'sell' ? 'buy' : 'sell';
   const oppositeSideStatus = oppositeSide === 'sell' ? sellStatusLabel : buyStatusLabel;
-  const shouldStackAssignmentsForAdminBoth = viewerRole === 'admin' && isBothClientType;
+  const buyStatusDisplay = getReferralStatusLabel(buyStatusLabel, { isAgentOrigin });
+  const sellStatusDisplay = getReferralStatusLabel(sellStatusLabel, { isAgentOrigin });
+  const oppositeSideStatusDisplay = getReferralStatusLabel(oppositeSideStatus, { isAgentOrigin });
   const latestDealStatusLabel = latestDealStatus ?? 'No deals yet';
   const latestBuyDealStatusLabel = latestBuyDealStatus ?? 'No deals yet';
   const latestSellDealStatusLabel = latestSellDealStatus ?? 'No deals yet';
-  // Side-by-side grid only when both buy- and sell-side agents are shown; strict Buyer/Seller
-  // stays a single column so agent + MC contact details are not squeezed.
-  const assignmentGridClassName =
-    shouldStackAssignmentsForAdminBoth
-      ? 'grid items-start gap-2.5'
-      : isBothClientType
-        ? 'grid items-start gap-2.5 md:grid-cols-2'
-        : 'grid items-start gap-2.5';
+  const showSplitStatus = isBothClientType && viewerRole === 'admin';
+
+  const statusCardMeta = (
+    <p className="text-[13px] text-foreground-subtle">
+      {!showSplitStatus ? <>Latest deal: {latestDealStatusLabel}</> : null}
+      {referral.statusLastUpdated ? (
+        <>
+          {!showSplitStatus ? ' · ' : ''}
+          Updated <span className="text-numeric">{formatDateMST(referral.statusLastUpdated)}</span>
+        </>
+      ) : null}
+    </p>
+  );
 
   return (
-    <div className="space-y-5 rounded-card bg-surface-raised p-4 shadow-sm ring-1 ring-border sm:p-5">
-      <div className="grid gap-4 rounded-xl bg-gradient-to-r from-slate-50 via-white to-slate-50 p-4 lg:grid-cols-[minmax(0,1.1fr),minmax(0,1fr)] lg:items-center">
-        <div className="space-y-2 lg:self-center">
-          <div>
-            <div className="flex items-center gap-1.5">
-              <h1 className="text-2xl font-semibold text-foreground">{borrowerName}</h1>
-              <CopyButton value={borrowerName} label="Copy name" />
+    <>
+      <AdminDetailHeader
+        referralId={String(referral._id)}
+        borrowerName={borrowerName}
+        clientType={referral.clientType ?? 'Buyer'}
+        showAgentOriginMarker={isAgentOrigin && (viewerRole === 'admin' || viewerRole === 'manager')}
+        referredAt={referral.referralDate ?? referral.createdAt}
+        propertyLabel={propertyLabel}
+        loanFileNumber={referral.loanFileNumber}
+        borrowerEmail={borrowerEmail}
+        borrowerPhone={borrowerPhone}
+        backHref={backHref}
+        showNav={showNav}
+        prevHref={prevHref}
+        nextHref={nextHref}
+        canDelete={canDelete}
+        deleting={deleting}
+        onDelete={onDelete}
+      />
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+        <div className="flex min-w-0 flex-col gap-4">
+          <section className={railCardClasses}>
+            <div className="flex flex-wrap items-baseline justify-between gap-3">
+              <h2 className={railTitleClasses}>Where are they now?</h2>
+              {statusCardMeta}
             </div>
-            {hasBorrowerContact ? (
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-foreground-muted">
-                {borrowerEmail && (
-                  <>
-                    <EmailActivityLink
-                      referralId={referral._id}
-                      email={borrowerEmail}
-                      recipient="Borrower"
-                      recipientName={borrowerName}
-                      className="text-sm"
-                    >
-                      {borrowerEmail}
-                    </EmailActivityLink>
-                    <CopyButton value={borrowerEmail} label="Copy email" />
-                  </>
-                )}
-                {borrowerEmail && borrowerPhone && <span className="text-foreground-subtle">•</span>}
-                {borrowerPhone && (
-                  <>
-                    <PhoneActivityLink
-                      referralId={referral._id}
-                      phone={borrowerPhone}
-                      recipient="Borrower"
-                      recipientName={borrowerName}
-                      className="text-sm"
-                    >
-                      {borrowerPhone}
-                    </PhoneActivityLink>
-                    <CopyButton value={borrowerPhone} label="Copy phone" />
-                  </>
-                )}
-              </div>
-            ) : (
-              <p className="mt-1 text-sm text-foreground-muted">Contact information pending</p>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-wide text-foreground-muted">
-            <span className="rounded-full bg-primary-600/15 px-3 py-1 text-primary-700">{status}</span>
-            <span className="rounded-full bg-surface-subtle px-3 py-1 text-foreground-muted">{propertyLabel}</span>
-            <span className="rounded-full bg-amber-100 px-3 py-1 text-amber-700">{daysInStatus} days in stage</span>
-          </div>
-        </div>
-        <div
-          className={`flex flex-col items-stretch gap-2.5 ${
-            isAgentView ? 'lg:justify-start' : ''
-          }`}
-        >
-          <section className="w-full rounded-lg border border-border bg-surface-raised p-3 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-foreground-muted">Status &amp; progress</h2>
-              <span className="text-xs uppercase tracking-wide text-foreground-subtle">Pipeline</span>
-            </div>
-            <div className="mt-1.5">
-              {isBothClientType && viewerRole === 'admin' ? (
-                <div className="space-y-3">
-                  <div className="grid gap-3 lg:grid-cols-2">
-                    <div className="space-y-2 rounded-md border border-border bg-surface-muted/70 p-2.5">
-                      <div className="text-[11px] font-semibold uppercase tracking-wide text-sky-700">Buy</div>
-                      <p className="text-[11px] text-foreground-subtle">Latest deal: {latestBuyDealStatusLabel}</p>
+            <div className="mt-3.5">
+              {showSplitStatus ? (
+                <div className="space-y-4">
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <p className="text-eyebrow text-info">Buy side</p>
+                        <p className="text-xs text-foreground-subtle">Latest deal: {latestBuyDealStatusLabel}</p>
+                      </div>
                       <StatusChanger
                         referralId={referral._id}
                         status={buyStatusLabel}
                         statuses={REFERRAL_STATUSES}
                         includeTerminalStatuses
+                        isAgentOrigin={isAgentOrigin}
                         side="buy"
-                        statusLabel="Status & progress"
+                        statusLabel="Buy side stage"
+                        mode="track"
+                        compactTrack
+                        borrowerName={borrowerName}
                         showPreApproval={false}
-                        preApprovalAmountCents={preApprovalAmountCents}
                         onStatusChanged={(next, payload) => handleStatusChanged(next, payload, 'buy')}
-                        onPreApprovalSaved={handlePreApprovalSaved}
                         onUnderContractIntentChange={onUnderContractIntentChange}
                       />
                     </div>
-                    <div className="space-y-2 rounded-md border border-border bg-surface-muted/70 p-2.5">
-                      <div className="text-[11px] font-semibold uppercase tracking-wide text-indigo-700">Sell</div>
-                      <p className="text-[11px] text-foreground-subtle">Latest deal: {latestSellDealStatusLabel}</p>
+                    <div className="space-y-2">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <p className="text-eyebrow text-accent">Sell side</p>
+                        <p className="text-xs text-foreground-subtle">Latest deal: {latestSellDealStatusLabel}</p>
+                      </div>
                       <StatusChanger
                         referralId={referral._id}
                         status={sellStatusLabel}
                         statuses={REFERRAL_STATUSES}
                         includeTerminalStatuses
+                        isAgentOrigin={isAgentOrigin}
                         side="sell"
-                        statusLabel="Status & progress"
+                        statusLabel="Sell side stage"
+                        mode="track"
+                        compactTrack
+                        borrowerName={borrowerName}
                         showPreApproval={false}
-                        preApprovalAmountCents={preApprovalAmountCents}
                         onStatusChanged={(next, payload) => handleStatusChanged(next, payload, 'sell')}
-                        onPreApprovalSaved={handlePreApprovalSaved}
                         onUnderContractIntentChange={onUnderContractIntentChange}
                       />
                     </div>
-                  </div>
-                  <div className="rounded-md border border-border bg-surface-muted/70 p-2.5">
-                    <StatusChanger
-                      referralId={referral._id}
-                      status={status}
-                      statuses={REFERRAL_STATUSES}
-                      statusLabel="Status & progress"
-                      showStatusControl={false}
-                      showPreApproval
-                      preApprovalAmountCents={preApprovalAmountCents}
-                      onPreApprovalSaved={handlePreApprovalSaved}
-                    />
                   </div>
                 </div>
               ) : isBothClientType && viewerRole === 'agent' ? (
                 <div className="space-y-2">
                   <div className="grid grid-cols-2 gap-2">
-                    <span className="rounded-full bg-sky-100 px-3 py-1 text-center text-[11px] font-semibold uppercase tracking-wide text-sky-700">
-                      Buy: {buyStatusLabel}
-                    </span>
-                    <span className="rounded-full bg-indigo-100 px-3 py-1 text-center text-[11px] font-semibold uppercase tracking-wide text-indigo-700">
-                      Sell: {sellStatusLabel}
-                    </span>
+                    <Badge variant="info" className="justify-center">
+                      Buy: {buyStatusDisplay}
+                    </Badge>
+                    <Badge variant="accent" className="justify-center">
+                      Sell: {sellStatusDisplay}
+                    </Badge>
                   </div>
-                  <p className="text-[11px] text-foreground-subtle">
+                  <p className="text-xs text-foreground-subtle">
                     Latest deal on my side ({viewerAssignedSide.toUpperCase()}):{' '}
                     {viewerAssignedSide === 'sell' ? latestSellDealStatusLabel : latestBuyDealStatusLabel}
                   </p>
@@ -1097,8 +851,10 @@ export function ReferralHeader({
                     referralId={referral._id}
                     status={viewerAssignedStatus}
                     statuses={REFERRAL_STATUSES}
+                    isAgentOrigin={isAgentOrigin}
                     side={viewerAssignedSide}
                     statusLabel={`My side (${viewerAssignedSide})`}
+                    borrowerName={borrowerName}
                     preApprovalAmountCents={preApprovalAmountCents}
                     onStatusChanged={(next, payload) =>
                       handleStatusChanged(next, payload, viewerAssignedSide)
@@ -1106,260 +862,81 @@ export function ReferralHeader({
                     onPreApprovalSaved={handlePreApprovalSaved}
                     onUnderContractIntentChange={onUnderContractIntentChange}
                   />
-                  <p className="text-[11px] text-foreground-subtle">
-                    {oppositeSide.toUpperCase()} side status: {oppositeSideStatus}
+                  <p className="text-xs text-foreground-subtle">
+                    {oppositeSide.toUpperCase()} side status: {oppositeSideStatusDisplay}
                   </p>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  <p className="text-[11px] text-foreground-subtle">Latest deal: {latestDealStatusLabel}</p>
-                  <StatusChanger
-                    referralId={referral._id}
-                    status={status}
-                    statuses={REFERRAL_STATUSES}
-                    includeTerminalStatuses={viewerRole === 'admin'}
-                    side={primarySide}
-                    preApprovalAmountCents={preApprovalAmountCents}
-                    onStatusChanged={handleStatusChanged}
-                    onPreApprovalSaved={handlePreApprovalSaved}
-                    onUnderContractIntentChange={onUnderContractIntentChange}
-                  />
-                </div>
+                <StatusChanger
+                  referralId={referral._id}
+                  status={status}
+                  statuses={REFERRAL_STATUSES}
+                  includeTerminalStatuses={viewerRole === 'admin'}
+                  isAgentOrigin={isAgentOrigin}
+                  side={primarySide}
+                  statusLabel="Status"
+                  mode="track"
+                  daysInStatus={daysInStatus}
+                  borrowerName={borrowerName}
+                  showPreApproval={false}
+                  onStatusChanged={handleStatusChanged}
+                  onUnderContractIntentChange={onUnderContractIntentChange}
+                />
               )}
             </div>
           </section>
+
+          {viewerRole === 'admin' && <AdminTasksCard referralId={String(referral._id)} viewerRole={viewerRole} />}
+
+          {children}
+        </div>
+
+        <aside className="flex min-w-0 flex-col gap-4">
+          <TeamCard
+            referral={referral}
+            viewerRole={viewerRole}
+            isBothClientType={isBothClientType}
+            primarySide={primarySide}
+            buySideContact={effectiveBuySideContact}
+            sellSideContact={effectiveSellSideContact}
+            mcContact={effectiveMcContact}
+            canAssignBuyAgent={canAssignBuyAgent}
+            canAssignSellAgent={canAssignSellAgent}
+            canAssignPrimaryAgent={canAssignPrimaryAgent}
+            canAssignMc={canAssignMc}
+            onBuySideAgentContactChange={onBuySideAgentContactChange}
+            onSellSideAgentContactChange={onSellSideAgentContactChange}
+            onMcContactChange={onMcContactChange}
+            pendingMcHelper={pendingMcHelper}
+            showAgentCcField={showAgentCcField}
+            showMcCcField={showMcCcField}
+          />
+
+          {railSlot}
+
+          {showSlaWidget && <SLAWidget referral={{ ...referral, status, audit: auditEntries }} />}
+
           {showBucketSummary && (
-            <section className="flex h-full flex-col justify-between rounded-lg border border-border bg-surface-muted p-4 sm:col-span-2">
-              <div className="space-y-2">
-                <h2 className="text-xs font-semibold uppercase tracking-wide text-foreground-muted">Agent bucket</h2>
-                <p className="text-xs text-foreground-subtle">{bucketDescription}</p>
-              </div>
+            <RailCard title="Agent bucket" description={bucketDescription}>
               {canEditBucket ? (
                 <select
                   value={ahaBucket}
                   onChange={handleBucketChange}
                   disabled={savingBucket}
-                  className="mt-2 w-full rounded border border-border-strong bg-surface-raised px-3 py-2 text-sm text-foreground-muted shadow-sm focus:border-primary-500 focus:outline-none"
+                  className={selectFieldClasses}
                 >
                   <option value="">Not set</option>
                   <option value="AHA">AHA</option>
                   <option value="AHA_OOS">AHA OOS</option>
                 </select>
               ) : (
-                <p className="mt-3 text-lg font-semibold text-foreground">{bucketLabel}</p>
+                <p className="text-sm font-semibold text-foreground">{bucketLabel}</p>
               )}
-            </section>
+            </RailCard>
           )}
-        </div>
-      </div>
-      {showSlaWidget && <SLAWidget referral={{ ...referral, status, audit: auditEntries }} />}
-
-      <div
-        className={
-          viewerRole === 'admin'
-            ? 'grid gap-4 lg:grid-cols-[minmax(0,1fr),minmax(280px,1fr)]'
-            : 'grid gap-4'
-        }
-      >
-        {viewerRole === 'admin' && <AdminTasksCard referralId={String(referral._id)} viewerRole={viewerRole} />}
-        <section className="space-y-3 rounded-xl border border-border bg-surface-raised px-4 py-3.5 shadow-sm">
-          <div className="space-y-1">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-foreground-muted">Team assignments</h2>
-            <p className="text-xs text-foreground-subtle">Keep the right partners aligned on this referral.</p>
-          </div>
-          {shouldStackAssignmentsForAdminBoth ? (
-            <div className="space-y-2.5">
-              <ContactAssignment
-                referralId={referral._id}
-                type="agent"
-                side="buy"
-                contact={effectiveBuySideContact}
-                canAssign={canAssignBuyAgent}
-                onContactChange={onBuySideAgentContactChange}
-              />
-              <ContactAssignment
-                referralId={referral._id}
-                type="agent"
-                side="sell"
-                contact={effectiveSellSideContact}
-                canAssign={canAssignSellAgent}
-                onContactChange={onSellSideAgentContactChange}
-              />
-              {referral.clientType !== 'Seller' && (
-                <ContactAssignment
-                  referralId={referral._id}
-                  type="mc"
-                  contact={effectiveMcContact}
-                  canAssign={canAssignMc}
-                  onContactChange={onMcContactChange}
-                />
-              )}
-            </div>
-          ) : (
-            <div className={assignmentGridClassName}>
-              {isBothClientType ? (
-                <>
-                  <ContactAssignment
-                    referralId={referral._id}
-                    type="agent"
-                    side="buy"
-                    contact={effectiveBuySideContact}
-                    canAssign={canAssignBuyAgent}
-                    onContactChange={onBuySideAgentContactChange}
-                  />
-                  <ContactAssignment
-                    referralId={referral._id}
-                    type="agent"
-                    side="sell"
-                    contact={effectiveSellSideContact}
-                    canAssign={canAssignSellAgent}
-                    onContactChange={onSellSideAgentContactChange}
-                  />
-                </>
-              ) : (
-                <ContactAssignment
-                  referralId={referral._id}
-                  type="agent"
-                  side={primarySide}
-                  contact={effectiveAgentContact}
-                  canAssign={canAssignPrimaryAgent}
-                  onContactChange={
-                    primarySide === 'sell'
-                      ? onSellSideAgentContactChange
-                      : onBuySideAgentContactChange
-                  }
-                />
-              )}
-              {referral.clientType !== 'Seller' && (
-                <ContactAssignment
-                  referralId={referral._id}
-                  type="mc"
-                  contact={effectiveMcContact}
-                  canAssign={canAssignMc}
-                  onContactChange={onMcContactChange}
-                  className={isBothClientType ? 'md:col-span-2' : undefined}
-                />
-              )}
-            </div>
-          )}
-          {viewerRole === 'admin' && (
-            <div className="rounded-lg border border-border bg-surface-muted px-3 py-2">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="space-y-0.5 text-xs text-foreground-muted">
-                  <p className="font-semibold uppercase tracking-wide text-foreground-muted">Intro emails</p>
-                  <p>Send friendly updates to the agent and MC.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handlePreviewIntroductions}
-                  disabled={sendingIntroductions || cleaningNotes}
-                  className="rounded-md bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white shadow transition hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
-                >
-                  {sendingIntroductions ? 'Sending…' : cleaningNotes ? 'Preparing…' : 'Send now'}
-                </button>
-              </div>
-              <textarea
-                value={introNotes}
-                onChange={(event) => setIntroNotes(event.target.value)}
-                rows={2}
-                className="mt-2 w-full rounded border border-border bg-surface-raised px-3 py-2 text-xs text-foreground-muted placeholder:text-foreground-subtle focus:border-primary-500 focus:outline-none"
-                placeholder="Add a note to include in the agent email (optional)"
-                disabled={sendingIntroductions || cleaningNotes}
-              />
-              <p className="mt-1 text-[11px] text-foreground-subtle">
-                Agent intro emails include MC info plus opposite-side agent details when available, and the MC email highlights the paired agent team.
-              </p>
-              {introEmailStatus && (
-                <div className="mt-2 space-y-2">
-                  <div className="text-[11px] text-foreground-muted">
-                    <p>{introEmailStatus.summary}</p>
-                    <p>
-                      Copied intro email for Gmail and sent at{' '}
-                      {formatInTimeZone(new Date(introEmailStatus.sentAt), SLA_TIME_ZONE, "h:mm a 'MT'")}
-                      .
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleRecopyIntroEmail}
-                    className="rounded-md border border-border-strong bg-surface-raised px-3 py-1.5 text-xs font-medium text-foreground-muted shadow-sm transition hover:bg-surface-muted"
-                  >
-                    Re-copy intro email
-                  </button>
-                </div>
-              )}
-              {showPreview && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-                  <div className="mx-4 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-md bg-surface-raised p-6 shadow-xl">
-                    <h3 className="text-lg font-semibold text-foreground">Preview Email Notes</h3>
-                    <p className="mt-1 text-sm text-foreground-subtle">
-                      Review the cleaned-up notes before sending to the agent.
-                    </p>
-                    {cleanedNotes ? (
-                      <div className="mt-4 rounded-md border border-border bg-surface-muted p-3">
-                        <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Notes (cleaned up)</p>
-                        <textarea
-                          value={cleanedNotes}
-                          onChange={(event) => setCleanedNotes(event.target.value)}
-                          rows={4}
-                          className="mt-2 w-full rounded border border-border bg-surface-raised px-3 py-2 text-sm text-foreground-muted focus:border-primary-500 focus:outline-none"
-                        />
-                      </div>
-                    ) : (
-                      <div className="mt-4 rounded-md border border-border bg-surface-muted p-3">
-                        <p className="text-sm text-foreground-muted">No notes will be included in the email.</p>
-                      </div>
-                    )}
-                    <div className="mt-6 flex justify-end gap-3">
-                      <button
-                        type="button"
-                        onClick={handleCancelPreview}
-                        className="rounded-md border border-border-strong bg-surface-raised px-4 py-2 text-sm font-medium text-foreground-muted shadow-sm transition hover:bg-surface-muted"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleConfirmSend}
-                        disabled={sendingIntroductions}
-                        className="rounded-md bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
-                      >
-                        {sendingIntroductions ? 'Sending…' : 'Confirm & Send'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-          
-          {/* Agent Update Request Section */}
-          {viewerRole === 'admin' && (
-            <div className="space-y-3 border-t border-border pt-4">
-              <RequestUpdateButton
-                referralId={referral._id}
-                assignedAgent={effectiveAgentContact}
-                buySideAgent={effectiveBuySideContact}
-                sellSideAgent={effectiveSellSideContact}
-                lastAutoReminderSentAt={referral.lastAutoReminderSentAt}
-                lastManualReminderSentAt={referral.lastManualReminderSentAt}
-                autoRemindersEnabled={referral.autoUpdateRemindersEnabled || false}
-                status={referral.status}
-                lastPairedAt={referral.sla?.lastPairedAt}
-                audit={referral.audit || []}
-                notes={referral.notes || []}
-                viewerRole={viewerRole}
-              />
-              <AutoReminderToggle
-                referralId={referral._id}
-                autoRemindersEnabled={referral.autoUpdateRemindersEnabled || false}
-                viewerRole={viewerRole}
-              />
-            </div>
-          )}
-        </section>
+        </aside>
       </div>
 
-    </div>
+    </>
   );
 }

@@ -6,6 +6,7 @@ import {
   differenceInCalendarDays,
   endOfDay,
   endOfMonth,
+  endOfWeek,
   format,
   startOfDay,
   startOfHour,
@@ -17,7 +18,20 @@ import {
   subYears
 } from 'date-fns';
 
-export type TimeframeKey = 'day' | 'week' | 'month' | 'next_month' | 'year' | 'ytd' | 'all' | 'custom';
+export type TimeframeKey =
+  | 'day'
+  | 'week'
+  | 'last_week'
+  | 'next_week'
+  | 'month'
+  | 'last_month'
+  | 'next_month'
+  | 'year'
+  | 'ytd'
+  | 'all'
+  | 'custom';
+
+const WEEK_OPTIONS = { weekStartsOn: 1 as const };
 
 export interface TimeframeInfo {
   key: TimeframeKey;
@@ -35,7 +49,10 @@ export interface TrendPoint {
 export const TIMEFRAME_LABELS: Record<TimeframeKey, string> = {
   day: 'Today',
   week: 'This Week',
+  last_week: 'Last Week',
+  next_week: 'Next Week',
   month: 'This Month',
+  last_month: 'Last Month',
   next_month: 'Next Month',
   year: 'Last 12 Months',
   ytd: 'Year to Date',
@@ -61,7 +78,10 @@ export function parseTimeframe(
   const normalizedKey: TimeframeKey =
     value === 'day' ||
     value === 'week' ||
+    value === 'last_week' ||
+    value === 'next_week' ||
     value === 'month' ||
+    value === 'last_month' ||
     value === 'next_month' ||
     value === 'year' ||
     value === 'ytd' ||
@@ -110,9 +130,27 @@ export function parseTimeframe(
       return {
         key: 'week',
         label: TIMEFRAME_LABELS.week,
-        start: startOfWeek(now, { weekStartsOn: 1 }),
+        start: startOfWeek(now, WEEK_OPTIONS),
         end: endOfDay(now)
       };
+    case 'last_week': {
+      const lastWeek = subWeeks(now, 1);
+      return {
+        key: 'last_week',
+        label: TIMEFRAME_LABELS.last_week,
+        start: startOfWeek(lastWeek, WEEK_OPTIONS),
+        end: endOfWeek(lastWeek, WEEK_OPTIONS)
+      };
+    }
+    case 'next_week': {
+      const nextWeek = addWeeks(now, 1);
+      return {
+        key: 'next_week',
+        label: TIMEFRAME_LABELS.next_week,
+        start: startOfWeek(nextWeek, WEEK_OPTIONS),
+        end: endOfWeek(nextWeek, WEEK_OPTIONS)
+      };
+    }
     case 'year':
       return {
         key: 'year',
@@ -129,6 +167,15 @@ export function parseTimeframe(
         end: endOfMonth(nextMonth)
       };
     }
+    case 'last_month': {
+      const lastMonth = subMonths(now, 1);
+      return {
+        key: 'last_month',
+        label: TIMEFRAME_LABELS.last_month,
+        start: startOfMonth(lastMonth),
+        end: endOfMonth(lastMonth)
+      };
+    }
     case 'ytd':
       return {
         key: 'ytd',
@@ -143,13 +190,16 @@ export function parseTimeframe(
         end: endOfDay(now)
       };
     case 'month':
-    default:
       return {
         key: 'month',
         label: TIMEFRAME_LABELS.month,
         start: startOfMonth(now),
         end: endOfMonth(now)
       };
+    default: {
+      const exhaustive: never = normalizedKey;
+      return exhaustive;
+    }
   }
 }
 
@@ -203,7 +253,9 @@ export function groupTrendByTimeframe(dates: Date[], timeframe: TimeframeInfo): 
         sortValue = hourStart.getTime();
         break;
       }
-      case 'week': {
+      case 'week':
+      case 'last_week':
+      case 'next_week': {
         const dayStart = startOfDay(d);
         key = format(dayStart, 'yyyy-MM-dd');
         label = format(dayStart, 'EEE dd');
@@ -211,8 +263,9 @@ export function groupTrendByTimeframe(dates: Date[], timeframe: TimeframeInfo): 
         break;
       }
       case 'month':
+      case 'last_month':
       case 'next_month': {
-        const weekStart = startOfWeek(d, { weekStartsOn: 1 });
+        const weekStart = startOfWeek(d, WEEK_OPTIONS);
         key = `${format(weekStart, 'yyyy')}-W${format(weekStart, 'II')}`;
         label = `${format(weekStart, 'MMM d')}`;
         sortValue = weekStart.getTime();
@@ -220,12 +273,17 @@ export function groupTrendByTimeframe(dates: Date[], timeframe: TimeframeInfo): 
       }
       case 'year':
       case 'ytd':
-      default: {
+      case 'all':
+      case 'custom': {
         const monthStart = startOfMonth(d);
         key = `${format(monthStart, 'yyyy-MM')}`;
         label = format(monthStart, 'MMM yy');
         sortValue = monthStart.getTime();
         break;
+      }
+      default: {
+        const exhaustive: never = timeframe.key;
+        throw new Error(`Unhandled timeframe: ${exhaustive}`);
       }
     }
 
@@ -288,7 +346,9 @@ export function buildTimeframeBuckets(timeframe: TimeframeInfo): TimeframeBucket
       }
       break;
     }
-    case 'week': {
+    case 'week':
+    case 'last_week':
+    case 'next_week': {
       cursor = startOfDay(rangeStart);
       while (cursor <= rangeEnd) {
         buckets.push({
@@ -301,9 +361,10 @@ export function buildTimeframeBuckets(timeframe: TimeframeInfo): TimeframeBucket
       break;
     }
     case 'month':
+    case 'last_month':
     case 'next_month': {
-      cursor = startOfWeek(rangeStart, { weekStartsOn: 1 });
-      const endWeek = startOfWeek(rangeEnd, { weekStartsOn: 1 });
+      cursor = startOfWeek(rangeStart, WEEK_OPTIONS);
+      const endWeek = startOfWeek(rangeEnd, WEEK_OPTIONS);
       while (cursor <= endWeek) {
         buckets.push({
           key: `${format(cursor, 'yyyy')}-W${format(cursor, 'II')}`,
@@ -316,7 +377,8 @@ export function buildTimeframeBuckets(timeframe: TimeframeInfo): TimeframeBucket
     }
     case 'year':
     case 'ytd':
-    default: {
+    case 'all':
+    case 'custom': {
       cursor = startOfMonth(rangeStart);
       const endMonth = startOfMonth(rangeEnd);
       while (cursor <= endMonth) {
@@ -328,6 +390,10 @@ export function buildTimeframeBuckets(timeframe: TimeframeInfo): TimeframeBucket
         cursor = addMonths(cursor, 1);
       }
       break;
+    }
+    default: {
+      const exhaustive: never = effectiveKey;
+      throw new Error(`Unhandled timeframe: ${exhaustive}`);
     }
   }
 
@@ -349,14 +415,24 @@ export function getTimeframeBucketKey(date: Date, timeframe: TimeframeInfo): str
     case 'day':
       return format(startOfHour(d), 'yyyy-MM-dd-HH');
     case 'week':
+    case 'last_week':
+    case 'next_week':
       return format(startOfDay(d), 'yyyy-MM-dd');
     case 'month':
-    case 'next_month':
-      return `${format(startOfWeek(d, { weekStartsOn: 1 }), 'yyyy')}-W${format(startOfWeek(d, { weekStartsOn: 1 }), 'II')}`;
+    case 'last_month':
+    case 'next_month': {
+      const weekStart = startOfWeek(d, WEEK_OPTIONS);
+      return `${format(weekStart, 'yyyy')}-W${format(weekStart, 'II')}`;
+    }
     case 'year':
     case 'ytd':
-    default:
+    case 'all':
+    case 'custom':
       return format(startOfMonth(d), 'yyyy-MM');
+    default: {
+      const exhaustive: never = effectiveKey;
+      throw new Error(`Unhandled timeframe: ${exhaustive}`);
+    }
   }
 }
 
@@ -415,14 +491,17 @@ export function getPreviousPeriodRange(timeframe: TimeframeInfo): { start: Date;
         end: endOfDay(previousEnd)
       };
     }
-    case 'month': {
-      const currentMonthStart = startOfMonth(currentStart);
-      const previousMonthStart = startOfMonth(subMonths(currentMonthStart, 1));
+    case 'last_week':
+    case 'next_week': {
+      const weekStart = startOfWeek(currentStart, WEEK_OPTIONS);
+      const previousStart = subWeeks(weekStart, 1);
       return {
-        start: previousMonthStart,
-        end: endOfMonth(previousMonthStart)
+        start: previousStart,
+        end: endOfWeek(previousStart, WEEK_OPTIONS)
       };
     }
+    case 'month':
+    case 'last_month':
     case 'next_month': {
       const currentMonthStart = startOfMonth(currentStart);
       const previousMonthStart = startOfMonth(subMonths(currentMonthStart, 1));
@@ -431,7 +510,9 @@ export function getPreviousPeriodRange(timeframe: TimeframeInfo): { start: Date;
         end: endOfMonth(previousMonthStart)
       };
     }
-    case 'custom': {
+    case 'custom':
+    case 'year':
+    case 'ytd': {
       const periodMs = currentEnd.getTime() - currentStart.getTime();
       const previousEnd = new Date(currentStart.getTime() - 1);
       const previousStart = new Date(previousEnd.getTime() - periodMs);
@@ -440,16 +521,9 @@ export function getPreviousPeriodRange(timeframe: TimeframeInfo): { start: Date;
         end: previousEnd
       };
     }
-    case 'year':
-    case 'ytd':
     default: {
-      const periodMs = currentEnd.getTime() - currentStart.getTime();
-      const previousEnd = new Date(currentStart.getTime() - 1);
-      const previousStart = new Date(previousEnd.getTime() - periodMs);
-      return {
-        start: previousStart,
-        end: previousEnd
-      };
+      const exhaustive: never = timeframe.key;
+      throw new Error(`Unhandled timeframe: ${exhaustive}`);
     }
   }
 }

@@ -1,7 +1,12 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { Types } from 'mongoose';
 
+import { isTerminalReferralStatus } from '@/constants/referrals';
 import { connectMongo } from '@/lib/mongoose';
 import { requireAdmin } from '@/lib/auth';
+import { pickLatestClosedTaskTitles } from '@/lib/latest-closed-task';
+import { loadReferralDesignationMap } from '@/lib/server/referral-networks';
+import { parseTaskNetwork, referralMatchesTaskNetwork } from '@/lib/task-network';
 import { AdminTask } from '@/models/admin-task';
 import { Referral } from '@/models/referral';
 
@@ -12,17 +17,6 @@ const NO_CACHE_HEADERS = {
   Pragma: 'no-cache',
 };
 
-// Referral-model terminal statuses — referrals in these states no longer need
-// follow-up tasks, so they are excluded from the "no open tasks" call list.
-const TERMINAL_REFERRAL_STATUS_KEYS = new Set<string>(['closed', 'lost', 'terminated']);
-
-function normalizeStatusKey(value: unknown): string {
-  return String(value ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '_');
-}
-
 export interface NoOpenTaskReferralEntry {
   id: string;
   borrowerName: string;
@@ -30,10 +24,20 @@ export interface NoOpenTaskReferralEntry {
   agentName: string | null;
   mcName: string | null;
   lastActivityAt: string | null;
+  lastTaskTitle: string | null;
 }
 
 interface PopulatedNameRef {
   name?: string;
+}
+
+interface ClosedTaskRow {
+  referralId?: { toString(): string };
+  title?: string;
+  status: string;
+  completedAt?: Date;
+  dismissedAt?: Date;
+  updatedAt?: Date;
 }
 
 interface ReferralLeanRow {
@@ -41,13 +45,17 @@ interface ReferralLeanRow {
   borrower?: { name?: string };
   status?: string;
   assignedAgent?: PopulatedNameRef | null;
+  buySideAgent?: unknown;
+  sellSideAgent?: unknown;
   lender?: PopulatedNameRef | null;
+  ahaBucket?: 'AHA' | 'AHA_OOS' | null;
+  org?: string | null;
   updatedAt?: Date;
   referralDate?: Date | null;
   createdAt?: Date;
 }
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     await requireAdmin();
   } catch (err) {
@@ -59,6 +67,8 @@ export async function GET(): Promise<NextResponse> {
   }
 
   await connectMongo();
+
+  const network = parseTaskNetwork(new URL(request.url).searchParams.get('network'));
 
   const openTasks = await AdminTask.find({ status: 'open' })
     .select('referralId')
@@ -73,23 +83,61 @@ export async function GET(): Promise<NextResponse> {
   const referrals = await Referral.find({ deletedAt: null })
     .populate('assignedAgent', 'name')
     .populate('lender', 'name')
-    .select('borrower.name status assignedAgent lender updatedAt referralDate createdAt')
+    .select('borrower.name status assignedAgent buySideAgent sellSideAgent lender updatedAt referralDate createdAt ahaBucket org')
     .lean<ReferralLeanRow[]>();
 
-  const entries: NoOpenTaskReferralEntry[] = referrals
-    .filter((referral) => {
-      if (TERMINAL_REFERRAL_STATUS_KEYS.has(normalizeStatusKey(referral.status))) return false;
-      return !openTaskReferralIds.has(referral._id.toString());
+  const candidates = referrals.filter((referral) => {
+    if (isTerminalReferralStatus(referral.status)) return false;
+    return !openTaskReferralIds.has(referral._id.toString());
+  });
+
+  const designationByReferral = network === 'all'
+    ? null
+    : await loadReferralDesignationMap(candidates);
+
+  const matched = designationByReferral
+    ? candidates.filter((referral) =>
+        referralMatchesTaskNetwork(designationByReferral.get(referral._id.toString()) ?? null, network)
+      )
+    : candidates;
+
+  const matchedIds = matched.map((referral) => new Types.ObjectId(referral._id.toString()));
+  const closedTasks: ClosedTaskRow[] = matchedIds.length === 0
+    ? []
+    : await AdminTask.find({
+        status: { $in: ['completed', 'dismissed'] },
+        referralId: { $in: matchedIds },
+      })
+        .select('referralId title status completedAt dismissedAt updatedAt')
+        .lean<ClosedTaskRow[]>();
+
+  const titleByReferral = pickLatestClosedTaskTitles(
+    closedTasks.flatMap((task) => {
+      const referralId = task.referralId?.toString();
+      if (!referralId) return [];
+      return [{
+        referralId,
+        title: task.title,
+        status: task.status,
+        completedAt: task.completedAt,
+        dismissedAt: task.dismissedAt,
+        updatedAt: task.updatedAt,
+      }];
     })
+  );
+
+  const entries: NoOpenTaskReferralEntry[] = matched
     .map((referral) => {
       const lastActivityAt = referral.updatedAt ?? referral.referralDate ?? referral.createdAt;
+      const id = referral._id.toString();
       return {
-        id: referral._id.toString(),
+        id,
         borrowerName: referral.borrower?.name ?? 'Unknown',
         status: referral.status ?? 'New Lead',
         agentName: referral.assignedAgent?.name ?? null,
         mcName: referral.lender?.name ?? null,
         lastActivityAt: lastActivityAt ? new Date(lastActivityAt).toISOString() : null,
+        lastTaskTitle: titleByReferral.get(id) ?? null,
       };
     })
     .sort((a, b) => {

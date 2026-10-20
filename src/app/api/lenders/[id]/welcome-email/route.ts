@@ -4,6 +4,7 @@ import { connectMongo } from '@/lib/mongoose';
 import { LenderMC } from '@/models/lender';
 import { getCurrentSession } from '@/lib/auth';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
+import { renderMcWelcomeEmail } from '@/lib/email-templates/invites';
 
 interface Params {
   params: { id: string };
@@ -36,19 +37,7 @@ export async function POST(_request: NextRequest, { params }: Params): Promise<N
 
   const inviteLink = `${baseUrl}/signup?role=mortgage-consultant&email=${encodeURIComponent(lender.email)}`;
   const lenderFirstName = lender.name?.trim().split(/\s+/)[0] ?? lender.name ?? 'there';
-  const html = `
-    <p>Hi ${lenderFirstName},</p>
-    <p>You have been invited to Referral CRM. Please complete your profile and choose a password to finish setting up your login.</p>
-    <p><a href="${inviteLink}">Complete your profile</a> to save your credentials and start collaborating.</p>
-    <p>If you were not expecting this invitation, please contact your admin.</p>
-  `;
-  const text = `Hi ${lenderFirstName},
-
-You have been invited to Referral CRM. Please complete your profile and choose a password to finish setting up your login.
-
-Complete your profile: ${inviteLink}
-
-If you were not expecting this invitation, please contact your admin.`;
+  const { html, text } = renderMcWelcomeEmail({ firstName: lenderFirstName, inviteLink });
 
   try {
     const delivered = await sendTransactionalEmail({

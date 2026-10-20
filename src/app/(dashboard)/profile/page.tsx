@@ -9,10 +9,8 @@ export const metadata: Metadata = {
 
 export default function ProfilePage() {
   return (
-    <div>
-      <div className="max-w-3xl">
-        <ProfileForm />
-      </div>
+    <div className="space-y-5">
+      <ProfileForm />
       <ProfileMetrics />
     </div>
   );

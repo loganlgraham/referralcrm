@@ -12,6 +12,16 @@ import { Types } from 'mongoose';
 import { LenderMC } from '@/models/lender';
 import { buildReferralLink } from '@/lib/referral-links';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
+import {
+  renderAgentMcAssignmentThankYouEmail,
+  renderMcAssignmentEmail,
+} from '@/lib/email-templates/referral-ops';
+import { generateAndReconcileAdminTasks } from '@/lib/server/admin-task-reconciler';
+import {
+  deriveReferralStatusFromSides,
+  pickPrimarySideForReferral,
+} from '@/lib/server/referral-sides';
+import { formatPhoneNumber } from '@/utils/formatters';
 
 interface Params {
   params: { id: string };
@@ -54,15 +64,12 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     return new NextResponse('Forbidden', { status: 403 });
   }
 
-  const previousLenderValue = (referral.lender as any)?._id ?? referral.lender ?? null;
-  const previousLender = previousLenderValue ? previousLenderValue.toString() : null;
-  if (
-    session.user.role === 'agent' &&
-    previousLender &&
-    previousLender !== parsed.data.lenderId
-  ) {
+  if (session.user.role !== 'admin') {
     return new NextResponse('Forbidden', { status: 403 });
   }
+
+  const previousLenderValue = (referral.lender as any)?._id ?? referral.lender ?? null;
+  const previousLender = previousLenderValue ? previousLenderValue.toString() : null;
   referral.lender = parsed.data.lenderId as any;
   referral.audit = referral.audit || [];
   const auditEntry: Record<string, unknown> = {
@@ -79,19 +86,78 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   }
 
   referral.audit.push(auditEntry as any);
+
+  const isNewAssignment = !previousLender || previousLender !== parsed.data.lenderId;
+  const previousStatusRaw = referral.status;
+  const previousStatus = previousStatusRaw === 'Showing Homes' ? 'Active Lead' : previousStatusRaw;
+  let advancedToPaired = false;
+  const now = new Date();
+
+  // Agent-sent AFC referrals: assigning an MC completes pairing.
+  if (isNewAssignment && referral.origin === 'agent' && previousStatus === 'New Lead') {
+    const clientType = referral.clientType ?? null;
+    if (clientType === 'Both') {
+      referral.buyStatus = 'Paired';
+      referral.sellStatus = 'Paired';
+    } else if (clientType === 'Seller') {
+      referral.sellStatus = 'Paired';
+      referral.dealSide = 'sell';
+    } else {
+      // Buyer (default) or missing clientType
+      const side = pickPrimarySideForReferral({
+        buySideAgent: referral.buySideAgent as any,
+        sellSideAgent: referral.sellSideAgent as any,
+        assignedAgent: referral.assignedAgent as any,
+        dealSide: referral.dealSide ?? null,
+        clientType,
+      });
+      if (side === 'sell') {
+        referral.sellStatus = 'Paired';
+        referral.dealSide = 'sell';
+      } else {
+        referral.buyStatus = 'Paired';
+        referral.dealSide = 'buy';
+      }
+    }
+
+    referral.status = deriveReferralStatusFromSides(
+      referral.buyStatus ?? previousStatus,
+      referral.sellStatus ?? previousStatus,
+      clientType
+    );
+    referral.statusLastUpdated = now;
+
+    const statusAuditEntry: Record<string, unknown> = {
+      actorRole: session.user.role,
+      field: 'status',
+      previousValue: previousStatus,
+      newValue: referral.status,
+      timestamp: now,
+    };
+    if (auditActorId) {
+      statusAuditEntry.actorId = auditActorId;
+    }
+    referral.audit.push(statusAuditEntry as any);
+
+    const sla = (referral.sla ??= {} as any);
+    sla.lastPairedAt = now;
+    referral.markModified?.('sla');
+    advancedToPaired = true;
+  }
+
   await referral.save();
 
   const previousLenderDoc = previousLender
     ? await LenderMC.findById(previousLender)
-        .select('name email')
-        .lean<{ _id: Types.ObjectId; name?: string; email?: string }>()
+        .select('name email phone')
+        .lean<{ _id: Types.ObjectId; name?: string; email?: string; phone?: string }>()
     : null;
   const nextLenderDoc = await LenderMC.findById(parsed.data.lenderId)
-    .select('name email')
-    .lean<{ _id: Types.ObjectId; name?: string; email?: string }>();
+    .select('name email phone')
+    .lean<{ _id: Types.ObjectId; name?: string; email?: string; phone?: string }>();
 
-  const previousLabel = previousLenderDoc?.name?.trim() || 'Unassigned';
-  const nextLabel = nextLenderDoc?.name?.trim() || 'Unassigned';
+  const previousLabel = previousLenderDoc?.name?.trim() || 'Pending';
+  const nextLabel = nextLenderDoc?.name?.trim() || 'Pending';
   const activityContent =
     previousLender && previousLender !== parsed.data.lenderId
       ? `Reassigned mortgage consultant from ${previousLabel} to ${nextLabel}`
@@ -107,8 +173,9 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     content: activityContent,
   });
 
-  const isNewAssignment = !previousLender || previousLender !== parsed.data.lenderId;
   const lenderEmail = nextLenderDoc?.email?.trim();
+  const lenderPhone = nextLenderDoc?.phone?.trim();
+  const mcName = nextLenderDoc?.name?.trim() || 'a mortgage consultant';
 
   // Check if any attached agent has AGIT designation - skip MC notification if so
   const hasAgitAgent =
@@ -117,19 +184,19 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     (referral.sellSideAgent as any)?.ahaDesignation === 'AGIT';
 
   const shouldNotifyMc = referral.origin === 'agent' && !hasAgitAgent;
+  const borrowerName = referral.borrower?.name?.trim() || 'your referral';
+  const referralLink = buildReferralLink(referral._id.toString());
+  const agentContact = referral.assignedAgent as
+    | { name?: string; email?: string; phone?: string }
+    | null
+    | undefined;
+  const agentName = typeof agentContact?.name === 'string' ? agentContact.name.trim() : '';
+  const agentEmail = typeof agentContact?.email === 'string' ? agentContact.email.trim() : '';
+  const agentPhone = typeof agentContact?.phone === 'string' ? agentContact.phone.trim() : '';
 
   if (isNewAssignment && lenderEmail && shouldNotifyMc && isTransactionalEmailConfigured()) {
-    const borrowerName = referral.borrower?.name?.trim() || 'your referral';
     const borrowerEmail = referral.borrower?.email?.trim();
     const borrowerPhone = referral.borrower?.phone?.trim();
-    const referralLink = buildReferralLink(referral._id.toString());
-    const agentContact = referral.assignedAgent as
-      | { name?: string; email?: string; phone?: string }
-      | null
-      | undefined;
-    const agentName = typeof agentContact?.name === 'string' ? agentContact.name.trim() : '';
-    const agentEmail = typeof agentContact?.email === 'string' ? agentContact.email.trim() : '';
-    const agentPhone = typeof agentContact?.phone === 'string' ? agentContact.phone.trim() : '';
 
     const borrowerLines = [
       `Borrower: ${borrowerName}`,
@@ -140,35 +207,72 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     const agentLines = [agentName, agentEmail, agentPhone].filter((line) => line && line.trim()) as string[];
 
     const greetingName = nextLenderDoc?.name?.trim() || 'there';
-    const html = `
-      <p>Hi ${greetingName},</p>
-      <p>You have been assigned a new referral.</p>
-      <p>${borrowerLines.join('<br />')}</p>
-      ${
-        agentLines.length > 0
-          ? `<p><strong>Agent who sent it:</strong><br />${agentLines.join('<br />')}</p>`
-          : ''
-      }
-      <p><a href="${referralLink}">View the referral</a> to acknowledge and follow up.</p>
-    `;
-    const text = `Hi ${greetingName},
-
-You have been assigned a new referral.
-${borrowerLines.join('\n')}
-
-${agentLines.length > 0 ? `Agent who sent it:\n${agentLines.join('\n')}\n\n` : ''}View the referral: ${referralLink}`;
+    const rendered = renderMcAssignmentEmail({
+      greetingName,
+      borrowerLines,
+      agentLines,
+      referralLink,
+    });
 
     try {
       await sendTransactionalEmail({
         to: [lenderEmail],
         subject: `New referral: ${borrowerName}`,
-        html,
-        text,
+        html: rendered.html,
+        text: rendered.text,
       });
     } catch (error) {
       console.error('Failed to deliver MC assignment email', error);
     }
   }
 
-  return NextResponse.json({ id: referral._id.toString() });
+  // Notify the referring agent when an admin assigns the MC
+  if (
+    isNewAssignment &&
+    referral.origin === 'agent' &&
+    agentEmail &&
+    isTransactionalEmailConfigured()
+  ) {
+    const formattedLenderPhone = formatPhoneNumber(lenderPhone);
+    const mcLines = [
+      mcName,
+      lenderEmail ? `Email: ${lenderEmail}` : null,
+      formattedLenderPhone ? `Phone: ${formattedLenderPhone}` : null,
+    ].filter(Boolean) as string[];
+
+    const greeting = agentName || 'there';
+    const rendered = renderAgentMcAssignmentThankYouEmail({
+      greeting,
+      borrowerName,
+      mcName,
+      mcLines,
+      referralLink,
+    });
+
+    try {
+      await sendTransactionalEmail({
+        to: [agentEmail],
+        subject: `Thanks for your referral — ${mcName} is on it for ${borrowerName}`,
+        html: rendered.html,
+        text: rendered.text,
+      });
+    } catch (error) {
+      console.error('Failed to deliver agent MC assignment email', error);
+    }
+  }
+
+  if (advancedToPaired) {
+    await generateAndReconcileAdminTasks({
+      referralId: referral._id.toString(),
+      trigger: 'referral.status_changed',
+      actorId: session.user.id,
+    }).catch((error) => {
+      console.error('[Admin Tasks] Failed to reconcile tasks after MC assign Paired advance:', error);
+    });
+  }
+
+  return NextResponse.json({
+    id: referral._id.toString(),
+    status: referral.status,
+  });
 }

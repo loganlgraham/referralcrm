@@ -13,10 +13,19 @@ import { ReferralMetadata } from '@/models/referral-metadata';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { logReferralActivity } from '@/lib/server/activities';
 import { sendTransactionalEmail, isTransactionalEmailConfigured } from '@/lib/email';
+import {
+  renderAfcAdminNotificationEmail,
+  renderAgentReferralReceiptEmail,
+  renderNewReferralNotificationEmail,
+} from '@/lib/email-templates/referral-ops';
+import { getReferralNotificationRecipients } from '@/lib/server/cc-recipients';
 import { buildReferralLink } from '@/lib/referral-links';
 import { normalizePhoneNumber } from '@/utils/phone-utils';
 import { generateAndReconcileAdminTasks } from '@/lib/server/admin-task-reconciler';
 import { resolveOriginalLenderId } from '@/lib/server/referral-transfer';
+import { createAdminNotifications } from '@/lib/server/notifications';
+import { User } from '@/models/user';
+import { createPendingLoanFileNumber, displayLoanFileNumber } from '@/utils/loan-file-number';
 import {
   addWeeks,
   format,
@@ -950,10 +959,16 @@ export async function POST(request: Request) {
     if (!loanFileNumber) {
       return NextResponse.json({ error: 'Loan file number is required.' }, { status: 400 });
     }
+    if (!parsed.data.borrowerCurrentAddress?.trim()) {
+      return NextResponse.json({ error: 'Borrower current address is required.' }, { status: 400 });
+    }
   }
 
   const source = origin === 'agent' ? '' : providedSource;
   const endorser = origin === 'agent' ? '' : providedEndorser;
+  const clientType = origin === 'agent' ? 'Buyer' : parsed.data.clientType;
+  const borrowerCurrentAddress =
+    origin === 'agent' ? '' : (parsed.data.borrowerCurrentAddress?.trim() ?? '');
 
   const referralData: Record<string, unknown> = {
     borrower: {
@@ -965,10 +980,10 @@ export async function POST(request: Request) {
     },
     source,
     endorser,
-    clientType: parsed.data.clientType,
+    clientType,
     lookingInZip: primaryZip,
     lookingInZips,
-    borrowerCurrentAddress: parsed.data.borrowerCurrentAddress,
+    borrowerCurrentAddress,
     stageOnTransfer: parsed.data.stageOnTransfer,
     loanType: parsed.data.loanType,
     estPurchasePriceCents: preApprovalAmountCents,
@@ -1000,6 +1015,10 @@ export async function POST(request: Request) {
 
   if (loanFileNumber) {
     referralData.loanFileNumber = loanFileNumber;
+  } else if (origin === 'agent') {
+    // Unique index forbids multiple null loanFileNumbers; store a pending
+    // placeholder until an admin fills in the real file number.
+    referralData.loanFileNumber = createPendingLoanFileNumber();
   }
 
   if (session.user.role === 'mc') {
@@ -1010,22 +1029,17 @@ export async function POST(request: Request) {
   }
 
   let creatorAgentDesignation: string | null = null;
+  let creatorAgentEmail: string | null = null;
   if (session.user.role === 'agent') {
-    const agent = await Agent.findOne({ userId: session.user.id }).select('_id ahaDesignation');
+    const agent = await Agent.findOne({ userId: session.user.id }).select('_id ahaDesignation email');
     if (agent) {
       const agentId = agent._id;
       creatorAgentDesignation = agent.ahaDesignation ?? null;
-      if (parsed.data.clientType === 'Seller') {
-        referralData.sellSideAgent = agentId;
-        referralData.assignedAgent = agentId;
-      } else if (parsed.data.clientType === 'Buyer') {
-        referralData.buySideAgent = agentId;
-        referralData.assignedAgent = agentId;
-      } else if (parsed.data.clientType === 'Both') {
-        referralData.buySideAgent = agentId;
-        referralData.sellSideAgent = agentId;
-        referralData.assignedAgent = agentId;
-      }
+      creatorAgentEmail =
+        typeof agent.email === 'string' && agent.email.trim() ? agent.email.trim() : null;
+      // Agent AFC intros are always buy-side
+      referralData.buySideAgent = agentId;
+      referralData.assignedAgent = agentId;
     }
   }
 
@@ -1177,55 +1191,41 @@ export async function POST(request: Request) {
     console.error('[Admin Tasks] Failed to reconcile tasks for new referral:', error);
   });
 
-  // Send email notification to kristen.truong@americanhomeagents.com
+  // Notify the referral coordinators configured for the account.
   // Skip if AGIT agent created the referral
   const hasAgitCreator = creatorAgentDesignation === 'AGIT';
   if (isTransactionalEmailConfigured() && !hasAgitCreator) {
     (async () => {
       try {
-        const escapeHtml = (value: string): string => {
-          return value.replace(/[&<>"']/g, (char) => {
-            switch (char) {
-              case '&':
-                return '&amp;';
-              case '<':
-                return '&lt;';
-              case '>':
-                return '&gt;';
-              case '"':
-                return '&quot;';
-              case "'":
-                return '&#39;';
-              default:
-                return char;
-            }
-          });
-        };
+        const coordinatorRecipients = getReferralNotificationRecipients();
+        if (coordinatorRecipients.length === 0) {
+          return;
+        }
 
         const referralLink = buildReferralLink(referral._id.toString());
         const summaryFields = [
           `Client Type: ${referral.clientType}`,
           `Zip${referral.lookingInZips && referral.lookingInZips.length > 1 ? 's' : ''}: ${(referral.lookingInZips || [referral.lookingInZip]).join(', ')}`,
-          referral.loanFileNumber ? `Loan File Number: ${referral.loanFileNumber}` : null,
+          displayLoanFileNumber(referral.loanFileNumber)
+            ? `Loan File Number: ${displayLoanFileNumber(referral.loanFileNumber)}`
+            : null,
           referral.borrower?.email ? `Email: ${referral.borrower.email}` : null,
           referral.borrower?.phone ? `Phone: ${referral.borrower.phone}` : null,
         ].filter(Boolean) as string[];
 
         const borrowerLabel = borrowerName || 'New Referral';
-        const html = `
-          <p>A new referral has been created for <strong>${escapeHtml(borrowerLabel)}</strong>.</p>
-          <ul>
-            ${summaryFields.map((field) => `<li>${escapeHtml(field)}</li>`).join('')}
-          </ul>
-          <p><a href="${referralLink}">View the referral</a></p>
-        `;
-        const text = `A new referral has been created for ${borrowerLabel}.\n\n${summaryFields.join('\n')}\n\nView the referral: ${referralLink}`;
+        const rendered = renderNewReferralNotificationEmail({
+          borrowerLabel,
+          summaryFields,
+          referralLink,
+        });
 
         await sendTransactionalEmail({
-          to: ['kristen.truong@americanhomeagents.com'],
+          to: coordinatorRecipients,
           subject: `New Referral: ${borrowerLabel}`,
-          html,
-          text
+          html: rendered.html,
+          text: rendered.text,
+          context: { referralId: referral._id.toString() }
         });
       } catch (error) {
         console.error('Failed to send new referral notification email', error);
@@ -1233,6 +1233,100 @@ export async function POST(request: Request) {
     })().catch((error) => {
       console.error('Failed to send new referral notification email', error);
     });
+  }
+
+  // Notify all admins when an agent creates an AFC referral
+  if (session.user.role === 'agent' && !hasAgitCreator) {
+    const agentName = session.user.name || session.user.email || 'An agent';
+    const borrowerLabel = borrowerName || 'New Referral';
+
+    void createAdminNotifications({
+      type: 'referral_created',
+      referralId: referral._id,
+      borrowerName: borrowerLabel,
+      actorRole: session.user.role,
+      actorName: agentName,
+      content: `${agentName} created a new AFC referral for ${borrowerLabel}.`,
+    });
+
+    if (isTransactionalEmailConfigured()) {
+      (async () => {
+        try {
+          const adminUsers = await User.find({ role: 'admin', email: { $ne: null } })
+            .select('name email')
+            .lean<{ name?: string | null; email?: string | null }[]>();
+          const adminEmails = adminUsers
+            .map((user) => (typeof user.email === 'string' && user.email ? user.email.trim() : null))
+            .filter((email): email is string => Boolean(email));
+
+          if (adminEmails.length === 0) {
+            return;
+          }
+
+          const referralLink = buildReferralLink(referral._id.toString());
+          const summaryFields = [
+            `Agent: ${agentName}`,
+            `Client Type: ${referral.clientType}`,
+            `Zip${referral.lookingInZips && referral.lookingInZips.length > 1 ? 's' : ''}: ${(referral.lookingInZips || [referral.lookingInZip]).join(', ')}`,
+            referral.borrower?.email ? `Email: ${referral.borrower.email}` : null,
+            referral.borrower?.phone ? `Phone: ${referral.borrower.phone}` : null,
+          ].filter(Boolean) as string[];
+
+          const rendered = renderAfcAdminNotificationEmail({
+            agentName,
+            borrowerLabel,
+            summaryFields,
+            referralLink,
+          });
+
+          await sendTransactionalEmail({
+            to: adminEmails,
+            subject: `New AFC referral from ${agentName}: ${borrowerLabel}`,
+            html: rendered.html,
+            text: rendered.text,
+          });
+        } catch (error) {
+          console.error('Failed to send admin AFC referral notification email', error);
+        }
+      })().catch((error) => {
+        console.error('Failed to send admin AFC referral notification email', error);
+      });
+    }
+  }
+
+  // Thank the referring agent for their AFC intro
+  if (session.user.role === 'agent' && isTransactionalEmailConfigured()) {
+    const agentReceiptEmail =
+      creatorAgentEmail ||
+      (typeof session.user.email === 'string' && session.user.email.trim()
+        ? session.user.email.trim()
+        : null);
+    const agentGreeting = session.user.name?.trim() || 'there';
+    const borrowerLabel = borrowerName || 'your client';
+
+    if (agentReceiptEmail) {
+      (async () => {
+        try {
+          const referralLink = buildReferralLink(referral._id.toString());
+          const rendered = renderAgentReferralReceiptEmail({
+            agentGreeting,
+            borrowerLabel,
+            referralLink,
+          });
+
+          await sendTransactionalEmail({
+            to: [agentReceiptEmail],
+            subject: `We received your referral for ${borrowerLabel} — thank you!`,
+            html: rendered.html,
+            text: rendered.text,
+          });
+        } catch (error) {
+          console.error('Failed to send agent AFC referral receipt email', error);
+        }
+      })().catch((error) => {
+        console.error('Failed to send agent AFC referral receipt email', error);
+      });
+    }
   }
 
   return NextResponse.json({ id: referral._id.toString() }, { status: 201 });

@@ -1,5 +1,12 @@
 import mongoose from 'mongoose';
 import { attachDatabasePool } from '@vercel/functions';
+import {
+  isCachedConnectionFresh,
+  MONGO_PING_TIMEOUT_MS,
+  MONGO_POOL_OPTIONS,
+  raceWithTimeout,
+  shouldCloseBeforeConnect,
+} from '@/lib/mongo-connection';
 
 const resolvedMongoUri =
   process.env.MONGODB_URI ??
@@ -46,7 +53,10 @@ const registerModels = async () => {
     import('@/models/admin-task'),
     import('@/models/agent'),
     import('@/models/coverage-suggestion'),
+    import('@/models/email-address-health'),
+    import('@/models/email-message'),
     import('@/models/lender'),
+    import('@/models/notification'),
     import('@/models/payment'),
     import('@/models/pre-approval-metric'),
     import('@/models/referral'),
@@ -61,6 +71,8 @@ const registerModels = async () => {
 interface GlobalWithMongoose {
   conn: typeof mongoose | null;
   promise: Promise<typeof mongoose> | null;
+  lastSuccessfulOpAt: number;
+  listenersAttached: boolean;
 }
 
 declare global {
@@ -75,7 +87,15 @@ const globalWithMongoose = global as typeof global & {
 let cached = globalWithMongoose.mongooseGlobal;
 
 if (!cached) {
-  cached = globalWithMongoose.mongooseGlobal = { conn: null, promise: null };
+  cached = globalWithMongoose.mongooseGlobal = {
+    conn: null,
+    promise: null,
+    lastSuccessfulOpAt: 0,
+    listenersAttached: false,
+  };
+} else {
+  cached.lastSuccessfulOpAt ??= 0;
+  cached.listenersAttached ??= false;
 }
 
 /**
@@ -91,6 +111,85 @@ function sleep(ms: number): Promise<void> {
 function isConnectionHealthy(): boolean {
   // Treat only "connected" as healthy. "connecting" should be awaited via cached.promise.
   return cached?.conn?.connection?.readyState === mongoose.ConnectionStates.connected;
+}
+
+function invalidateCache(reason: string): void {
+  if (cached?.conn || cached?.promise) {
+    console.warn(`[mongo] connection ${reason}, clearing cache`);
+  }
+  if (!cached) {
+    return;
+  }
+  cached.conn = null;
+  cached.promise = null;
+  cached.lastSuccessfulOpAt = 0;
+}
+
+function attachLifecycleListeners(connection: mongoose.Connection): void {
+  if (cached?.listenersAttached) {
+    return;
+  }
+  if (cached) {
+    cached.listenersAttached = true;
+  }
+  // A transient disconnect is recovered by the driver; keep the client and force a ping
+  // on the next request instead of opening a second client next to the reconnecting one.
+  connection.on('disconnected', () => {
+    if (cached) {
+      cached.lastSuccessfulOpAt = 0;
+    }
+  });
+  connection.on('close', () => {
+    if (!closingIntentionally) {
+      invalidateCache('close');
+    }
+  });
+  connection.on('error', (error: unknown) => {
+    console.error('[mongo] connection error', error instanceof Error ? error.message : String(error));
+  });
+}
+
+let closingIntentionally = false;
+
+async function closeExistingClient(): Promise<void> {
+  const connection = mongoose.connection;
+  const hasClient = Boolean(connection.getClient?.());
+  if (!shouldCloseBeforeConnect(connection.readyState, hasClient)) {
+    return;
+  }
+  closingIntentionally = true;
+  try {
+    await mongoose.disconnect();
+  } catch (error) {
+    console.warn(
+      '[mongo] closing previous client failed',
+      error instanceof Error ? error.message : String(error)
+    );
+  } finally {
+    closingIntentionally = false;
+  }
+}
+
+async function pingWithTimeout(connection: mongoose.Connection): Promise<boolean> {
+  const db = connection.db;
+  if (!db) {
+    return false;
+  }
+  const ping = db.admin().command({ ping: 1 }).then(
+    () => true,
+    () => false
+  );
+  try {
+    return await raceWithTimeout(ping, MONGO_PING_TIMEOUT_MS, 'ping timeout');
+  } catch {
+    return false;
+  }
+}
+
+async function resetMongooseConnection(): Promise<void> {
+  invalidateCache('reset');
+  // A "disconnected" client may still be retrying in the background with live sockets.
+  await closeExistingClient();
 }
 
 /**
@@ -162,18 +261,42 @@ async function retryConnection(
   }
 }
 
-export async function connectMongo(): Promise<typeof mongoose> {
-  // Check if we have a cached connection that's still healthy
-  if (cached?.conn && isConnectionHealthy()) {
-    await registerModels();
-    return cached.conn;
-  }
+const SLOW_CONNECT_MS = 2_000;
 
-  // If connection is stale, clear it
-  if (cached?.conn && !isConnectionHealthy()) {
+export async function connectMongo(): Promise<typeof mongoose> {
+  const startedAt = Date.now();
+  try {
+    return await connectMongoUnchecked();
+  } finally {
+    const durationMs = Date.now() - startedAt;
+    if (durationMs > SLOW_CONNECT_MS) {
+      console.warn(
+        `[mongo] slow connect: ${durationMs}ms readyState=${cached?.conn?.connection?.readyState ?? 'none'}`
+      );
+    }
+  }
+}
+
+async function connectMongoUnchecked(): Promise<typeof mongoose> {
+  if (cached?.conn && isConnectionHealthy()) {
+    if (isCachedConnectionFresh(cached.lastSuccessfulOpAt)) {
+      cached.lastSuccessfulOpAt = Date.now();
+      await registerModels();
+      return cached.conn;
+    }
+
+    const pingOk = await pingWithTimeout(cached.conn.connection);
+    if (pingOk) {
+      cached.lastSuccessfulOpAt = Date.now();
+      await registerModels();
+      return cached.conn;
+    }
+
+    console.warn('Mongoose connection failed ping, reconnecting...');
+    await resetMongooseConnection();
+  } else if (cached?.conn && !isConnectionHealthy()) {
     console.warn('Mongoose connection is stale, reconnecting...');
-    cached.conn = null;
-    cached.promise = null;
+    await resetMongooseConnection();
   }
 
   // Create new connection with retry logic
@@ -181,15 +304,7 @@ export async function connectMongo(): Promise<typeof mongoose> {
     const needsTLS = requiresTLS(MONGODB_URI);
     
     const connectionOptions: Parameters<typeof mongoose.connect>[1] = {
-      bufferCommands: false,
-      serverSelectionTimeoutMS: 15000, // Generous for a cold Flex cluster wake; same-region so failover is fast
-      socketTimeoutMS: 45000, // Add socket timeout
-      connectTimeoutMS: 30000, // Add connection timeout
-      maxPoolSize: 5, // Serverless-appropriate; low read volume needs nowhere near 10
-      minPoolSize: 0, // Avoid keeping unnecessary connections open between invocations
-      maxIdleTimeMS: 30000,
-      retryWrites: true,
-      retryReads: true,
+      ...MONGO_POOL_OPTIONS,
     };
     
     // Configure TLS options for secure connections
@@ -226,10 +341,13 @@ export async function connectMongo(): Promise<typeof mongoose> {
 
     cached!.promise = retryConnection(async () => {
       try {
+        await closeExistingClient();
         const conn = await mongoose.connect(MONGODB_URI, connectionOptions);
 
         // Ensure the underlying connection is actually ready.
-        await waitForConnected(conn.connection, connectionOptions.serverSelectionTimeoutMS ?? 30000);
+        await waitForConnected(conn.connection, connectionOptions.serverSelectionTimeoutMS ?? 10000);
+
+        attachLifecycleListeners(conn.connection);
 
         // Let Fluid Compute drain pooled connections when the instance suspends,
         // so idle connections don't accumulate against the Atlas connection cap.
@@ -237,11 +355,17 @@ export async function connectMongo(): Promise<typeof mongoose> {
           attachDatabasePool(conn.connection.getClient());
         }
 
+        if (cached) {
+          cached.lastSuccessfulOpAt = Date.now();
+        }
+
         return conn;
       } catch (error) {
-        // Clear the cached promise on failure so we can retry
-        cached!.promise = null;
+        // Keep cached.promise set during retries so concurrent callers await this attempt
+        // instead of starting a parallel client; the outer .catch clears it on final failure.
+        await closeExistingClient();
         cached!.conn = null;
+        cached!.lastSuccessfulOpAt = 0;
         
         // Enhance error messages for SSL/TLS issues
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -278,6 +402,7 @@ export async function connectMongo(): Promise<typeof mongoose> {
       // Clear cache on final failure after all retries
       cached!.promise = null;
       cached!.conn = null;
+      cached!.lastSuccessfulOpAt = 0;
       
       const errorMessage = error instanceof Error ? error.message : String(error);
       const isSSLError = errorMessage.includes('SSL') || 
@@ -306,12 +431,14 @@ export async function connectMongo(): Promise<typeof mongoose> {
 
   try {
     cached!.conn = await cached!.promise;
+    cached!.lastSuccessfulOpAt = Date.now();
     await registerModels();
     return cached!.conn;
   } catch (error) {
     // Clear cache on error to allow retry
     cached!.promise = null;
     cached!.conn = null;
+    cached!.lastSuccessfulOpAt = 0;
     
     const errorMessage = error instanceof Error ? error.message : String(error);
     const isSSLError = errorMessage.includes('SSL') || 

@@ -5,6 +5,7 @@ pnpm-lock.yaml
 .env.local
 .env*
 !.env.example
+!.env.test.example
 .DS_Store
 playwright-report
 /coverage
@@ -16,3 +17,10 @@ tsconfig.tsbuildinfo
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+.playwright-cli/
+
+# Cursor debug logs
+.cursor/debug-*.log
+
+.vercel
+.tmp/

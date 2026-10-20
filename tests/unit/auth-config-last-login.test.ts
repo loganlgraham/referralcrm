@@ -12,6 +12,10 @@ jest.mock('@/models/user', () => ({
   },
 }));
 
+jest.mock('@/lib/server/agent-activity', () => ({
+  recordAgentLoginEvent: jest.fn(async () => undefined),
+}));
+
 jest.mock('next-auth/providers/email', () => ({
   __esModule: true,
   default: jest.fn(() => ({ id: 'email' }))
@@ -21,11 +25,17 @@ jest.mock('@next-auth/mongodb-adapter', () => ({
   MongoDBAdapter: jest.fn(() => ({ name: 'mock-adapter' }))
 }));
 
+const { MongoDBAdapter } = require('@next-auth/mongodb-adapter') as {
+  MongoDBAdapter: jest.Mock;
+};
 const { connectMongo } = require('@/lib/mongoose') as {
   connectMongo: jest.Mock;
 };
 const { User } = require('@/models/user') as {
   User: { updateOne: jest.Mock };
+};
+const { recordAgentLoginEvent } = require('@/lib/server/agent-activity') as {
+  recordAgentLoginEvent: jest.Mock;
 };
 const { authOptions, persistUserLastLoginAt } = require('@/lib/auth-config') as {
   authOptions: {
@@ -38,10 +48,12 @@ const { authOptions, persistUserLastLoginAt } = require('@/lib/auth-config') as 
 describe('Auth config last login persistence', () => {
   const mockedConnectMongo = connectMongo;
   const mockedUpdateOne = User.updateOne;
+  const mockedRecordAgentLoginEvent = recordAgentLoginEvent;
 
   beforeEach(() => {
     mockedConnectMongo.mockClear();
     mockedUpdateOne.mockClear();
+    mockedRecordAgentLoginEvent.mockClear();
   });
 
   it('persists last login timestamp using user id', async () => {
@@ -98,7 +110,21 @@ describe('Auth config last login persistence', () => {
     ).resolves.toBeUndefined();
   });
 
-  it('persists last login when jwt callback receives user', async () => {
+  it('records a detailed login event after a successful sign-in', async () => {
+    await authOptions.events?.signIn?.({
+      user: { id: '507f1f77bcf86cd799439011', email: 'agent@example.com' },
+      account: null,
+      profile: null,
+      isNewUser: false
+    } as never);
+
+    expect(mockedRecordAgentLoginEvent).toHaveBeenCalledWith({
+      id: '507f1f77bcf86cd799439011',
+      email: 'agent@example.com'
+    });
+  });
+
+  it('does not write login timestamps when jwt callback receives user', async () => {
     const jwt = authOptions.callbacks?.jwt;
     expect(jwt).toBeDefined();
 
@@ -116,29 +142,17 @@ describe('Auth config last login persistence', () => {
       } as never
     );
 
-    expect(mockedConnectMongo).toHaveBeenCalled();
-    expect(mockedUpdateOne).toHaveBeenCalledWith(
-      { _id: expect.any(Types.ObjectId) },
-      { $set: { lastLoginAt: expect.any(Date) } }
-    );
+    expect(mockedUpdateOne).not.toHaveBeenCalled();
+    expect(mockedRecordAgentLoginEvent).not.toHaveBeenCalled();
   });
 
-  it('does not throw when jwt last-login persistence fails', async () => {
-    mockedUpdateOne.mockRejectedValueOnce(new Error('write failed'));
-    const jwt = authOptions.callbacks?.jwt;
+  it('defers adapter Mongo connect until the client promise is used', async () => {
+    const adapterArg = MongoDBAdapter.mock.calls[0]?.[0] as Promise<unknown> | undefined;
+    expect(adapterArg).toBeDefined();
+    expect(typeof adapterArg?.then).toBe('function');
 
-    await expect(
-      jwt!({
-        token: {},
-        user: {
-          id: '507f1f77bcf86cd799439011',
-          email: 'agent@example.com',
-          role: 'agent'
-        },
-        account: null,
-        profile: undefined,
-        trigger: 'signIn'
-      } as never)
-    ).resolves.toEqual(expect.any(Object));
+    mockedConnectMongo.mockClear();
+    await adapterArg;
+    expect(mockedConnectMongo).toHaveBeenCalled();
   });
 });

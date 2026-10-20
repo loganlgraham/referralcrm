@@ -15,9 +15,22 @@ import Link from 'next/link';
 import useSWR from 'swr';
 import { fetcher } from '@/utils/fetcher';
 import { formatCurrency, formatDate, formatNumber } from '@/utils/formatters';
-import { buildGmailComposeUrl } from '@/utils/gmail';
 import { Info, Trash2 } from 'lucide-react';
+import { dashCardClasses } from '@/components/dashboard/dashboard-ui';
 import { Modal } from '@/components/ui/modal';
+import { PageHeader } from '@/components/ui/page-header';
+import { sectionLabelClasses } from '@/components/ui/section-label';
+import { PillTabs, type PillTabDefinition } from '@/components/ui/pill-tabs';
+import { MultiSegmentedPills } from '@/components/ui/segmented-pills';
+import { cn } from '@/lib/cn';
+import { buttonClasses } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select';
 import { Tooltip } from '@/components/ui/tooltip';
 import { DEAL_STATUS_LABELS, type DealStatus } from '@/constants/deals';
 import {
@@ -31,8 +44,7 @@ import {
   type TimeframeKey,
   type TimeframePreset
 } from '@/components/dashboard/timeframe-controls';
-
-type NetworkFilter = 'ALL' | 'AHA' | 'AHA_OOS';
+import { parseNetworkList, serializeNetworkList, type NetworkOption } from '@/utils/network-filter';
 
 interface TrendPoint {
   key: string;
@@ -55,6 +67,24 @@ interface LeaderboardEntry {
   outsideLenderLossCount?: number;
   outsideLenderLossRate?: number;
   referrals?: number;
+  unattributableReferrals?: number;
+}
+
+interface LostAttributionBreakdownEntry {
+  id: string;
+  name: string;
+  count: number;
+}
+
+interface LostAttributionSummary {
+  attributableCount: number;
+  unattributableCount: number;
+  totalCount: number;
+  classifiedCount: number;
+  classifiedRatePercent: number;
+  unattributableByMc: LostAttributionBreakdownEntry[];
+  unattributableBySource: LostAttributionBreakdownEntry[];
+  unattributableByReason: LostAttributionBreakdownEntry[];
 }
 
 interface AhaRankedAgent {
@@ -140,19 +170,18 @@ interface StageOnTransferDrilldownEntry {
 const LIST_SCROLL_VISIBLE_ROWS = 5;
 const LEADERBOARD_ROW_HEIGHT_REM = 2.5;
 const LEADERBOARD_HEADER_HEIGHT_REM = 1.75;
-const TERMINATED_DEAL_ROW_HEIGHT_REM = 4;
 const RANKED_LIST_ROW_HEIGHT_REM = 3.25;
 const RANKED_LIST_PREVIEW_ROWS = 10;
 const AFC_RISK_VISIBLE_ROWS = 7;
 
 const getCompositeScoreStyle = (score: number) => {
-  if (score >= 75) return 'bg-emerald-50 text-emerald-700';
-  if (score >= 50) return 'bg-amber-50 text-amber-700';
-  return 'bg-red-50 text-red-700';
+  if (score >= 75) return 'bg-success-soft text-success';
+  if (score >= 50) return 'bg-warning-soft text-warning';
+  return 'bg-danger-soft text-danger';
 };
 
 const getKpiWeightBadge = (weight: 'critical' | 'high' | 'medium' | 'low') => {
-  if (weight === 'critical') return 'bg-indigo-600 text-white';
+  if (weight === 'critical') return 'bg-accent text-white';
   if (weight === 'high') return 'bg-[hsl(var(--text))] text-white';
   if (weight === 'medium') return 'bg-foreground-muted text-white';
   return 'bg-surface-subtle text-foreground-muted';
@@ -390,6 +419,7 @@ interface DashboardResponse {
     revenueExpected: LeaderboardEntry[];
     netRevenue: LeaderboardEntry[];
     lostDeals: LeaderboardEntry[];
+    lostAttribution?: LostAttributionSummary;
     agentCreatedMcAssignments: LeaderboardEntry[];
     ahaLeaderboards: { rankedAgents: AhaRankedAgent[] };
     ahaOosLeaderboards: { rankedAgents: AhaRankedAgent[] };
@@ -424,54 +454,6 @@ interface DashboardResponse {
     stalePipelineCount: number;
     stalePipelineList: StaleReferralEntry[];
   };
-  agit: {
-    agitReferrals: number;
-    agitPercentage: number;
-    usedAfcCount: number;
-    usedAfcRate: number;
-    lostReferrals: number;
-    closeRate: number;
-    dealsClosed: number;
-    referralRows: AgitReferralRow[];
-    dealRows: AgitDealRow[];
-  };
-}
-
-interface AgitReferralRow {
-  id: string;
-  borrowerName: string;
-  loanFileNumber: string | null;
-  status: string;
-  agentId: string | null;
-  agentName: string | null;
-  agentEmail: string | null;
-  agentPhone: string | null;
-  mcId: string | null;
-  mcName: string | null;
-  mcEmail: string | null;
-  mcPhone: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface AgitDealRow {
-  id: string;
-  referralId: string;
-  borrowerName: string;
-  status: string;
-  expectedAmountCents: number;
-  receivedAmountCents: number;
-  agentId: string | null;
-  agentName: string | null;
-  mcId: string | null;
-  mcName: string | null;
-  mcEmail: string | null;
-  mcPhone: string | null;
-  closingDate: string | null;
-  usedAfc: boolean | null;
-  referralStatus: string | null;
-  usedAssignedAgent: boolean | null;
-  agentAttribution: 'AHA' | 'AHA_OOS' | 'OUTSIDE_AGENT' | null;
 }
 
 interface StaleReferralEntry {
@@ -500,54 +482,35 @@ const TAB_OPTIONS = [
   { label: 'Main', value: 'main' },
   { label: 'MC', value: 'mc' },
   { label: 'Agent', value: 'agent' },
-  { label: 'Admin', value: 'admin' },
-  { label: 'AGIT', value: 'agit' }
+  { label: 'Admin', value: 'admin' }
 ] as const;
 
 type TabValue = (typeof TAB_OPTIONS)[number]['value'];
 
-const NETWORK_FILTER_OPTIONS: { label: string; value: NetworkFilter }[] = [
-  { label: 'All', value: 'ALL' },
+const NETWORK_FILTER_OPTIONS: { label: string; value: NetworkOption }[] = [
   { label: 'AHA', value: 'AHA' },
-  { label: 'AHA OOS', value: 'AHA_OOS' }
+  { label: 'AHA OOS', value: 'AHA_OOS' },
+  { label: 'AGIT', value: 'AGIT' }
 ];
 
-const DEFAULT_NETWORK_FILTER: Record<TabValue, NetworkFilter> = {
-  main: 'ALL',
-  mc: 'ALL',
-  agent: 'ALL',
-  admin: 'AHA_OOS',
-  agit: 'ALL'
-};
+const DEFAULT_NETWORKS: NetworkOption[] = ['AHA', 'AHA_OOS'];
+const NETWORK_STORAGE_KEY = 'dashboard:network:v1';
 
-function NetworkFilterButtons({
-  value,
-  onChange
-}: {
-  value: NetworkFilter;
-  onChange: (value: NetworkFilter) => void;
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      {NETWORK_FILTER_OPTIONS.map((option) => {
-        const isActive = value === option.value;
-        return (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => onChange(option.value)}
-            className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
-              isActive
-                ? 'border-transparent bg-primary-600 text-white shadow-sm'
-                : 'border-border bg-surface text-foreground-muted hover:border-border-strong hover:bg-surface-muted'
-            }`}
-          >
-            {option.label}
-          </button>
-        );
-      })}
-    </div>
-  );
+function loadStoredNetworks(): NetworkOption[] | null {
+  try {
+    const stored = localStorage.getItem(NETWORK_STORAGE_KEY);
+    return stored === null ? null : parseNetworkList(stored);
+  } catch {
+    return null;
+  }
+}
+
+function saveStoredNetworks(networks: NetworkOption[]) {
+  try {
+    localStorage.setItem(NETWORK_STORAGE_KEY, serializeNetworkList(networks));
+  } catch {
+    // Storage is unavailable in some private-browsing modes; the filter still works for this visit.
+  }
 }
 
 const CHART_WIDTH = 320;
@@ -559,6 +522,15 @@ const MULTI_LINE_CHART_PLOT_LEFT = 72;
 const MULTI_LINE_CHART_PLOT_RIGHT = 296;
 const MULTI_LINE_CHART_Y_TICKS = [0, 0.5, 1];
 
+type SummaryCardHelperTone = 'positive' | 'negative' | 'neutral';
+type SummaryCardHelper = { text: string; tone: SummaryCardHelperTone };
+
+const SUMMARY_HELPER_TONE_CLASSES: Record<SummaryCardHelperTone, string> = {
+  positive: 'text-success',
+  negative: 'text-danger',
+  neutral: 'text-foreground-subtle'
+};
+
 function SummaryCard({
   title,
   value,
@@ -569,17 +541,26 @@ function SummaryCard({
 }: {
   title: string;
   value: string;
-  helper?: string;
+  helper?: string | SummaryCardHelper;
   extraStats?: { label: string; value: string; onClick?: () => void }[];
   drillDownHref?: string;
   onClick?: () => void;
 }) {
   const isHeaderInteractive = Boolean(drillDownHref ?? onClick);
+  const resolvedHelper: SummaryCardHelper | null =
+    typeof helper === 'string' ? { text: helper, tone: 'neutral' } : helper ?? null;
   const headerContent = (
     <>
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
-      <p className="mt-2 text-2xl font-semibold text-foreground">{value}</p>
-      {helper ? <p className="mt-1 text-xs text-foreground-subtle">{helper}</p> : null}
+      <p className="text-eyebrow text-foreground-subtle">{title}</p>
+      <p className="text-numeric mt-2 text-2xl font-semibold tracking-[-0.02em] text-foreground">{value}</p>
+      <p
+        className={cn(
+          'mt-1 min-h-[1rem] text-xs',
+          SUMMARY_HELPER_TONE_CLASSES[resolvedHelper?.tone ?? 'neutral']
+        )}
+      >
+        {resolvedHelper?.text ?? ''}
+      </p>
     </>
   );
   const headerInteractiveClass =
@@ -603,7 +584,10 @@ function SummaryCard({
   const extraStatsNode = extraStats?.length ? (
     <dl className="mt-3 grid grid-cols-2 gap-2">
       {extraStats.map((stat) => {
-        const tileBase = 'rounded-lg bg-surface-muted px-2 py-1 text-left transition min-h-[3.6rem] flex flex-col justify-between';
+        const tileBase = cn(
+          'rounded-lg bg-surface-muted px-2 py-1 text-left transition h-[3.75rem] flex flex-col justify-between overflow-hidden',
+          extraStats.length === 1 && 'col-span-2'
+        );
         if (stat.onClick) {
           return (
             <button
@@ -614,23 +598,27 @@ function SummaryCard({
                 event.preventDefault();
                 stat.onClick?.();
               }}
-              className={`${tileBase} cursor-pointer hover:bg-surface-subtle hover:ring-1 hover:ring-sky-300`}
+              className={`${tileBase} cursor-pointer hover:bg-surface-subtle hover:ring-1 hover:ring-info/30`}
             >
-              <dt className="text-xs font-medium uppercase tracking-wide text-foreground-subtle leading-tight min-h-[1.8rem]">{stat.label}</dt>
+              <dt className="text-eyebrow text-foreground-subtle leading-tight min-h-[1.8rem] line-clamp-2">{stat.label}</dt>
               <dd className="text-sm font-semibold text-foreground">{stat.value}</dd>
             </button>
           );
         }
         return (
           <div key={`${title}-${stat.label}`} className={tileBase}>
-            <dt className="text-xs font-medium uppercase tracking-wide text-foreground-subtle leading-tight min-h-[1.8rem]">{stat.label}</dt>
+            <dt className="text-eyebrow text-foreground-subtle leading-tight min-h-[1.8rem] line-clamp-2">{stat.label}</dt>
             <dd className="text-sm font-semibold text-foreground">{stat.value}</dd>
           </div>
         );
       })}
     </dl>
   ) : null;
-  const wrapperClass = `rounded-card border border-border bg-surface-raised p-4 shadow-card block w-full text-left transition${isHeaderInteractive ? ' hover:border-sky-300 hover:shadow-md' : ''}`;
+  const wrapperClass = cn(
+    dashCardClasses,
+    'block w-full text-left transition',
+    isHeaderInteractive && 'hover:border-info/30 hover:shadow-md'
+  );
   return (
     <div className={wrapperClass}>
       {headerNode}
@@ -647,8 +635,8 @@ function MetricGroupCard({
   metrics: { label: string; value: string; helper?: string; onHelperClick?: () => void }[];
 }) {
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
+    <div className={dashCardClasses}>
+      <p className="text-eyebrow text-foreground-subtle">{title}</p>
       <dl className="mt-3 divide-y divide-border">
         {metrics.map((metric, index) => (
           <div key={`${title}-${metric.label}`} className="space-y-0.5 py-2.5 first:pt-0 last:pb-0">
@@ -661,7 +649,7 @@ function MetricGroupCard({
                 <button
                   type="button"
                   onClick={metric.onHelperClick}
-                  className="text-xs text-sky-600 underline decoration-sky-300 underline-offset-2 hover:text-sky-800"
+                  className="text-xs text-info underline decoration-info/40 underline-offset-2 hover:text-info"
                 >
                   {metric.helper}
                 </button>
@@ -682,7 +670,7 @@ function LineChartCard({
   formatValue,
   helper,
   actions,
-  color = '#0ea5e9'
+  color = 'hsl(var(--info))'
 }: {
   title: string;
   data: TrendPoint[];
@@ -764,10 +752,10 @@ function LineChartCard({
   };
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+    <div className={dashCardClasses}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
+          <p className="text-eyebrow text-foreground-subtle">{title}</p>
           {helper ? <p className="text-xs text-foreground-subtle">{helper}</p> : null}
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -823,7 +811,7 @@ function LineChartCard({
                   x2={tooltipPoint.x}
                   y1={CHART_PADDING_Y}
                   y2={CHART_HEIGHT - CHART_PADDING_Y}
-                  stroke="#cbd5f5"
+                  stroke="hsl(var(--border))"
                   strokeDasharray="4 4"
                 />
                 <rect
@@ -833,19 +821,19 @@ function LineChartCard({
                   height={tooltipMetrics.height}
                   rx={6}
                   fill="#ffffff"
-                  stroke="#cbd5f5"
+                  stroke="hsl(var(--border))"
                 />
                 <text
                   x={tooltipMetrics.x + 8}
                   y={tooltipMetrics.y + 18}
-                  className="text-[11px] font-semibold fill-slate-900"
+                  className="text-[11px] font-semibold fill-foreground"
                 >
                   {tooltipMetrics.valueLabel}
                 </text>
                 <text
                   x={tooltipMetrics.x + 8}
                   y={tooltipMetrics.y + tooltipMetrics.height - 10}
-                  className="text-[10px] fill-slate-500"
+                  className="text-[10px] fill-foreground-subtle"
                 >
                   {tooltipMetrics.labelText}
                 </text>
@@ -856,14 +844,14 @@ function LineChartCard({
               x2={CHART_WIDTH - CHART_PADDING_X}
               y1={CHART_HEIGHT - CHART_PADDING_Y}
               y2={CHART_HEIGHT - CHART_PADDING_Y}
-              stroke="#e2e8f0"
+              stroke="hsl(var(--border))"
               strokeWidth={1}
             />
             <text
               x={CHART_PADDING_X - 6}
               y={CHART_HEIGHT - CHART_PADDING_Y / 2}
               textAnchor="end"
-              className="text-[10px] fill-slate-400"
+              className="text-[10px] fill-foreground-subtle"
             >
               {formatValue(normalizedMin)}
             </text>
@@ -871,7 +859,7 @@ function LineChartCard({
               x={CHART_PADDING_X - 6}
               y={CHART_PADDING_Y - 4}
               textAnchor="end"
-              className="text-[10px] fill-slate-400"
+              className="text-[10px] fill-foreground-subtle"
             >
               {formatValue(normalizedMax)}
             </text>
@@ -965,10 +953,10 @@ function MultiLineChartCard({
   };
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+    <div className={dashCardClasses}>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
+          <p className="text-eyebrow text-foreground-subtle">{title}</p>
           {helper ? <p className="text-xs text-foreground-subtle">{helper}</p> : null}
         </div>
         <div className="flex items-center gap-4">
@@ -996,8 +984,8 @@ function MultiLineChartCard({
           >
             <defs>
               <linearGradient id="gridGradient" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stopColor="#e2e8f0" stopOpacity="0.4" />
-                <stop offset="100%" stopColor="#e2e8f0" stopOpacity="0.1" />
+                <stop offset="0%" stopColor="hsl(var(--border))" stopOpacity="0.4" />
+                <stop offset="100%" stopColor="hsl(var(--border))" stopOpacity="0.1" />
               </linearGradient>
             </defs>
             <rect
@@ -1018,7 +1006,7 @@ function MultiLineChartCard({
                     y1={y}
                     x2={MULTI_LINE_CHART_PLOT_RIGHT}
                     y2={y}
-                    stroke="#e2e8f0"
+                    stroke="hsl(var(--border))"
                     strokeWidth={1}
                     strokeDasharray="4 4"
                   />
@@ -1026,7 +1014,7 @@ function MultiLineChartCard({
                     x={MULTI_LINE_CHART_PLOT_LEFT - 6}
                     y={y + 4}
                     textAnchor="end"
-                    className="fill-slate-400 text-[10px]"
+                    className="fill-foreground-subtle text-[10px]"
                   >
                     {formatValue(value)}
                   </text>
@@ -1059,7 +1047,7 @@ function MultiLineChartCard({
                 y1={CHART_PADDING_Y}
                 x2={activePoint.x}
                 y2={CHART_HEIGHT - CHART_PADDING_Y}
-                stroke="#94a3b8"
+                stroke="hsl(var(--text-subtle))"
                 strokeWidth={1}
                 strokeDasharray="4 4"
                 className="pointer-events-none"
@@ -1092,7 +1080,15 @@ function PieChartCard({
   helper?: string;
 }) {
   const total = data.reduce((sum, item) => sum + item.value, 0);
-  const colors = ['#0ea5e9', '#38bdf8', '#7dd3fc', '#bae6fd', '#0284c7'];
+  // Distinct hues rather than five shades of one, so adjacent slices stay
+  // tellable apart at small sizes.
+  const colors = [
+    'hsl(var(--info))',
+    'hsl(var(--accent))',
+    'hsl(var(--success))',
+    'hsl(var(--signal))',
+    'hsl(var(--warning))'
+  ];
 
   const describeArc = (startAngle: number, endAngle: number, radius: number, cx: number, cy: number) => {
     const start = {
@@ -1110,10 +1106,10 @@ function PieChartCard({
   let currentAngle = -Math.PI / 2;
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+    <div className={dashCardClasses}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
+          <p className="text-eyebrow text-foreground-subtle">{title}</p>
           {helper ? <p className="text-xs text-foreground-subtle">{helper}</p> : null}
         </div>
         <p className="text-xs font-semibold text-foreground-muted">{total > 0 ? `${formatNumber(total)} deals` : '—'}</p>
@@ -1177,23 +1173,20 @@ function TerminatedDealsList({
   totalLostReferralFeeCents: number;
   totalDeals: number;
 }) {
-  const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * TERMINATED_DEAL_ROW_HEIGHT_REM}rem`;
-
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+    <div className={cn(dashCardClasses, 'flex h-full min-h-0 flex-col')}>
       <div className="flex items-baseline justify-between gap-3">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Terminated deals</p>
-          <p className="mt-2 text-2xl font-semibold text-foreground">{formatCurrency(totalLostReferralFeeCents)}</p>
+          <p className="text-eyebrow text-foreground-subtle">Terminated deals</p>
+          <p className="text-numeric mt-2 text-2xl font-semibold tracking-[-0.02em] text-foreground">{formatCurrency(totalLostReferralFeeCents)}</p>
           <p className="text-xs text-foreground-subtle">{formatNumber(totalDeals)} lost deals</p>
         </div>
       </div>
 
-      <div className="mt-4">
+      <div className="mt-4 min-h-0 flex-1">
         {deals.length ? (
           <div
-            className="divide-y divide-border overflow-y-auto"
-            style={{ maxHeight: scrollMaxHeight }}
+            className="h-full divide-y divide-border overflow-y-auto"
             aria-label="Scrollable list: terminated deals"
           >
             {deals.map((deal) => (
@@ -1202,7 +1195,7 @@ function TerminatedDealsList({
                   <p className="truncate text-sm font-semibold text-foreground">{deal.mcName}, {deal.agentName}</p>
                   <p className="text-xs text-foreground-subtle">{deal.reasonLabel}</p>
                 </div>
-                <p className="whitespace-nowrap text-sm font-semibold text-rose-600">
+                <p className="whitespace-nowrap text-sm font-semibold text-danger">
                   {formatCurrency(deal.lostReferralFeeCents)}
                 </p>
               </div>
@@ -1223,11 +1216,11 @@ function ConversionFunnelCard({
 }: {
   stages: FunnelStage[];
   terminal: FunnelTerminalTotals;
-  networkFilter: NetworkFilter;
+  networkFilter: NetworkOption[];
 }) {
   const withNetworkParam = (params: URLSearchParams) => {
-    if (networkFilter === 'AHA' || networkFilter === 'AHA_OOS') {
-      params.set('ahaBucket', networkFilter);
+    if (networkFilter.length > 0) {
+      params.set('ahaBucket', serializeNetworkList(networkFilter));
     }
     return params;
   };
@@ -1247,8 +1240,8 @@ function ConversionFunnelCard({
   };
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Conversion funnel</p>
+    <div className={dashCardClasses}>
+      <p className="text-eyebrow text-foreground-subtle">Conversion funnel</p>
       <p className="mt-1 text-xs text-foreground-subtle">
         Cohort funnel: each stage counts referrals that ever reached that stage. Click a row to open referrals
         currently in that status (row totals can differ from the list).
@@ -1261,10 +1254,10 @@ function ConversionFunnelCard({
               <Link
                 key={stage.status}
                 href={buildStageDrillDownUrl(stage.status)}
-                className="group block rounded-md border border-border px-3 py-2 transition hover:border-primary-200 hover:bg-primary-50/40"
+                className="group block rounded-md border border-border px-3 py-2 transition hover:border-primary/25 hover:bg-primary-soft/40"
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-medium text-foreground group-hover:text-sky-700">{stage.label}</span>
+                  <span className="font-medium text-foreground group-hover:text-info">{stage.label}</span>
                   <div className="flex items-center gap-3 text-sm text-foreground-muted">
                     <span className="font-semibold text-foreground">{formatNumber(stage.count)}</span>
                     {!isFirst && stage.conversionFromPrevious != null ? (
@@ -1276,7 +1269,7 @@ function ConversionFunnelCard({
                       <span className="text-xs text-foreground-subtle">avg {stage.avgDaysInStage}d → next</span>
                     ) : null}
                     {!isFirst && stage.dropOffPercent != null && stage.dropOffPercent > 0 ? (
-                      <span className="text-xs font-medium text-amber-600">↓{stage.dropOffPercent.toFixed(0)}%</span>
+                      <span className="text-xs font-medium text-warning">↓{stage.dropOffPercent.toFixed(0)}%</span>
                     ) : null}
                   </div>
                 </div>
@@ -1292,14 +1285,14 @@ function ConversionFunnelCard({
           <span className="uppercase tracking-wide">Terminal outcomes:</span>
           <Link
             href={buildTerminalDrillDownUrl('Lost')}
-            className="font-medium text-foreground-muted hover:text-sky-700"
+            className="font-medium text-foreground-muted hover:text-info"
           >
             Lost {formatNumber(terminal.lostTotal)}
           </Link>
           <span aria-hidden="true">•</span>
           <Link
             href={buildTerminalDrillDownUrl('Terminated')}
-            className="font-medium text-foreground-muted hover:text-sky-700"
+            className="font-medium text-foreground-muted hover:text-info"
           >
             Terminated {formatNumber(terminal.terminatedTotal)}
           </Link>
@@ -1349,7 +1342,7 @@ function RankedListBody({
                 </div>
                 <div className="mt-1 h-1 overflow-hidden rounded-full bg-surface-subtle">
                   <div
-                    className="h-full rounded-full bg-sky-400"
+                    className="h-full rounded-full bg-info"
                     style={{ width: `${barPct}%` }}
                   />
                 </div>
@@ -1373,7 +1366,7 @@ function RankedListTabs({ views }: { views: RankedListView[] }) {
   }
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+    <div className={dashCardClasses}>
       <div className="flex flex-wrap items-center gap-2">
         {views.map((view) => {
           const isActive = view.id === activeView.id;
@@ -1382,11 +1375,12 @@ function RankedListTabs({ views }: { views: RankedListView[] }) {
               key={view.id}
               type="button"
               onClick={() => setActiveId(view.id)}
-              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+              className={cn(
+                buttonClasses({ variant: 'secondary', size: 'sm' }),
                 isActive
-                  ? 'border-transparent bg-primary-600 text-white shadow-sm'
-                  : 'border-border bg-surface text-foreground-muted hover:border-border-strong hover:bg-surface-muted'
-              }`}
+                  ? 'bg-primary text-white shadow-none ring-0 hover:bg-primary hover:text-white'
+                  : 'text-foreground-muted'
+              )}
             >
               {view.label}
             </button>
@@ -1419,9 +1413,9 @@ function LeaderboardTable({
   const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+    <div className={dashCardClasses}>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
+        <p className="text-eyebrow text-foreground-subtle">{title}</p>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
       <div
@@ -1477,6 +1471,9 @@ type AgentLeaderboardView = {
   label: string;
   valueLabel: string;
   entries: LeaderboardEntry[];
+  /** When set, renders unattributableReferrals in an extra right-hand column. */
+  secondaryValueLabel?: string;
+  footnote?: string;
 };
 
 function AgentLeaderboardCard({ views }: { views: AgentLeaderboardView[] }) {
@@ -1488,10 +1485,11 @@ function AgentLeaderboardCard({ views }: { views: AgentLeaderboardView[] }) {
     return null;
   }
 
-  const { entries, valueLabel } = activeView;
+  const { entries, valueLabel, secondaryValueLabel, footnote } = activeView;
+  const columnCount = secondaryValueLabel ? 4 : 3;
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+    <div className={dashCardClasses}>
       <div className="flex flex-wrap items-center gap-2">
         {views.map((view) => {
           const isActive = view.id === activeView.id;
@@ -1500,11 +1498,12 @@ function AgentLeaderboardCard({ views }: { views: AgentLeaderboardView[] }) {
               key={view.id}
               type="button"
               onClick={() => setActiveId(view.id)}
-              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+              className={cn(
+                buttonClasses({ variant: 'secondary', size: 'sm' }),
                 isActive
-                  ? 'border-transparent bg-primary-600 text-white shadow-sm'
-                  : 'border-border bg-surface text-foreground-muted hover:border-border-strong hover:bg-surface-muted'
-              }`}
+                  ? 'bg-primary text-white shadow-none ring-0 hover:bg-primary hover:text-white'
+                  : 'text-foreground-muted'
+              )}
             >
               {view.label}
             </button>
@@ -1522,6 +1521,9 @@ function AgentLeaderboardCard({ views }: { views: AgentLeaderboardView[] }) {
               <th className="py-1 font-medium">Rank</th>
               <th className="py-1 font-medium">Name</th>
               <th className="py-1 font-medium text-right">{valueLabel}</th>
+              {secondaryValueLabel ? (
+                <th className="py-1 font-medium text-right">{secondaryValueLabel}</th>
+              ) : null}
             </tr>
           </thead>
           <tbody>
@@ -1543,11 +1545,16 @@ function AgentLeaderboardCard({ views }: { views: AgentLeaderboardView[] }) {
                               ? `${formatNumber(entry.dealsClosed)} / ${formatNumber(entry.totalReferrals ?? 0)}`
                               : '—'}
                   </td>
+                  {secondaryValueLabel ? (
+                    <td className="py-2 text-right text-foreground-subtle">
+                      {formatNumber(entry.unattributableReferrals ?? 0)}
+                    </td>
+                  ) : null}
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={3} className="py-6 text-center text-sm text-foreground-subtle">
+                <td colSpan={columnCount} className="py-6 text-center text-sm text-foreground-subtle">
                   Nothing to display for this period.
                 </td>
               </tr>
@@ -1555,123 +1562,111 @@ function AgentLeaderboardCard({ views }: { views: AgentLeaderboardView[] }) {
           </tbody>
         </table>
       </div>
+      {footnote ? <p className="mt-3 text-xs text-foreground-subtle">{footnote}</p> : null}
     </div>
   );
 }
 
-function McCloseEffectivenessTable({ entries }: { entries: LeaderboardEntry[] }) {
+const DEFAULT_MC_KPI_METRIC_KEY = 'referralCount';
+
+function McKpiMetricLeaderboardCard({ entries }: { entries: McRankedEntry[] }) {
+  const metricOptions = useMemo(() => {
+    const firstWithKpis = entries.find((entry) => entry.kpis.length > 0);
+    if (!firstWithKpis) return [];
+    return firstWithKpis.kpis.map((kpi) => ({ key: kpi.key, label: kpi.label }));
+  }, [entries]);
+
+  const [activeKey, setActiveKey] = useState(DEFAULT_MC_KPI_METRIC_KEY);
+  const resolvedKey = metricOptions.some((option) => option.key === activeKey)
+    ? activeKey
+    : metricOptions[0]?.key ?? DEFAULT_MC_KPI_METRIC_KEY;
+
+  const rankedRows = useMemo(() => {
+    return entries
+      .map((entry) => {
+        const kpi = entry.kpis.find((item) => item.key === resolvedKey);
+        if (!kpi || kpi.neutralFilled) return null;
+        return {
+          id: entry.id,
+          name: entry.name,
+          displayValue: kpi.displayValue,
+          normalizedScore: kpi.normalizedScore,
+          rawValue: kpi.rawValue
+        };
+      })
+      .filter((row): row is NonNullable<typeof row> => row != null)
+      .toSorted(
+        (a, b) =>
+          b.normalizedScore - a.normalizedScore || b.rawValue - a.rawValue || a.name.localeCompare(b.name)
+      );
+  }, [entries, resolvedKey]);
+
   const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
+  const activeLabel = metricOptions.find((option) => option.key === resolvedKey)?.label ?? 'Value';
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">MC Close Effectiveness</p>
+    <div className={dashCardClasses}>
+      <p className="text-eyebrow text-foreground-subtle">MC KPI by metric</p>
       <p className="mt-1 text-xs text-foreground-subtle">
-        Overall close rate uses cohort closes/referrals. AFC-only close rate is the share of the MC&apos;s closed deals
-        that still used AFC even though the assigned agent was not used.
+        Rank mortgage consultants on one Composite Leaderboard measure at a time for this period.
       </p>
-      <div
-        className="mt-4 overflow-y-auto"
-        style={entries.length ? { maxHeight: scrollMaxHeight } : undefined}
-        aria-label={entries.length ? 'Scrollable list: MC Close Effectiveness' : undefined}
-      >
-        <table className="w-full text-sm">
-          <thead className="sticky top-0 z-[1] bg-surface-raised shadow-[inset_0_-1px_0_0_hsl(var(--border))]">
-            <tr className="text-left text-xs text-foreground-subtle">
-              <th className="py-1 font-medium">Rank</th>
-              <th className="py-1 font-medium">MC</th>
-              <th className="py-1 font-medium text-right">Overall close rate</th>
-              <th className="py-1 font-medium text-right">AFC-only close rate</th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.length ? (
-              entries.map((entry, index) => {
-                const overallCloseRate = entry.closeRate ?? 0;
-                const assignedCloseRate = entry.assignedAgentCloseRate ?? 0;
-                return (
-                  <tr key={`${entry.id}-${index}`} className="border-t border-border text-foreground-muted">
+      {metricOptions.length > 0 ? (
+        <div className="mt-3">
+          <Select value={resolvedKey} onValueChange={setActiveKey}>
+            <SelectTrigger aria-label="Choose KPI" className="h-9">
+              <SelectValue placeholder="Choose KPI" />
+            </SelectTrigger>
+            <SelectContent>
+              {metricOptions.map((option) => (
+                <SelectItem key={option.key} value={option.key}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
+      {entries.length === 0 ? (
+        <p className="py-8 text-center text-sm text-foreground-subtle">No MCs with data for this period.</p>
+      ) : (
+        <div
+          className="mt-4 overflow-y-auto"
+          style={rankedRows.length ? { maxHeight: scrollMaxHeight } : undefined}
+          aria-label={rankedRows.length ? `Scrollable list: ${activeLabel}` : undefined}
+        >
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 z-[1] bg-surface-raised shadow-[inset_0_-1px_0_0_hsl(var(--border))]">
+              <tr className="text-left text-xs text-foreground-subtle">
+                <th className="py-1 font-medium">Rank</th>
+                <th className="py-1 font-medium">MC</th>
+                <th className="py-1 font-medium text-right">{activeLabel}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rankedRows.length ? (
+                rankedRows.map((row, index) => (
+                  <tr key={`${row.id}-${resolvedKey}`} className="border-t border-border text-foreground-muted">
                     <td className="py-2 text-foreground-subtle">#{index + 1}</td>
-                    <td className="py-2 font-medium text-foreground">{entry.name}</td>
+                    <td className="py-2 font-medium text-foreground">{row.name}</td>
                     <td className="py-2 text-right">
-                      <p>{`${overallCloseRate.toFixed(1)}%`}</p>
-                      <p className="text-xs text-foreground-subtle">
-                        {`${formatNumber(entry.dealsClosed ?? 0)} / ${formatNumber(entry.totalReferrals ?? 0)}`}
-                      </p>
-                    </td>
-                    <td className="py-2 text-right">
-                      <p>{`${assignedCloseRate.toFixed(1)}%`}</p>
-                      <p className="text-xs text-foreground-subtle">
-                        {`${formatNumber(entry.assignedAgentCloses ?? 0)} / ${formatNumber(entry.assignedCloseTotal ?? 0)}`}
+                      <p className="tabular-nums text-foreground">{row.displayValue}</p>
+                      <p className="text-xs tabular-nums text-foreground-subtle">
+                        {`${row.normalizedScore.toFixed(0)}/100`}
                       </p>
                     </td>
                   </tr>
-                );
-              })
-            ) : (
-              <tr>
-                <td colSpan={4} className="py-6 text-center text-sm text-foreground-subtle">
-                  Nothing to display for this period.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-function McOutsideLenderLossTable({ entries }: { entries: LeaderboardEntry[] }) {
-  const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
-
-  return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">MC Outside Lender Loss Signal</p>
-      <p className="mt-1 text-xs text-foreground-subtle">
-        Share of closed deals where the assigned agent was used, but AFC was not.
-      </p>
-      <div
-        className="mt-4 overflow-y-auto"
-        style={entries.length ? { maxHeight: scrollMaxHeight } : undefined}
-        aria-label={entries.length ? 'Scrollable list: MC Outside Lender Loss Signal' : undefined}
-      >
-        <table className="w-full text-sm">
-          <thead className="sticky top-0 z-[1] bg-surface-raised shadow-[inset_0_-1px_0_0_hsl(var(--border))]">
-            <tr className="text-left text-xs text-foreground-subtle">
-              <th className="py-1 font-medium">Rank</th>
-              <th className="py-1 font-medium">MC</th>
-              <th className="py-1 font-medium text-right">Loss signal rate</th>
-              <th className="py-1 font-medium text-right">Count</th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.length ? (
-              entries.map((entry, index) => {
-                const count = entry.outsideLenderLossCount ?? 0;
-                const totalClosedDeals = entry.totalClosedDeals ?? 0;
-                const rate = entry.outsideLenderLossRate ?? 0;
-                return (
-                  <tr key={`${entry.id}-${index}`} className="border-t border-border text-foreground-muted">
-                    <td className="py-2 text-foreground-subtle">#{index + 1}</td>
-                    <td className="py-2 font-medium text-foreground">{entry.name}</td>
-                    <td className="py-2 text-right">
-                      <p>{`${rate.toFixed(1)}%`}</p>
-                      <p className="text-xs text-foreground-subtle">{`${formatNumber(count)} / ${formatNumber(totalClosedDeals)}`}</p>
-                    </td>
-                    <td className="py-2 text-right">{formatNumber(count)}</td>
-                  </tr>
-                );
-              })
-            ) : (
-              <tr>
-                <td colSpan={4} className="py-6 text-center text-sm text-foreground-subtle">
-                  Nothing to display for this period.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={3} className="py-6 text-center text-sm text-foreground-subtle">
+                    Nothing to display for this measure.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
@@ -1720,8 +1715,8 @@ function TransferTimingCard({
   }
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
+    <div className={dashCardClasses}>
+      <p className="text-eyebrow text-foreground-subtle">
         When to transfer to the brokerage
       </p>
       <p className="mt-1 text-xs text-foreground-subtle">
@@ -1768,7 +1763,7 @@ function TransferTimingPanel({
   onClick?: () => void;
 }) {
   const containerClasses = isWinner
-    ? 'rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2'
+    ? 'rounded-lg border border-success/30 bg-success-soft px-3 py-2'
     : 'rounded-lg border border-border bg-surface-muted px-3 py-2';
 
   return (
@@ -1778,20 +1773,20 @@ function TransferTimingPanel({
           <button
             type="button"
             onClick={onClick}
-            className="text-xs font-medium uppercase tracking-wide text-sky-600 underline decoration-dotted underline-offset-2 transition hover:text-sky-700"
+            className="text-xs font-medium uppercase tracking-wide text-info underline decoration-dotted underline-offset-2 transition hover:text-info"
           >
             {label}
           </button>
         ) : (
-          <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{label}</p>
+          <p className="text-eyebrow text-foreground-subtle">{label}</p>
         )}
         {isWinner ? (
-          <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+          <span className="rounded-full bg-success px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
             Recommended
           </span>
         ) : null}
       </div>
-      <p className="mt-1 text-2xl font-semibold text-foreground">{rate.toFixed(1)}%</p>
+      <p className="text-numeric mt-1 text-2xl font-semibold tracking-[-0.02em] text-foreground">{rate.toFixed(1)}%</p>
       <p className="text-xs text-foreground-subtle">
         {`${formatNumber(closed)} / ${formatNumber(total)} closed`}
       </p>
@@ -1822,7 +1817,7 @@ function TransferTimingDrilldownTable({
                 <td className="py-2">
                   <Link
                     href={`/referrals/${entry.referralId}`}
-                    className="font-medium text-sky-600 hover:text-sky-800 hover:underline"
+                    className="font-medium text-info hover:text-info/75 hover:underline"
                   >
                     {entry.borrowerName}
                   </Link>
@@ -1838,7 +1833,7 @@ function TransferTimingDrilldownTable({
                   <span
                     className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
                       entry.hasClosedDeal
-                        ? 'bg-emerald-50 text-emerald-700'
+                        ? 'bg-success-soft text-success'
                         : 'bg-surface-subtle text-foreground-muted'
                     }`}
                   >
@@ -1923,9 +1918,9 @@ function PreApprovalConversionSection({
 
   const conversionSeries = useMemo(
     () => [
-      { label: 'All', color: '#0ea5e9', data: conversion.trend.all ?? [] },
-      { label: 'AHA', color: '#0ea64a', data: conversion.trend.aha ?? [] },
-      { label: 'AHA OOS', color: '#6366f1', data: conversion.trend.ahaOos ?? [] }
+      { label: 'All', color: 'hsl(var(--info))', data: conversion.trend.all ?? [] },
+      { label: 'AHA', color: 'hsl(var(--success))', data: conversion.trend.aha ?? [] },
+      { label: 'AHA OOS', color: 'hsl(var(--accent))', data: conversion.trend.ahaOos ?? [] }
     ],
     [conversion.trend]
   );
@@ -1994,10 +1989,10 @@ function PreApprovalConversionSection({
   };
 
   return (
-    <div className="space-y-4 rounded-card border border-border bg-surface-raised p-4 shadow-card">
+    <div className={cn(dashCardClasses, 'space-y-4')}>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Pre-approval conversion</p>
+          <p className="text-eyebrow text-foreground-subtle">Pre-approval conversion</p>
           <p className="text-xs text-foreground-subtle">
             Track how referral volume compares with AHA and AHA OOS pre-approvals issued each month.
           </p>
@@ -2010,7 +2005,7 @@ function PreApprovalConversionSection({
                 type="month"
                 value={selectedMonth}
                 onChange={(event) => setSelectedMonth(event.target.value)}
-                className="mt-1 w-40 rounded-md border border-border bg-surface px-2 py-1 text-sm text-foreground shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                className="mt-1 w-40 rounded-md border border-border bg-surface px-2 py-1 text-sm text-foreground shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
               />
             </label>
             <label className="flex flex-col text-xs font-medium text-foreground-muted">
@@ -2020,7 +2015,7 @@ function PreApprovalConversionSection({
                 min={0}
                 value={inputAhaValue}
                 onChange={(event) => setInputAhaValue(event.target.value)}
-                className="mt-1 w-32 rounded-md border border-border bg-surface px-2 py-1 text-sm text-foreground shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                className="mt-1 w-32 rounded-md border border-border bg-surface px-2 py-1 text-sm text-foreground shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
               />
             </label>
             <label className="flex flex-col text-xs font-medium text-foreground-muted">
@@ -2030,12 +2025,12 @@ function PreApprovalConversionSection({
                 min={0}
                 value={inputAhaOosValue}
                 onChange={(event) => setInputAhaOosValue(event.target.value)}
-                className="mt-1 w-32 rounded-md border border-border bg-surface px-2 py-1 text-sm text-foreground shadow-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/30"
+                className="mt-1 w-32 rounded-md border border-border bg-surface px-2 py-1 text-sm text-foreground shadow-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
               />
             </label>
             <button
               type="submit"
-              className="inline-flex items-center rounded-md bg-primary-600 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center rounded-md bg-primary px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
               disabled={status === 'saving'}
             >
               {status === 'saving' ? 'Saving…' : 'Save entry'}
@@ -2062,7 +2057,7 @@ function PreApprovalConversionSection({
           </p>
         </div>
       ) : null}
-      {errorMessage ? <p className="text-sm text-red-600">{errorMessage}</p> : null}
+      {errorMessage ? <p className="text-sm text-danger">{errorMessage}</p> : null}
       {status === 'saved' && !errorMessage ? (
         <p className="text-sm text-foreground-muted">Pre-approvals saved.</p>
       ) : null}
@@ -2073,9 +2068,13 @@ function PreApprovalConversionSection({
           formatValue={(value) => `${value.toFixed(1)}%`}
           helper="Referrals ÷ pre-approvals across recorded months by network"
         />
-        <div className="overflow-x-auto rounded-card border border-border">
-          <table className="min-w-full text-sm">
-            <thead className="bg-surface-muted text-xs text-foreground-subtle">
+        <div className="min-w-0 lg:relative lg:min-h-0">
+          <div
+            className="overflow-x-auto rounded-card border border-border lg:absolute lg:inset-0 lg:overflow-auto"
+            aria-label="Scrollable table: pre-approval conversion history"
+          >
+            <table className="min-w-full text-sm">
+              <thead className="bg-surface-muted text-xs text-foreground-subtle lg:sticky lg:top-0 lg:z-10">
               <tr className="text-left">
                 <th className="px-3 py-2 font-medium">Month</th>
                 <th className="px-3 py-2 font-medium text-right">Referrals</th>
@@ -2086,8 +2085,8 @@ function PreApprovalConversionSection({
                 <th className="px-3 py-2 font-medium text-right">Conversion (AHA OOS)</th>
                 {canEdit ? <th className="px-3 py-2 font-medium text-right">Actions</th> : null}
               </tr>
-            </thead>
-            <tbody>
+              </thead>
+              <tbody>
               {sortedEntries.length ? (
                 sortedEntries.map((entry) => (
                   <tr key={entry.monthKey} className="border-t border-border text-foreground-muted">
@@ -2102,7 +2101,7 @@ function PreApprovalConversionSection({
                       <td className="px-3 py-2 text-right">
                         <button
                           type="button"
-                          className="inline-flex items-center rounded border border-transparent px-2 py-1 text-sm text-foreground-muted hover:text-red-600 disabled:opacity-50"
+                          className="inline-flex items-center rounded border border-transparent px-2 py-1 text-sm text-foreground-muted hover:text-danger disabled:opacity-50"
                           onClick={() => handleDelete(entry.monthKey)}
                           disabled={deletingMonth === entry.monthKey}
                           aria-label={`Delete ${entry.label} pre-approvals`}
@@ -2120,32 +2119,86 @@ function PreApprovalConversionSection({
                   </td>
                 </tr>
               )}
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-function periodOverPeriodDelta(current: number, previous: number): string | null {
-  if (previous === 0) return current > 0 ? '+100%' : null;
-  const pct = ((current - previous) / previous) * 100;
-  if (pct === 0) return '0%';
-  const sign = pct > 0 ? '+' : '';
-  return `${sign}${pct.toFixed(1)}%`;
+function getComparisonLabel(timeframe: TimeframeKey): string | null {
+  switch (timeframe) {
+    case 'day':
+      return 'vs yesterday';
+    case 'week':
+      return 'vs last week';
+    case 'month':
+      return 'vs last month';
+    case 'last_week':
+      return 'vs the week before';
+    case 'last_month':
+      return 'vs the month before';
+    case 'next_week':
+    case 'next_month':
+    case 'year':
+    case 'ytd':
+    case 'custom':
+      return 'vs prior period';
+    case 'all':
+      return null;
+    default: {
+      const exhaustive: never = timeframe;
+      throw new Error(`Unhandled timeframe: ${exhaustive}`);
+    }
+  }
+}
+
+function describePeriodChange({
+  current,
+  previous,
+  comparisonLabel,
+  mode,
+  zeroLabel
+}: {
+  current: number;
+  previous: number | null;
+  comparisonLabel: string | null;
+  mode: 'percent' | 'points';
+  zeroLabel: string;
+}): SummaryCardHelper {
+  if (comparisonLabel === null) return { text: 'All-time total', tone: 'neutral' };
+  if (previous === null) return { text: 'No prior period to compare', tone: 'neutral' };
+  const noChange: SummaryCardHelper = { text: `No change ${comparisonLabel}`, tone: 'neutral' };
+  const toneFor = (delta: number): SummaryCardHelperTone => (delta > 0 ? 'positive' : 'negative');
+
+  if (mode === 'points') {
+    const diff = Number((current - previous).toFixed(1));
+    if (diff === 0) return noChange;
+    return { text: `${diff > 0 ? '+' : ''}${diff.toFixed(1)} pts ${comparisonLabel}`, tone: toneFor(diff) };
+  }
+
+  if (previous === 0) {
+    return current > 0 ? { text: `Up from ${zeroLabel} ${comparisonLabel}`, tone: 'positive' } : noChange;
+  }
+  const pct = Number((((current - previous) / previous) * 100).toFixed(1));
+  if (pct === 0) return noChange;
+  return { text: `${pct > 0 ? '+' : ''}${pct.toFixed(1)}% ${comparisonLabel}`, tone: toneFor(pct) };
 }
 
 function MainDashboard({
   data,
   canEditPreApprovals,
   onPreApprovalSaved,
-  networkFilter
+  networkFilter,
+  timeframe
 }: {
   data: DashboardResponse['main'];
   canEditPreApprovals: boolean;
   onPreApprovalSaved: () => void;
-  networkFilter: NetworkFilter;
+  networkFilter: NetworkOption[];
+  timeframe: TimeframeKey;
 }) {
   const [dealsLostModal, setDealsLostModal] = useState<'afc' | 'aha' | 'ahaOos' | null>(null);
   const [pendingClosingsModal, setPendingClosingsModal] = useState<'all' | 'thisMonth' | 'nextMonth' | null>(null);
@@ -2169,14 +2222,33 @@ function MainDashboard({
     summary.closedNotPaidPercentOfExpected ??
     (expectedRevenueCents > 0 ? (closedNotPaidCents / expectedRevenueCents) * 100 : null);
 
-  const revenueVsPrev = pop ? periodOverPeriodDelta(realizedRevenueCents, pop.previous.realizedRevenueCents) : null;
-  const referralsVsPrev = pop ? periodOverPeriodDelta(summary.totalReferrals, pop.previous.totalReferrals) : null;
-  const closeRateVsPrev = pop ? periodOverPeriodDelta(summary.closeRate, pop.previous.closeRate) : null;
+  const comparisonLabel = getComparisonLabel(timeframe);
+  const revenueVsPrev = describePeriodChange({
+    current: realizedRevenueCents,
+    previous: pop ? pop.previous.realizedRevenueCents : null,
+    comparisonLabel,
+    mode: 'percent',
+    zeroLabel: formatCurrency(0)
+  });
+  const referralsVsPrev = describePeriodChange({
+    current: summary.totalReferrals,
+    previous: pop ? pop.previous.totalReferrals : null,
+    comparisonLabel,
+    mode: 'percent',
+    zeroLabel: '0'
+  });
+  const closeRateVsPrev = describePeriodChange({
+    current: summary.closeRate,
+    previous: pop ? pop.previous.closeRate : null,
+    comparisonLabel,
+    mode: 'points',
+    zeroLabel: '0%'
+  });
 
   const highlights: {
     title: string;
     value: string;
-    helper?: string;
+    helper?: SummaryCardHelper;
     extraStats: { label: string; value: string; onClick?: () => void }[];
     drillDownHref?: string;
     onClick?: () => void;
@@ -2184,7 +2256,7 @@ function MainDashboard({
     {
       title: 'Revenue received',
       value: formatCurrency(summary.realizedRevenueCents),
-      helper: revenueVsPrev != null ? `vs previous period: ${revenueVsPrev}` : undefined,
+      helper: revenueVsPrev,
       extraStats: [
         {
           label: 'Generated (closed)',
@@ -2207,10 +2279,10 @@ function MainDashboard({
     {
       title: 'Total Future Closings',
       value: formatNumber(summary.pendingClosings),
-      helper:
-        summary.pendingClosings > 0
-          ? `${formatCurrency(summary.expectedRevenueFromPendingClosingsCents)} expected`
-          : undefined,
+      helper: {
+        text: `${formatCurrency(summary.pendingClosings > 0 ? summary.expectedRevenueFromPendingClosingsCents : 0)} expected`,
+        tone: 'neutral'
+      },
       onClick:
         summary.pendingClosings > 0
           ? () => setPendingClosingsModal('all')
@@ -2237,7 +2309,7 @@ function MainDashboard({
     {
       title: 'Total referrals',
       value: formatNumber(summary.totalReferrals),
-      helper: referralsVsPrev != null ? `vs previous period: ${referralsVsPrev}` : undefined,
+      helper: referralsVsPrev,
       extraStats: [
         {
           label: 'Contracts',
@@ -2258,14 +2330,14 @@ function MainDashboard({
       ],
       drillDownHref: (() => {
         const params = new URLSearchParams();
-        if (networkFilter === 'AHA' || networkFilter === 'AHA_OOS') params.set('ahaBucket', networkFilter);
+        if (networkFilter.length > 0) params.set('ahaBucket', serializeNetworkList(networkFilter));
         return params.toString() ? `/referrals?${params.toString()}` : '/referrals';
       })()
     },
     {
       title: 'Close rate',
       value: `${summary.closeRate.toFixed(1)}%`,
-      helper: closeRateVsPrev != null ? `vs previous period: ${closeRateVsPrev}` : undefined,
+      helper: closeRateVsPrev,
       extraStats: [
         {
           label: 'Avg. days closed → paid',
@@ -2279,7 +2351,7 @@ function MainDashboard({
       drillDownHref: (() => {
         const params = new URLSearchParams();
         params.set('status', 'Closed');
-        if (networkFilter === 'AHA' || networkFilter === 'AHA_OOS') params.set('ahaBucket', networkFilter);
+        if (networkFilter.length > 0) params.set('ahaBucket', serializeNetworkList(networkFilter));
         return `/referrals?${params.toString()}`;
       })()
     }
@@ -2366,20 +2438,20 @@ function MainDashboard({
           series={[
             {
               label: 'Revenue received',
-              color: '#10b981',
+              color: 'hsl(var(--success))',
               data: data.trends.revenue
             },
             {
               label: 'Revenue generated (closed)',
-              color: '#0ea5e9',
+              color: 'hsl(var(--info))',
               data: data.trends.revenueGenerated ?? []
             }
           ]}
           formatValue={formatCurrency}
         />
-        <LineChartCard title="Deals closed" data={data.trends.deals} formatValue={(value) => formatNumber(Math.round(value))} color="#f59e0b" />
-        <LineChartCard title="Close rate" data={data.trends.closeRate} formatValue={(value) => `${value.toFixed(1)}%`} color="#8b5cf6" />
-        <LineChartCard title="Referrals received" data={data.trends.referrals} formatValue={(value) => formatNumber(Math.round(value))} color="#0ea5e9" />
+        <LineChartCard title="Deals closed" data={data.trends.deals} formatValue={(value) => formatNumber(Math.round(value))} color="hsl(var(--warning))" />
+        <LineChartCard title="Close rate" data={data.trends.closeRate} formatValue={(value) => `${value.toFixed(1)}%`} color="hsl(var(--accent))" />
+        <LineChartCard title="Referrals received" data={data.trends.referrals} formatValue={(value) => formatNumber(Math.round(value))} color="hsl(var(--info))" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -2430,11 +2502,15 @@ function MainDashboard({
           data={data.terminatedDeals.breakdown}
           helper="Distribution of terminated deals"
         />
-        <TerminatedDealsList
-          deals={data.terminatedDeals.deals}
-          totalLostReferralFeeCents={data.terminatedDeals.totalLostReferralFeeCents}
-          totalDeals={data.terminatedDeals.totalDeals}
-        />
+        <div className="min-w-0 lg:relative lg:min-h-0">
+          <div className="lg:absolute lg:inset-0">
+            <TerminatedDealsList
+              deals={data.terminatedDeals.deals}
+              totalLostReferralFeeCents={data.terminatedDeals.totalLostReferralFeeCents}
+              totalDeals={data.terminatedDeals.totalDeals}
+            />
+          </div>
+        </div>
       </div>
 
       <Modal
@@ -2534,7 +2610,7 @@ function DealsLostTable({ deals }: { deals: LostDealEntry[] }) {
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead>
-          <tr className="border-b border-border text-xs font-medium uppercase tracking-wide text-foreground-muted">
+          <tr className="text-eyebrow border-b border-border text-foreground-muted">
             <th className="px-6 py-3">Borrower</th>
             <th className="px-6 py-3">Agent</th>
             <th className="px-6 py-3">MC</th>
@@ -2546,7 +2622,7 @@ function DealsLostTable({ deals }: { deals: LostDealEntry[] }) {
           {deals.map((deal) => (
             <tr key={deal.id} className="hover:bg-surface-muted">
               <td className="px-6 py-3 font-medium text-foreground-muted">
-                <Link href={`/referrals/${deal.referralId}`} className="hover:text-sky-600 hover:underline">
+                <Link href={`/referrals/${deal.referralId}`} className="hover:text-info hover:underline">
                   {deal.borrowerName}
                 </Link>
               </td>
@@ -2576,7 +2652,7 @@ function PendingClosingsTable({ deals }: { deals: PendingClosingEntry[] }) {
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead>
-          <tr className="border-b border-border text-xs font-medium uppercase tracking-wide text-foreground-muted">
+          <tr className="text-eyebrow border-b border-border text-foreground-muted">
             <th className="px-6 py-3">Borrower</th>
             <th className="px-6 py-3">Agent</th>
             <th className="px-6 py-3">MC</th>
@@ -2594,7 +2670,7 @@ function PendingClosingsTable({ deals }: { deals: PendingClosingEntry[] }) {
                 <td className="px-6 py-3 font-medium text-foreground-muted">
                   <Link
                     href={`/referrals/${deal.referralId}`}
-                    className="hover:text-sky-600 hover:underline"
+                    className="hover:text-info hover:underline"
                   >
                     {deal.borrowerName}
                   </Link>
@@ -2648,7 +2724,7 @@ function ClosedDealsTable({
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead>
-          <tr className="border-b border-border text-xs font-medium uppercase tracking-wide text-foreground-muted">
+          <tr className="text-eyebrow border-b border-border text-foreground-muted">
             <th className="px-6 py-3">Borrower</th>
             <th className="px-6 py-3">Agent</th>
             <th className="px-6 py-3">MC</th>
@@ -2675,7 +2751,7 @@ function ClosedDealsTable({
                 <td className="px-6 py-3 font-medium text-foreground-muted">
                   <Link
                     href={`/referrals/${deal.referralId}`}
-                    className="hover:text-sky-600 hover:underline"
+                    className="hover:text-info hover:underline"
                   >
                     {deal.borrowerName}
                   </Link>
@@ -2712,17 +2788,21 @@ function ClosedDealsTable({
 function McRankedList({ title, entries }: { title: string; entries: McRankedEntry[] }) {
   const [selectedMc, setSelectedMc] = useState<McRankedEntry | null>(null);
   const scrollMaxHeight = `${RANKED_LIST_PREVIEW_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
-  const description = "Composite score blends weighted MC KPIs scored relative to peers this period. The top drivers of rank are AFC close rate, total AFC deal volume, closed deals using AFC, fewer closed deals without AFC, total revenue, and referral (transfer) volume. Close speed, pushed-back deals, closes without the assigned agent, financing terminations, NPS, pipeline aging, source quality, and forecast accuracy act as lower-weight quality guardrails. MCs with fewer than 3 referrals are marked provisional and receive a volume discount, but still keep a score. KPIs with no data this period are excluded from that MC's weighted average rather than dragging the score toward the median.";
+  const description = "Composite score blends weighted MC KPIs scored relative to peers this period. The top drivers of rank are closed deals with AFC, fewer closed deals without AFC, fewer closes without the assigned agent, deals created, referral (transfer) volume, and total revenue. Close speed, pushed-back deals, financing terminations, NPS, and revenue per referral act as lower-weight quality guardrails. MCs with fewer than 3 referrals are marked provisional and receive a volume discount, but still keep a score. KPIs with no data this period are excluded from that MC's weighted average rather than dragging the score toward the median.";
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+    <div className={dashCardClasses}>
       <div className="flex items-center gap-1.5">
-        <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
+        <p className="text-eyebrow text-foreground-subtle">{title}</p>
         <Tooltip content={description} side="bottom" className="w-80 max-w-[calc(100vw-3rem)] text-left leading-relaxed">
           <button
             type="button"
             aria-label={`${title} details`}
-            className="inline-flex rounded-full text-foreground-subtle transition-colors hover:text-foreground focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+            className={buttonClasses({
+              variant: 'ghost',
+              size: 'icon',
+              className: 'h-6 w-6 text-foreground-subtle hover:bg-transparent hover:text-foreground'
+            })}
           >
             <Info className="h-3.5 w-3.5" aria-hidden="true" />
           </button>
@@ -2748,16 +2828,16 @@ function McRankedList({ title, entries }: { title: string; entries: McRankedEntr
                     <button
                       type="button"
                       onClick={() => setSelectedMc(entry)}
-                      className="text-sky-600 hover:text-sky-800 hover:underline text-left"
+                      className="text-info hover:text-info/75 hover:underline text-left"
                     >
                       {entry.name}
                     </button>
                     {!entry.qualified ? (
-                      <span className="ml-2 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                      <span className="ml-2 inline-flex rounded-full bg-warning-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning">
                         Provisional
                       </span>
                     ) : (
-                      <span className="ml-2 inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+                      <span className="ml-2 inline-flex rounded-full bg-success-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-success">
                         Qualified
                       </span>
                     )}
@@ -2803,7 +2883,7 @@ function McRankedList({ title, entries }: { title: string; entries: McRankedEntr
               ) : null}
             </div>
             <div>
-              <p className="mb-3 text-xs font-medium uppercase tracking-wide text-foreground-subtle">KPI Breakdown</p>
+              <p className="mb-3 text-eyebrow text-foreground-subtle">KPI Breakdown</p>
               <div className="space-y-3">
                 {selectedMc.kpis.map((kpi) => (
                   <div key={kpi.key}>
@@ -2828,7 +2908,7 @@ function McRankedList({ title, entries }: { title: string; entries: McRankedEntr
                     </div>
                     <div className="h-1.5 w-full rounded-full bg-surface-subtle">
                       <div
-                        className={`h-1.5 rounded-full transition-all ${kpi.normalizedScore >= 75 ? 'bg-emerald-500' : kpi.normalizedScore >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
+                        className={`h-1.5 rounded-full transition-all ${kpi.normalizedScore >= 75 ? 'bg-success' : kpi.normalizedScore >= 50 ? 'bg-warning' : 'bg-danger'}`}
                         style={{ width: `${kpi.normalizedScore}%` }}
                       />
                     </div>
@@ -2864,9 +2944,9 @@ function McAfcRiskCallListTable({ entries }: { entries: McAfcRiskCallListEntry[]
   });
 
   const getRiskTierBadge = (tier: McAfcRiskCallListEntry['riskTier']) => {
-    if (tier === 'high') return 'bg-rose-100 text-rose-700';
-    if (tier === 'medium') return 'bg-amber-100 text-amber-700';
-    return 'bg-emerald-100 text-emerald-700';
+    if (tier === 'high') return 'bg-danger-soft text-danger';
+    if (tier === 'medium') return 'bg-warning-soft text-warning';
+    return 'bg-success-soft text-success';
   };
   const sortedEntries = useMemo(() => {
     return [...entries].sort((a, b) => {
@@ -2907,8 +2987,8 @@ function McAfcRiskCallListTable({ entries }: { entries: McAfcRiskCallListEntry[]
   const scrollMaxHeight = `${AFC_RISK_VISIBLE_ROWS * RANKED_LIST_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">AFC Loss Risk Call List</p>
+    <div className={dashCardClasses}>
+      <p className="text-eyebrow text-foreground-subtle">AFC Loss Risk Call List</p>
       <p className="mt-1 text-xs text-foreground-subtle">
         AHA OOS buyer referrals in Active Lead or aged In Communication status with outside-lender risk signals.
         Under-contract referrals are excluded; rows can resurface after 14 days without a page update.
@@ -2921,7 +3001,7 @@ function McAfcRiskCallListTable({ entries }: { entries: McAfcRiskCallListEntry[]
           style={shouldScroll ? { maxHeight: scrollMaxHeight } : undefined}
         >
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-border text-xs font-medium uppercase tracking-wide text-foreground-muted">
+            <thead className="text-eyebrow border-b border-border text-foreground-muted">
               <tr>
                 {renderSortHeader('borrower', 'Borrower')}
                 {renderSortHeader('mc', 'MC')}
@@ -2937,7 +3017,7 @@ function McAfcRiskCallListTable({ entries }: { entries: McAfcRiskCallListEntry[]
                 <tr key={entry.rowId} className="hover:bg-surface-muted">
                   <td className="px-3 py-2">
                     <div className="flex flex-col">
-                      <Link href={`/referrals/${entry.referralId}`} className="font-medium text-primary-700 hover:underline">
+                      <Link href={`/referrals/${entry.referralId}`} className="font-medium text-primary hover:underline">
                         {entry.borrowerName}
                       </Link>
                       <span className="text-xs text-foreground-subtle">Loan # {entry.loanFileNumber ?? '—'}</span>
@@ -2999,21 +3079,14 @@ function McDashboard({ data }: { data: DashboardResponse['mc'] }) {
     <div className="space-y-6">
       <McRankedList title="MC Composite KPI Leaderboard" entries={data.kpiLeaderboard.rankedMcs} />
       <McAfcRiskCallListTable entries={data.afcRiskCallList} />
-      <LineChartCard
-        title="Requests received"
-        data={data.requestTrend.all}
-        formatValue={(value) => formatNumber(Math.round(value))}
-        helper="Trend of referral requests routed to MCs (network filter applied above)"
-      />
       <div className="grid gap-4 lg:grid-cols-2">
-        <LeaderboardTable
-          title="Referral requests by MC"
-          entries={data.requestLeaderboard.all}
-          valueLabel="Requests"
+        <LineChartCard
+          title="Requests received"
+          data={data.requestTrend.all}
+          formatValue={(value) => formatNumber(Math.round(value))}
+          helper="Trend of referral requests routed to MCs (network filter applied above)"
         />
-        <LeaderboardTable title="Revenue by MC" entries={data.revenueLeaderboard} valueLabel="Revenue" />
-        <McCloseEffectivenessTable entries={data.closeRateLeaderboard} />
-        <McOutsideLenderLossTable entries={data.outsideLenderLossLeaderboard} />
+        <McKpiMetricLeaderboardCard entries={data.kpiLeaderboard.rankedMcs} />
       </div>
       <div>
         <TransferTimingCard
@@ -3051,12 +3124,12 @@ function PushbackSummaryCard({
   const rate = summary.pushbackRatePercent.toFixed(1);
   const avgDays = summary.averageDaysPushedBackPerEvent.toFixed(1);
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
+    <div className={dashCardClasses}>
+      <p className="text-eyebrow text-foreground-subtle">
         Deals pushed back
       </p>
       <div className="mt-2 flex items-baseline gap-3">
-        <p className="text-2xl font-semibold text-foreground">
+        <p className="text-numeric text-2xl font-semibold tracking-[-0.02em] text-foreground">
           {formatNumber(summary.distinctDealsPushedBack)}
         </p>
         <p className="text-sm font-medium text-foreground-subtle">{rate}% pushback rate</p>
@@ -3067,7 +3140,7 @@ function PushbackSummaryCard({
       </p>
       <dl className="mt-3 grid grid-cols-2 gap-2">
         <div className="rounded-lg bg-surface-muted px-2 py-1">
-          <dt className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
+          <dt className="text-eyebrow text-foreground-subtle">
             Total pushback events
           </dt>
           <dd className="text-sm font-semibold text-foreground">
@@ -3075,7 +3148,7 @@ function PushbackSummaryCard({
           </dd>
         </div>
         <div className="rounded-lg bg-surface-muted px-2 py-1">
-          <dt className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
+          <dt className="text-eyebrow text-foreground-subtle">
             Avg. days pushed back
           </dt>
           <dd className="text-sm font-semibold text-foreground">{avgDays} days</dd>
@@ -3093,8 +3166,8 @@ function McPushbackLeaderboardTable({
   const scrollMaxHeight = `${LIST_SCROLL_VISIBLE_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
+    <div className={dashCardClasses}>
+      <p className="text-eyebrow text-foreground-subtle">
         Pushbacks by MC
       </p>
       <p className="mt-1 text-xs text-foreground-subtle">
@@ -3149,8 +3222,8 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
   const scrollMaxHeight = `${RANKED_LIST_PREVIEW_ROWS * LEADERBOARD_ROW_HEIGHT_REM + LEADERBOARD_HEADER_HEIGHT_REM}rem`;
 
   return (
-    <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">{title}</p>
+    <div className={dashCardClasses}>
+      <p className="text-eyebrow text-foreground-subtle">{title}</p>
       <p className="mt-1 text-xs text-foreground-subtle">
         Composite score blends weighted KPIs. Agents with fewer than 3 referrals are marked provisional and receive a
         reliability adjustment. CRM usage is included as a low-weight tie-break style signal.
@@ -3176,16 +3249,16 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
                       <button
                         type="button"
                         onClick={() => setSelectedAgent(agent)}
-                        className="text-sky-600 hover:text-sky-800 hover:underline text-left"
+                        className="text-info hover:text-info/75 hover:underline text-left"
                       >
                         {agent.name}
                       </button>
                       {!agent.qualified ? (
-                        <span className="ml-2 inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                        <span className="ml-2 inline-flex rounded-full bg-warning-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-warning">
                           Provisional
                         </span>
                       ) : (
-                        <span className="ml-2 inline-flex rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+                        <span className="ml-2 inline-flex rounded-full bg-success-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-success">
                           Qualified
                         </span>
                       )}
@@ -3232,7 +3305,7 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
               ) : null}
             </div>
             <div>
-              <p className="mb-3 text-xs font-medium uppercase tracking-wide text-foreground-subtle">KPI Breakdown</p>
+              <p className="mb-3 text-eyebrow text-foreground-subtle">KPI Breakdown</p>
               <div className="space-y-3">
                 {selectedAgent.kpis.map((kpi) => (
                   <div key={kpi.key}>
@@ -3257,7 +3330,7 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
                     </div>
                     <div className="h-1.5 w-full rounded-full bg-surface-subtle">
                       <div
-                        className={`h-1.5 rounded-full transition-all ${kpi.normalizedScore >= 75 ? 'bg-emerald-500' : kpi.normalizedScore >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
+                        className={`h-1.5 rounded-full transition-all ${kpi.normalizedScore >= 75 ? 'bg-success' : kpi.normalizedScore >= 50 ? 'bg-warning' : 'bg-danger'}`}
                         style={{ width: `${kpi.normalizedScore}%` }}
                       />
                     </div>
@@ -3272,20 +3345,101 @@ function AhaRankedList({ title, data }: { title: string; data: { rankedAgents: A
   );
 }
 
+function LostAttributionCard({ data }: { data: LostAttributionSummary }) {
+  const [activeId, setActiveId] = useState<'reason' | 'source' | 'mc'>('reason');
+  const breakdowns = {
+    reason: { label: 'By reason', nameLabel: 'Reason', entries: data.unattributableByReason },
+    source: { label: 'By lead source', nameLabel: 'Source', entries: data.unattributableBySource },
+    mc: { label: 'By mortgage consultant', nameLabel: 'Mortgage consultant', entries: data.unattributableByMc }
+  } as const;
+  const active = breakdowns[activeId];
+
+  return (
+    <div className={dashCardClasses}>
+      <p className="text-eyebrow text-foreground-subtle">
+        Lost referrals
+      </p>
+      <dl className="mt-3 grid grid-cols-2 gap-2">
+        <div className="rounded-lg bg-surface-muted px-3 py-2">
+          <dt className="text-xs text-foreground-subtle">Counted as a connected loss</dt>
+          <dd className="text-numeric mt-1 text-xl font-semibold tracking-[-0.02em] text-foreground">
+            {formatNumber(data.attributableCount)}
+          </dd>
+        </div>
+        <div className="rounded-lg bg-surface-muted px-3 py-2">
+          <dt className="text-xs text-foreground-subtle">Lost before anyone connected</dt>
+          <dd className="text-numeric mt-1 text-xl font-semibold tracking-[-0.02em] text-foreground">
+            {formatNumber(data.unattributableCount)}
+          </dd>
+        </div>
+      </dl>
+      <p className="mt-2 text-xs text-foreground-subtle">
+        {formatNumber(data.classifiedCount)} of {formatNumber(data.totalCount)} lost referrals have a
+        reason on file ({data.classifiedRatePercent.toFixed(0)}%). Referrals without a reason are
+        counted as a connected loss.
+      </p>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        {(Object.keys(breakdowns) as Array<keyof typeof breakdowns>).map((key) => {
+          const isActive = key === activeId;
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setActiveId(key)}
+              className={cn(
+                buttonClasses({ variant: 'secondary', size: 'sm' }),
+                isActive
+                  ? 'bg-primary text-white shadow-none ring-0 hover:bg-primary hover:text-white'
+                  : 'text-foreground-muted'
+              )}
+            >
+              {breakdowns[key].label}
+            </button>
+          );
+        })}
+      </div>
+      <table className="mt-3 w-full text-sm">
+        <thead>
+          <tr className="text-left text-xs text-foreground-subtle">
+            <th className="py-1 font-medium">{active.nameLabel}</th>
+            <th className="py-1 text-right font-medium">Lost referrals</th>
+          </tr>
+        </thead>
+        <tbody>
+          {active.entries.length ? (
+            active.entries.map((entry) => (
+              <tr key={entry.id} className="border-t border-border text-foreground-muted">
+                <td className="py-2 font-medium text-foreground">{entry.name}</td>
+                <td className="py-2 text-right">{formatNumber(entry.count)}</td>
+              </tr>
+            ))
+          ) : (
+            <tr>
+              <td colSpan={2} className="py-6 text-center text-sm text-foreground-subtle">
+                Nothing to display for this period.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
   const averageCommissionDisplay =
     data.averageCommissionPercent > 0 ? `${data.averageCommissionPercent.toFixed(2)}%` : '—';
   const commissionHelper =
     data.commissionSampleSize > 0
-      ? `Unweighted mean across ${formatNumber(data.commissionSampleSize)} closed/paid deals`
-      : 'No closed or paid deals this period';
+      ? `Unweighted mean across ${formatNumber(data.commissionSampleSize)} deals that closed this period`
+      : 'No deals closed this period';
 
   const averageReferralFeeDisplay =
     data.averageReferralFeePercent > 0 ? `${data.averageReferralFeePercent.toFixed(2)}%` : '—';
   const referralFeeHelper =
     data.referralFeeSampleSize > 0
-      ? `Unweighted mean across ${formatNumber(data.referralFeeSampleSize)} closed/paid deals`
-      : 'No closed or paid deals this period';
+      ? `Unweighted mean across ${formatNumber(data.referralFeeSampleSize)} deals that closed this period`
+      : 'No deals closed this period';
 
   return (
     <div className="space-y-6">
@@ -3299,6 +3453,9 @@ function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
         <SummaryCard title="Average agent commission" value={averageCommissionDisplay} helper={commissionHelper} />
         <SummaryCard title="Average referral fee" value={averageReferralFeeDisplay} helper={referralFeeHelper} />
       </div>
+      {data.lostAttribution && data.lostAttribution.totalCount > 0 ? (
+        <LostAttributionCard data={data.lostAttribution} />
+      ) : null}
       <AgentLeaderboardCard
         views={[
           { id: 'referrals', label: 'Referrals by agent', valueLabel: 'Referrals', entries: data.referralLeaderboard },
@@ -3317,7 +3474,15 @@ function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
             entries: data.revenueExpected
           },
           { id: 'net-earnings', label: 'Agent net earnings', valueLabel: 'Net revenue', entries: data.netRevenue },
-          { id: 'lost-referrals', label: 'Lost referrals by agent', valueLabel: 'Lost referrals', entries: data.lostDeals },
+          {
+            id: 'lost-referrals',
+            label: 'Lost referrals by agent',
+            valueLabel: 'Connected losses',
+            secondaryValueLabel: 'Lost before contact',
+            entries: data.lostDeals,
+            footnote:
+              'Only losses after someone connected with the borrower are included, so this total is lower than the overall lost referral count.'
+          },
           ...(data.agentCreatedMcAssignments.length > 0
             ? [
                 {
@@ -3342,7 +3507,7 @@ function StaleReferralsTable({ referrals }: { referrals: StaleReferralEntry[] })
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead>
-          <tr className="border-b border-border text-xs font-medium uppercase tracking-wide text-foreground-muted">
+          <tr className="text-eyebrow border-b border-border text-foreground-muted">
             <th className="px-6 py-3">Borrower</th>
             <th className="px-6 py-3">Status</th>
             <th className="px-6 py-3">Agent</th>
@@ -3355,7 +3520,7 @@ function StaleReferralsTable({ referrals }: { referrals: StaleReferralEntry[] })
           {referrals.map((row) => (
             <tr key={row.id} className="hover:bg-surface-muted">
               <td className="px-6 py-3 font-medium text-foreground-muted">
-                <Link href={`/referrals/${row.id}`} className="hover:text-sky-600 hover:underline">
+                <Link href={`/referrals/${row.id}`} className="hover:text-info hover:underline">
                   {row.borrowerName}
                 </Link>
               </td>
@@ -3392,7 +3557,7 @@ function MissingAttributionReferralsTable({ referrals }: { referrals: MissingAtt
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead>
-          <tr className="border-b border-border text-xs font-medium uppercase tracking-wide text-foreground-muted">
+          <tr className="text-eyebrow border-b border-border text-foreground-muted">
             <th className="px-6 py-3">Borrower</th>
             <th className="px-6 py-3">Status</th>
             <th className="px-6 py-3">Agent</th>
@@ -3410,7 +3575,7 @@ function MissingAttributionReferralsTable({ referrals }: { referrals: MissingAtt
             return (
               <tr key={row.id} className="hover:bg-surface-muted">
                 <td className="px-6 py-3 font-medium text-foreground-muted">
-                  <Link href={`/referrals/${row.id}`} className="hover:text-sky-600 hover:underline">
+                  <Link href={`/referrals/${row.id}`} className="hover:text-info hover:underline">
                     {row.borrowerName}
                   </Link>
                 </td>
@@ -3541,15 +3706,15 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
           helper="Outstanding open tasks and daily completed/created"
           formatValue={(v) => String(Math.round(v))}
           series={[
-            { label: 'Outstanding', color: '#0ea5e9', data: taskTrend.outstanding ?? [] },
-            { label: 'Completed', color: '#22c55e', data: taskTrend.completed ?? [] },
-            { label: 'Created', color: '#f59e0b', data: taskTrend.created ?? [] }
+            { label: 'Outstanding', color: 'hsl(var(--info))', data: taskTrend.outstanding ?? [] },
+            { label: 'Completed', color: 'hsl(var(--success))', data: taskTrend.completed ?? [] },
+            { label: 'Created', color: 'hsl(var(--warning))', data: taskTrend.created ?? [] }
           ]}
         />
       ) : null}
       <div className="rounded-card border border-border bg-surface-raised shadow-card">
         <div className="border-b border-border px-6 py-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">
+          <p className="text-eyebrow text-foreground-subtle">
             Missing Source or Endorser
           </p>
           <p className="mt-1 text-sm text-foreground-subtle">
@@ -3562,309 +3727,56 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
   );
 }
 
-function AgitDashboard({ data }: { data: DashboardResponse['agit'] }) {
-  return (
-    <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard
-          title="AGIT Percentage"
-          value={`${data.agitPercentage.toFixed(1)}%`}
-          helper={`${formatNumber(data.agitReferrals)} of referrals in timeframe have AGIT agent`}
-        />
-        <SummaryCard
-          title="Closed Deals"
-          value={formatNumber(data.dealsClosed)}
-        />
-        <SummaryCard
-          title="Used AFC (Buy-side Attach Rate)"
-          value={`${data.usedAfcRate.toFixed(1)}%`}
-          helper={`${formatNumber(data.usedAfcCount)} used AFC`}
-        />
-        <SummaryCard
-          title="Lost Referrals"
-          value={formatNumber(data.lostReferrals)}
-        />
-        <SummaryCard
-          title="Close Rate"
-          value={`${data.closeRate.toFixed(1)}%`}
-        />
-      </div>
-
-      {/* AGIT Referrals Table */}
-      <div>
-        <h3 className="mb-3 text-lg font-semibold text-foreground">AGIT Referrals</h3>
-        {data.referralRows.length === 0 ? (
-          <p className="text-sm text-foreground-subtle">No AGIT referrals in this timeframe.</p>
-        ) : (
-          <div className="overflow-hidden rounded-card border border-border bg-surface-raised shadow-card">
-            <table className="min-w-full divide-y divide-border">
-              <thead className="bg-surface-muted">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Borrower</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Agent</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">MC</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Created</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Last Updated</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {data.referralRows.map((row) => (
-                  <tr key={row.id} className="hover:bg-surface-muted">
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
-                      <div className="flex flex-col">
-                        <Link
-                          prefetch={false}
-                          href={`/referrals/${row.id}`}
-                          className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
-                        >
-                          {row.borrowerName}
-                        </Link>
-                        {row.loanFileNumber && (
-                          <span className="text-xs text-foreground-subtle">Loan # {row.loanFileNumber}</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">{row.status}</td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
-                      {row.agentId ? (
-                        <div className="flex flex-col">
-                          <Link
-                            prefetch={false}
-                            href={`/agents/${row.agentId}`}
-                            className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
-                          >
-                            {row.agentName || 'Agent'}
-                          </Link>
-                          {row.agentEmail && (
-                            <a
-                              href={buildGmailComposeUrl(row.agentEmail)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="block text-xs text-primary-700 hover:underline"
-                            >
-                              {row.agentEmail}
-                            </a>
-                          )}
-                          {row.agentPhone && (
-                            <a
-                              href={`tel:${row.agentPhone.replace(/[^0-9+]/g, '')}`}
-                              className="block text-xs text-primary-700 hover:underline"
-                            >
-                              {row.agentPhone}
-                            </a>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-foreground-subtle">Unassigned</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
-                      {row.mcId ? (
-                        <div className="flex flex-col">
-                          <Link
-                            prefetch={false}
-                            href={`/lenders/${row.mcId}`}
-                            className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
-                          >
-                            {row.mcName || 'MC'}
-                          </Link>
-                          {row.mcEmail && (
-                            <a
-                              href={buildGmailComposeUrl(row.mcEmail)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="block text-xs text-primary-700 hover:underline"
-                            >
-                              {row.mcEmail}
-                            </a>
-                          )}
-                          {row.mcPhone && (
-                            <a
-                              href={`tel:${row.mcPhone.replace(/[^0-9+]/g, '')}`}
-                              className="block text-xs text-primary-700 hover:underline"
-                            >
-                              {row.mcPhone}
-                            </a>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-foreground-subtle">Unassigned</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
-                      {formatDate(row.createdAt)}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
-                      {formatDate(row.updatedAt)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* AGIT Deals Table */}
-      <div>
-        <h3 className="mb-3 text-lg font-semibold text-foreground">
-          AGIT Deals
-          {data.dealRows.length > 0 && (
-            <span className="ml-2 text-sm font-normal text-foreground-subtle">
-              {
-                data.dealRows.filter(
-                  (row) =>
-                    ['closed', 'payment_sent', 'paid'].includes(row.status) &&
-                    row.usedAssignedAgent !== false &&
-                    row.agentAttribution !== 'OUTSIDE_AGENT'
-                ).length
-              }{' '}
-              closed of {data.dealRows.length} total
-            </span>
-          )}
-        </h3>
-        {data.dealRows.length === 0 ? (
-          <p className="text-sm text-foreground-subtle">No deals for AGIT referrals in this timeframe.</p>
-        ) : (
-          <div className="overflow-hidden rounded-card border border-border bg-surface-raised shadow-card">
-            <table className="min-w-full divide-y divide-border">
-              <thead className="bg-surface-muted">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Referral</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Expected</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Received</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Agent</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">MC</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Closing Date</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Agent Used</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-foreground-subtle">Used AFC</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {data.dealRows.map((row) => (
-                  <tr key={row.id} className="hover:bg-surface-muted">
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
-                      <Link
-                        prefetch={false}
-                        href={`/referrals/${row.referralId}`}
-                        className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
-                      >
-                        {row.borrowerName}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted capitalize">{row.status.replace(/_/g, ' ')}</td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">{formatCurrency(row.expectedAmountCents)}</td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">{formatCurrency(row.receivedAmountCents)}</td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
-                      <div className="flex flex-col gap-1">
-                        {row.agentId ? (
-                          <Link
-                            prefetch={false}
-                            href={`/agents/${row.agentId}`}
-                            className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
-                          >
-                            {row.agentName || 'Agent'}
-                          </Link>
-                        ) : (
-                          <span className="text-foreground-subtle">Unassigned</span>
-                        )}
-                        {(row.referralStatus === 'Lost' || row.usedAssignedAgent === false) && (
-                          <span className="inline-flex w-fit items-center justify-center whitespace-nowrap rounded-full bg-rose-100 px-2.5 py-0.5 text-center text-xs font-medium text-rose-700">
-                            Agent not used
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
-                      {row.mcId ? (
-                        <div className="flex flex-col">
-                          <Link
-                            prefetch={false}
-                            href={`/lenders/${row.mcId}`}
-                            className="font-medium text-primary-700 transition hover:text-primary-800 hover:underline"
-                          >
-                            {row.mcName || 'MC'}
-                          </Link>
-                          {row.mcEmail && (
-                            <a
-                              href={buildGmailComposeUrl(row.mcEmail)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="block text-xs text-primary-700 hover:underline"
-                            >
-                              {row.mcEmail}
-                            </a>
-                          )}
-                          {row.mcPhone && (
-                            <a
-                              href={`tel:${row.mcPhone.replace(/[^0-9+]/g, '')}`}
-                              className="block text-xs text-primary-700 hover:underline"
-                            >
-                              {row.mcPhone}
-                            </a>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-foreground-subtle">Unassigned</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
-                      {row.closingDate ? formatDate(row.closingDate) : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
-                      {row.usedAssignedAgent === null ? '—' : row.usedAssignedAgent ? 'Yes' : 'No'}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-foreground-muted">
-                      {row.usedAfc === null ? '—' : row.usedAfc ? 'Yes' : 'No'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 export function DashboardTabs() {
   const [activeTab, setActiveTab] = useState<(typeof TAB_OPTIONS)[number]['value']>('main');
   const [timeframe, setTimeframe] = useState<TimeframeKey>('month');
   const [customRange, setCustomRange] = useState<DateRange>(() => getPresetRange('month'));
-  const [networkFilters, setNetworkFilters] = useState<Record<TabValue, NetworkFilter>>(() => ({
-    ...DEFAULT_NETWORK_FILTER
-  }));
+  const [selectedNetworks, setSelectedNetworks] = useState<NetworkOption[]>(DEFAULT_NETWORKS);
+  // Stored selection is read after mount so server and client render the same
+  // chips; the dashboard fetch waits for it to avoid loading the default first.
+  const [networksLoaded, setNetworksLoaded] = useState(false);
   const { data: session } = useSession();
 
-  const activeNetworkFilter = networkFilters[activeTab] ?? 'ALL';
+  useEffect(() => {
+    const stored = loadStoredNetworks();
+    if (stored) {
+      setSelectedNetworks(stored);
+    }
+    setNetworksLoaded(true);
+  }, []);
+
+  const networkParam = serializeNetworkList(selectedNetworks);
   const { start: customStart, end: customEnd } = customRange;
+  const isRangeReady =
+    timeframe !== 'custom' || (Boolean(customStart) && Boolean(customEnd) && customStart <= customEnd);
 
   const swrKey = useMemo<string | null>(() => {
-    const params = new URLSearchParams({ timeframe, network: activeNetworkFilter });
+    if (!isRangeReady || !networksLoaded) {
+      return null;
+    }
+    const params = new URLSearchParams({ timeframe, network: networkParam });
     if (timeframe === 'custom') {
-      if (!customStart || !customEnd || customStart > customEnd) {
-        return null;
-      }
       params.set('start', customStart);
       params.set('end', customEnd);
     }
     return `/api/dashboard?${params.toString()}`;
-  }, [timeframe, activeNetworkFilter, customStart, customEnd]);
+  }, [isRangeReady, networksLoaded, timeframe, networkParam, customStart, customEnd]);
 
   const { data, error, isLoading, mutate } = useSWR<DashboardResponse>(swrKey, fetcher, {
     refreshInterval: 60_000
   });
 
-  const handleNetworkFilterChange = (tab: TabValue, value: NetworkFilter) => {
-    setNetworkFilters((prev) => {
-      if (prev[tab] === value) {
-        return prev;
-      }
-      return { ...prev, [tab]: value };
-    });
+  const updateNetworks = (next: NetworkOption[]) => {
+    setSelectedNetworks(next);
+    saveStoredNetworks(next);
+  };
+
+  const toggleNetwork = (network: NetworkOption) => {
+    updateNetworks(
+      selectedNetworks.includes(network)
+        ? selectedNetworks.filter((value) => value !== network)
+        : [...selectedNetworks, network]
+    );
   };
 
   useEffect(() => {
@@ -3879,7 +3791,7 @@ export function DashboardTabs() {
 
   const visibleTabs = useMemo(() => {
     return TAB_OPTIONS.filter((tab) => {
-      if (tab.value === 'main' || tab.value === 'admin' || tab.value === 'agit') {
+      if (tab.value === 'main' || tab.value === 'admin') {
         return canViewGlobal;
       }
       if (tab.value === 'mc') {
@@ -3898,6 +3810,11 @@ export function DashboardTabs() {
     }
   }, [visibleTabs, activeTab]);
 
+  const pillTabs = useMemo<PillTabDefinition<TabValue>[]>(
+    () => visibleTabs.map((tab) => ({ id: tab.value, label: tab.label })),
+    [visibleTabs]
+  );
+
   const handlePreApprovalSaved = () => {
     if (!swrKey) {
       return;
@@ -3906,7 +3823,7 @@ export function DashboardTabs() {
   };
 
   const maxSelectableDate = formatDateInput(new Date());
-  const showSkeleton = Boolean(swrKey) && (isLoading || !data);
+  const showSkeleton = isRangeReady && (isLoading || !data);
 
   const handlePresetSelect = (preset: TimeframePreset) => {
     setTimeframe(preset);
@@ -3927,22 +3844,35 @@ export function DashboardTabs() {
       : TIMEFRAME_PRESETS.find((option) => option.value === timeframe)?.label ?? 'Select timeframe';
   const timeframeLabel = data?.timeframe.label ?? fallbackTimeframeLabel;
 
+  // The button already names the preset, so the header spells out the actual
+  // dates instead. "All time" starts at the epoch, which reads as a bug.
+  const headerRangeLabel = timeframe === 'all' ? 'All time' : formatDisplayRange(customRange);
+
   if (error) {
     return (
-      <div className="rounded-lg border border-red-100 bg-red-50 p-4 text-red-700">
+      <div className="rounded-card border border-danger/30 bg-danger-soft p-4 text-danger shadow-card">
         Unable to load dashboard analytics. Please try again later.
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      <PageHeader
+        eyebrow="Analytics"
+        title="Performance dashboards"
+        description={headerRangeLabel}
+      />
+
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold text-foreground">Performance dashboards</h1>
-          <p className="text-sm text-foreground-subtle">{timeframeLabel}</p>
-        </div>
-        <div className="flex flex-wrap items-start justify-end gap-6">
+        <PillTabs
+          ariaLabel="Dashboard views"
+          idPrefix="dashboard-tab"
+          tabs={pillTabs}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+        />
+        <div className="flex flex-wrap items-center gap-3">
           <TimeframeDropdown
             timeframe={timeframe}
             rangeLabel={timeframeLabel}
@@ -3950,43 +3880,26 @@ export function DashboardTabs() {
             onPresetSelect={handlePresetSelect}
             onCustomRangeSelect={handleCustomRangeSelect}
             maxDate={maxSelectableDate}
+            openToRightOnMobile
           />
-          <div className="flex flex-col items-end gap-2">
-            <span className="text-xs font-medium uppercase tracking-wide text-foreground-subtle">Network</span>
-            <NetworkFilterButtons
-              value={activeNetworkFilter}
-              onChange={(value) => handleNetworkFilterChange(activeTab, value)}
+          <div className="flex items-center gap-2">
+            <span className={sectionLabelClasses}>Network</span>
+            <MultiSegmentedPills
+              ariaLabel="Network filter"
+              options={NETWORK_FILTER_OPTIONS}
+              values={selectedNetworks}
+              onToggle={toggleNetwork}
+              allLabel="All"
+              onSelectAll={() => updateNetworks([])}
             />
           </div>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {visibleTabs.map((tab) => {
-          const isActive = activeTab === tab.value;
-          return (
-            <button
-              key={tab.value}
-              type="button"
-              onClick={() => setActiveTab(tab.value)}
-              className={`rounded-full border px-4 py-1 text-sm font-medium transition ${
-                isActive
-                  ? 'border-transparent bg-primary-600 text-white shadow-sm'
-                  : 'border-border bg-surface text-foreground-muted hover:border-border-strong hover:bg-surface-muted'
-              }`}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
-
       {showSkeleton ? (
         <div className="space-y-4">
-          <div
-            className={`grid gap-4 md:grid-cols-2 ${activeTab === 'agit' ? 'xl:grid-cols-5' : 'xl:grid-cols-4'}`}
-          >
-            {Array.from({ length: activeTab === 'agit' ? 5 : 4 }).map((_, index) => (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, index) => (
               <div key={index} className="h-28 animate-pulse rounded-card border border-border bg-surface-muted" />
             ))}
           </div>
@@ -4002,8 +3915,8 @@ export function DashboardTabs() {
         </div>
       ) : null}
 
-      {!swrKey ? (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+      {!isRangeReady ? (
+        <div className="rounded-card border border-warning/30 bg-warning-soft p-4 text-sm text-warning shadow-card">
           Select a start and end date to load dashboard metrics.
         </div>
       ) : data ? (
@@ -4013,14 +3926,13 @@ export function DashboardTabs() {
               data={data.main}
               canEditPreApprovals={canViewGlobal}
               onPreApprovalSaved={handlePreApprovalSaved}
-              networkFilter={activeNetworkFilter}
+              networkFilter={selectedNetworks}
+              timeframe={timeframe}
             />
           ) : null}
           {activeTab === 'mc' ? <McDashboard data={data.mc} /> : null}
           {activeTab === 'agent' ? <AgentDashboard data={data.agent} /> : null}
-          {activeTab === 'admin' ? <AdminDashboard data={data.admin} /> : null}
-          {activeTab === 'agit' ? <AgitDashboard data={data.agit} /> : null}
-        </div>
+          {activeTab === 'admin' ? <AdminDashboard data={data.admin} /> : null}        </div>
       ) : null}
     </div>
   );

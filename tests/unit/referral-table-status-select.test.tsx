@@ -1,12 +1,17 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { ReferralTable } from '@/components/tables/referral-table';
 import { TERMINATED_REASON_OPTIONS } from '@/constants/deals';
+import { LOST_REASON_OPTIONS } from '@/constants/referrals';
+import { confirmReferralTermination } from '@/components/referrals/terminate-confirmation-toast';
 
 const mockReplace = jest.fn();
 const mockRefresh = jest.fn();
 const mockToastCustom = jest.fn();
 const mockToastError = jest.fn();
 const mockFetch = jest.fn();
+const mockedConfirmReferralTermination = confirmReferralTermination as jest.MockedFunction<
+  typeof confirmReferralTermination
+>;
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ replace: mockReplace, refresh: mockRefresh }),
@@ -34,6 +39,10 @@ jest.mock('@/components/referrals/status-date-confirmation-toast', () => ({
   })),
 }));
 
+jest.mock('@/components/referrals/terminate-confirmation-toast', () => ({
+  confirmReferralTermination: jest.fn(),
+}));
+
 describe('ReferralTable agent status actions', () => {
   beforeEach(() => {
     mockFetch.mockResolvedValue({
@@ -46,6 +55,7 @@ describe('ReferralTable agent status actions', () => {
   afterEach(() => {
     mockFetch.mockReset();
     mockRefresh.mockReset();
+    mockedConfirmReferralTermination.mockReset();
   });
 
   it('opens Under Contract toast card from agent table status select', () => {
@@ -138,6 +148,76 @@ describe('ReferralTable agent status actions', () => {
     expect(statusRequestBody.contractDetails.contractPrice).toBe(450000);
   });
 
+  it('captures commission percent for agent-origin under-contract deals', async () => {
+    render(
+      <ReferralTable
+        mode="agent"
+        data={[
+          {
+            _id: 'ref-agent-commission',
+            createdAt: new Date().toISOString(),
+            borrowerName: 'Agent Origin Borrower',
+            borrowerEmail: 'agent-origin@example.com',
+            borrowerPhone: '1234567890',
+            clientType: 'Buyer',
+            lookingInZip: '80014',
+            loanFileNumber: 'L-agent-commission',
+            status: 'Active Lead',
+            origin: 'agent',
+          },
+        ]}
+      />
+    );
+
+    fireEvent.change(screen.getByDisplayValue('Active Lead'), { target: { value: 'Under Contract' } });
+
+    const toastRenderer = mockToastCustom.mock.calls.at(-1)?.[0] as ((toastRef: unknown) => JSX.Element) | undefined;
+    expect(toastRenderer).toBeDefined();
+    if (!toastRenderer) {
+      return;
+    }
+    render(toastRenderer({ id: 'toast-agent-commission' }));
+
+    expect(screen.getByText('Commission %')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Referral fee %')).not.toBeInTheDocument();
+
+    const contractPriceField = screen.getByText('Contract price').closest('label')?.querySelector('input');
+    expect(contractPriceField).toBeTruthy();
+    if (!contractPriceField) {
+      return;
+    }
+    fireEvent.change(contractPriceField as HTMLInputElement, { target: { value: '500000' } });
+    fireEvent.change(screen.getByLabelText('Commission %'), { target: { value: '2.5' } });
+    fireEvent.change(screen.getByLabelText('Property address'), { target: { value: '123 Main St' } });
+    fireEvent.change(screen.getByLabelText('Property city'), { target: { value: 'Denver' } });
+    fireEvent.change(screen.getByLabelText('Property state'), { target: { value: 'CO' } });
+    fireEvent.change(screen.getByLabelText('Property ZIP'), { target: { value: '80014' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save deal & move status' }));
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/payments',
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+    });
+
+    const paymentRequestCall = mockFetch.mock.calls.find((call) => call[0] === '/api/payments');
+    expect(paymentRequestCall).toBeDefined();
+    const paymentRequestBody = JSON.parse(String(paymentRequestCall?.[1]?.body));
+    expect(paymentRequestBody.commissionBasisPoints).toBe(250);
+
+    const statusRequestCall = mockFetch.mock.calls.find(
+      (call) => call[0] === '/api/referrals/ref-agent-commission/status'
+    );
+    expect(statusRequestCall).toBeDefined();
+    const statusRequestBody = JSON.parse(String(statusRequestCall?.[1]?.body));
+    expect(statusRequestBody.contractDetails.agentCommissionPercentage).toBe(2.5);
+  });
+
   it('updates both-side status pill immediately after under-contract save', async () => {
     render(
       <ReferralTable
@@ -204,7 +284,8 @@ describe('ReferralTable agent status actions', () => {
     expect(within(buyPill).getByText('Under Contract')).toBeInTheDocument();
   });
 
-  it('uses dropdown flow for terminated reason instead of prompt', () => {
+  it('opens still-shopping toast for terminated instead of a native prompt', async () => {
+    mockedConfirmReferralTermination.mockResolvedValueOnce({ confirmed: false });
     const promptSpy = jest.spyOn(window, 'prompt').mockImplementation(() => 'inspection');
     render(
       <ReferralTable
@@ -219,17 +300,25 @@ describe('ReferralTable agent status actions', () => {
             clientType: 'Buyer',
             lookingInZip: '80014',
             loanFileNumber: 'L-2',
-            status: 'Active Lead',
+            status: 'Under Contract',
+            dealStatusLabel: 'Under Contract',
           },
         ]}
       />
     );
 
-    const statusSelect = screen.getByDisplayValue('Active Lead');
+    const statusSelect = screen.getByDisplayValue('Under Contract');
     fireEvent.change(statusSelect, { target: { value: 'Terminated' } });
 
-    expect(screen.getByText('Termination reason')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockedConfirmReferralTermination).toHaveBeenCalledWith({
+        borrowerName: 'Test Borrower 2',
+        isAgentOrigin: false,
+      });
+    });
+    expect(screen.getByDisplayValue('Under Contract')).toBeInTheDocument();
     expect(promptSpy).not.toHaveBeenCalled();
+    expect(mockFetch).not.toHaveBeenCalled();
     promptSpy.mockRestore();
   });
 
@@ -328,9 +417,19 @@ describe('ReferralTable agent status actions', () => {
     });
   });
 
-  it('sends source=referral_table on terminated confirm flow', async () => {
+  it('sends Active Lead + terminateDeal when customer is still shopping', async () => {
     const terminatedReason = TERMINATED_REASON_OPTIONS[0]?.value;
     expect(terminatedReason).toBeTruthy();
+    mockedConfirmReferralTermination.mockResolvedValueOnce({
+      confirmed: true,
+      resolvedStatus: 'Active Lead',
+      terminatedReason,
+      lostReason: null,
+    });
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ status: 'Active Lead', deal: { status: 'terminated' } }),
+    });
 
     render(
       <ReferralTable
@@ -345,15 +444,14 @@ describe('ReferralTable agent status actions', () => {
             clientType: 'Buyer',
             lookingInZip: '80014',
             loanFileNumber: 'L-5',
-            status: 'Active Lead',
+            status: 'Under Contract',
+            dealStatusLabel: 'Under Contract',
           },
         ]}
       />
     );
 
-    fireEvent.change(screen.getByDisplayValue('Active Lead'), { target: { value: 'Terminated' } });
-    fireEvent.change(screen.getByDisplayValue('Select reason'), { target: { value: terminatedReason } });
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    fireEvent.change(screen.getByDisplayValue('Under Contract'), { target: { value: 'Terminated' } });
 
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith(
@@ -362,12 +460,140 @@ describe('ReferralTable agent status actions', () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            status: 'Terminated',
+            status: 'Active Lead',
             source: 'referral_table',
             terminatedReason,
+            lostReason: null,
+            terminateDeal: true,
           }),
         })
       );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Active Lead')).toBeInTheDocument();
+      expect(mockRefresh).toHaveBeenCalled();
+      expect(screen.queryByText('Deal stage: Under Contract')).not.toBeInTheDocument();
+    });
+  });
+
+  it('sends Lost + terminateDeal when customer is not still shopping', async () => {
+    const terminatedReason = TERMINATED_REASON_OPTIONS[1]?.value ?? TERMINATED_REASON_OPTIONS[0]?.value;
+    expect(terminatedReason).toBeTruthy();
+    const lostReason = LOST_REASON_OPTIONS[0]?.value;
+    expect(lostReason).toBeTruthy();
+    mockedConfirmReferralTermination.mockResolvedValueOnce({
+      confirmed: true,
+      resolvedStatus: 'Lost',
+      terminatedReason,
+      lostReason,
+    });
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ status: 'Lost', deal: { status: 'terminated' } }),
+    });
+
+    render(
+      <ReferralTable
+        mode="agent"
+        data={[
+          {
+            _id: 'ref-6',
+            createdAt: new Date().toISOString(),
+            borrowerName: 'Test Borrower 6',
+            borrowerEmail: 'borrower6@example.com',
+            borrowerPhone: '1234567890',
+            clientType: 'Buyer',
+            lookingInZip: '80014',
+            loanFileNumber: 'L-6',
+            status: 'Under Contract',
+            dealStatusLabel: 'Under Contract',
+          },
+        ]}
+      />
+    );
+
+    fireEvent.change(screen.getByDisplayValue('Under Contract'), { target: { value: 'Terminated' } });
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/referrals/ref-6/status',
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status: 'Lost',
+            source: 'referral_table',
+            terminatedReason,
+            lostReason,
+            terminateDeal: true,
+          }),
+        })
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Lost')).toBeInTheDocument();
+      expect(mockRefresh).toHaveBeenCalled();
+    });
+  });
+
+  it('sends In Communication + terminateDeal when shopping answer is maybe', async () => {
+    const terminatedReason = TERMINATED_REASON_OPTIONS[0]?.value;
+    expect(terminatedReason).toBeTruthy();
+    mockedConfirmReferralTermination.mockResolvedValueOnce({
+      confirmed: true,
+      resolvedStatus: 'In Communication',
+      terminatedReason,
+      lostReason: null,
+    });
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ status: 'In Communication', deal: { status: 'terminated' } }),
+    });
+
+    render(
+      <ReferralTable
+        mode="agent"
+        data={[
+          {
+            _id: 'ref-7',
+            createdAt: new Date().toISOString(),
+            borrowerName: 'Test Borrower 7',
+            borrowerEmail: 'borrower7@example.com',
+            borrowerPhone: '1234567890',
+            clientType: 'Buyer',
+            lookingInZip: '80014',
+            loanFileNumber: 'L-7',
+            status: 'Under Contract',
+            dealStatusLabel: 'Under Contract',
+          },
+        ]}
+      />
+    );
+
+    fireEvent.change(screen.getByDisplayValue('Under Contract'), { target: { value: 'Terminated' } });
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/referrals/ref-7/status',
+        expect.objectContaining({
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            status: 'In Communication',
+            source: 'referral_table',
+            terminatedReason,
+            lostReason: null,
+            terminateDeal: true,
+          }),
+        })
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('In Communication')).toBeInTheDocument();
+      expect(mockRefresh).toHaveBeenCalled();
     });
   });
 });

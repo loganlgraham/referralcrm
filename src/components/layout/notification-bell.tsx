@@ -1,38 +1,63 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Bell } from 'lucide-react';
 import useSWR from 'swr';
 import { Session } from 'next-auth';
-import { NotificationDropdown } from './notification-dropdown';
+import { NotificationDropdown, type Notification } from './notification-dropdown';
+import { cn } from '@/lib/cn';
 
 interface NotificationBellProps {
   session: Session;
+  inverted?: boolean;
 }
+
+const COUNT_POLL_MS = 120_000;
+const COUNT_URL = '/api/admin/notifications?count=1';
+const LIST_URL = '/api/admin/notifications';
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-export function NotificationBell({ session }: NotificationBellProps) {
+export function NotificationBell({ session, inverted = false }: NotificationBellProps) {
+  const isAdmin = session.user.role === 'admin';
   const [isOpen, setIsOpen] = useState(false);
-  
-  // Only render for admin users
-  if (session.user.role !== 'admin') {
-    return null;
-  }
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const countInFlightRef = useRef(false);
 
-  const { data, mutate } = useSWR<{ count: number; notifications: any[] }>(
-    '/api/admin/notifications',
-    fetcher,
+  const { data: countData, mutate: mutateCount } = useSWR<{ count: number }>(
+    isAdmin ? COUNT_URL : null,
+    async (url: string) => {
+      countInFlightRef.current = true;
+      try {
+        return await fetcher(url);
+      } finally {
+        countInFlightRef.current = false;
+      }
+    },
     {
-      refreshInterval: 30000, // Poll every 30 seconds
+      refreshInterval: () => (countInFlightRef.current ? 0 : COUNT_POLL_MS),
+      dedupingInterval: COUNT_POLL_MS,
+      refreshWhenHidden: false,
       revalidateOnFocus: true,
     }
   );
 
-  const count = data?.count || 0;
+  const { data: listData, mutate: mutateList } = useSWR<{
+    count: number;
+    notifications: Notification[];
+  }>(isAdmin && isOpen ? LIST_URL : null, fetcher, {
+    revalidateOnFocus: false,
+    dedupingInterval: COUNT_POLL_MS,
+  });
+
+  if (!isAdmin) {
+    return null;
+  }
+
+  const count = countData?.count ?? listData?.count ?? 0;
 
   const handleToggle = () => {
-    setIsOpen(!isOpen);
+    setIsOpen((open) => !open);
   };
 
   const handleClose = () => {
@@ -40,16 +65,22 @@ export function NotificationBell({ session }: NotificationBellProps) {
   };
 
   const handleNotificationsChanged = () => {
-    // Refresh data when notification read state changes
-    mutate();
+    void mutateCount();
+    void mutateList();
   };
 
   return (
     <div className="relative">
       <button
+        ref={buttonRef}
         type="button"
         onClick={handleToggle}
-        className="relative rounded-md p-2 text-foreground-muted transition hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
+        className={cn(
+          'relative rounded-md p-2 transition focus-visible:outline-none focus-visible:ring-2',
+          inverted
+            ? 'text-white/60 hover:bg-white/10 hover:text-white focus-visible:ring-white/40'
+            : 'text-foreground-muted hover:bg-surface-muted focus-visible:ring-ring/40'
+        )}
         aria-label="Notifications"
       >
         <Bell className="h-5 w-5" />
@@ -62,7 +93,8 @@ export function NotificationBell({ session }: NotificationBellProps) {
 
       {isOpen && (
         <NotificationDropdown
-          notifications={data?.notifications || []}
+          anchorRef={buttonRef}
+          notifications={listData?.notifications || []}
           onClose={handleClose}
           onNotificationsChanged={handleNotificationsChanged}
         />

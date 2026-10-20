@@ -111,7 +111,7 @@ function NPSSurveyContent() {
       <div className="w-full max-w-xl rounded-card bg-surface-raised p-8 shadow-lg ring-1 ring-border">
         <div className="space-y-6">
           <div className="text-center">
-            <p className="text-xs font-semibold uppercase tracking-wide text-primary-700">Net Promoter Score</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-primary">Net Promoter Score</p>
             <h1 className="mt-2 text-2xl font-semibold text-foreground">Help us improve</h1>
           </div>
 
@@ -132,7 +132,7 @@ function NPSSurveyContent() {
                     key={score}
                     className={`flex cursor-pointer flex-col items-center rounded-lg border-2 p-3 transition ${
                       selectedScore === score
-                        ? 'border-primary-500 bg-primary-600/5'
+                        ? 'border-primary bg-primary/5'
                         : 'border-border hover:border-border-strong'
                     }`}
                   >
@@ -155,13 +155,13 @@ function NPSSurveyContent() {
             </div>
 
             {error && (
-              <div className="rounded-md bg-red-50 p-3 text-sm text-red-800">{error}</div>
+              <div className="rounded-md bg-danger-soft p-3 text-sm text-danger">{error}</div>
             )}
 
             <button
               type="submit"
               disabled={submitting || selectedScore === null}
-              className="w-full rounded-md bg-primary-600 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-md bg-primary px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
               {submitting ? 'Submitting...' : 'Submit'}
             </button>

@@ -4,7 +4,9 @@ import {
   clampPercent,
   computeCohortCloseRate,
   isClosingInNonTerminatedMonth,
+  isDealClosedInWindow,
   isTotalFutureClosingStatus,
+  resolveDealClosingDate,
   safePercent
 } from '@/lib/server/dashboard-math';
 
@@ -108,5 +110,81 @@ describe('isClosingInNonTerminatedMonth', () => {
     expect(
       isClosingInNonTerminatedMonth('closed', new Date(2026, 4, 1), monthStart, monthEnd)
     ).toBe(false);
+  });
+});
+
+describe('resolveDealClosingDate', () => {
+  it('uses the closing date ahead of a later paid date', () => {
+    expect(
+      resolveDealClosingDate({
+        status: 'paid',
+        closingDate: new Date(2026, 8, 18),
+        paidDate: new Date(2026, 9, 4)
+      })
+    ).toEqual(new Date(2026, 8, 18));
+  });
+
+  it('falls back to the referral last closed time, then the paid or invoice date', () => {
+    expect(
+      resolveDealClosingDate({
+        status: 'paid',
+        lastClosedAt: '2026-09-30T12:00:00.000Z',
+        paidDate: new Date(2026, 9, 4),
+        invoiceDate: new Date(2026, 9, 2)
+      })
+    ).toEqual(new Date('2026-09-30T12:00:00.000Z'));
+
+    expect(
+      resolveDealClosingDate({
+        status: 'paid',
+        paidDate: new Date(2026, 9, 4),
+        invoiceDate: new Date(2026, 8, 1)
+      })
+    ).toEqual(new Date(2026, 9, 4));
+
+    expect(
+      resolveDealClosingDate({
+        status: 'closed',
+        invoiceDate: new Date(2026, 9, 2),
+        updatedAt: new Date(2026, 9, 5)
+      })
+    ).toEqual(new Date(2026, 9, 2));
+  });
+});
+
+describe('isDealClosedInWindow', () => {
+  const octoberStart = startOfMonth(new Date(2026, 9, 1));
+  const octoberEnd = endOfMonth(new Date(2026, 9, 1));
+
+  it('keeps a September close out of October when it was marked paid in October', () => {
+    expect(
+      isDealClosedInWindow(
+        {
+          status: 'paid',
+          closingDate: new Date(2026, 8, 18),
+          paidDate: new Date(2026, 9, 4)
+        },
+        octoberStart,
+        octoberEnd
+      )
+    ).toBe(false);
+  });
+
+  it('keeps an October close in October when it is marked paid in November', () => {
+    expect(
+      isDealClosedInWindow(
+        {
+          status: 'paid',
+          closingDate: new Date(2026, 9, 9),
+          paidDate: new Date(2026, 10, 2)
+        },
+        octoberStart,
+        octoberEnd
+      )
+    ).toBe(true);
+  });
+
+  it('returns false when no closing date can be resolved', () => {
+    expect(isDealClosedInWindow({ status: 'closed' }, octoberStart, octoberEnd)).toBe(false);
   });
 });

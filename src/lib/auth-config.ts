@@ -2,12 +2,16 @@ import { MongoDBAdapter } from '@next-auth/mongodb-adapter';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import EmailProvider from 'next-auth/providers/email';
 import bcrypt from 'bcryptjs';
+import type { MongoClient } from 'mongodb';
 import type { NextAuthOptions } from 'next-auth';
 import { Resend } from 'resend';
 import { connectMongo } from '@/lib/mongoose';
+import { lazyThenable } from '@/lib/mongo-connection';
 import { Types } from 'mongoose';
 import { User } from '@/models/user';
 import { z } from 'zod';
+import { recordAgentLoginEvent } from '@/lib/server/agent-activity';
+import { renderMagicLinkEmail } from '@/lib/email-templates/auth';
 
 const roleValues = ['agent', 'mortgage-consultant', 'admin'] as const;
 type Role = (typeof roleValues)[number];
@@ -141,12 +145,13 @@ if (process.env.RESEND_API_KEY && process.env.EMAIL_FROM) {
       from: process.env.EMAIL_FROM,
       async sendVerificationRequest({ identifier, url, provider }) {
         const host = new URL(url).host;
+        const email = renderMagicLinkEmail({ host, url });
         await resend.emails.send({
           from: provider.from as string,
           to: identifier,
           subject: `Sign in to ${host}`,
-          html: `<p>Click the link below to sign in to ${host}:</p><p><a href="${url}">Sign in</a></p>`,
-          text: `Sign in to ${host}:\n${url}`,
+          html: email.html,
+          text: email.text,
         });
       },
     })
@@ -168,7 +173,10 @@ if (!authSecret) {
 
 // Reuse mongoose's underlying MongoClient so auth shares the single connection
 // pool instead of opening a second one (halves per-instance connections + monitoring).
-const getAdapterClientPromise = () => connectMongo().then((m) => m.connection.getClient());
+// Lazy: do not open Mongo at module load; the adapter awaits this on first use.
+const adapterClientPromise = lazyThenable(() =>
+  connectMongo().then((m) => m.connection.getClient() as MongoClient)
+);
 
 export async function persistUserLastLoginAt(input: { id?: string | null; email?: string | null }) {
   const userId = typeof input.id === 'string' && input.id.length > 0 ? input.id : null;
@@ -199,7 +207,7 @@ export async function persistUserLastLoginAt(input: { id?: string | null; email?
 }
 
 export const authOptions: NextAuthOptions = {
-  adapter: MongoDBAdapter(getAdapterClientPromise() as any),
+  adapter: MongoDBAdapter(adapterClientPromise as never),
   session: { strategy: 'jwt' },
   pages: {
     signIn: '/login',
@@ -217,6 +225,10 @@ export const authOptions: NextAuthOptions = {
           id: signInUser?.id ?? null,
           email: signInUser?.email ?? null
         });
+        await recordAgentLoginEvent({
+          id: signInUser?.id ?? null,
+          email: signInUser?.email ?? null
+        });
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
           console.error('[Auth] Unable to persist last login timestamp:', error);
@@ -229,17 +241,6 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         // @ts-ignore
         token.role = (user as any).role ?? token.role;
-        try {
-          const jwtUser = user as { id?: string | null; email?: string | null };
-          await persistUserLastLoginAt({
-            id: jwtUser?.id ?? null,
-            email: jwtUser?.email ?? null
-          });
-        } catch (error) {
-          if (process.env.NODE_ENV === 'development') {
-            console.error('[Auth] Unable to persist last login timestamp from jwt:', error);
-          }
-        }
       }
 
       const role = (token as any).role;

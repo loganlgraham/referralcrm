@@ -68,7 +68,7 @@ export function PhoneActivityLink({
     <a
       href={`tel:${phone.replace(/[^0-9+]/g, '')}`}
       onClick={handleClick}
-      className={clsx('text-primary-700 hover:underline', className)}
+      className={clsx('text-primary hover:underline', className)}
     >
       {children ?? phone}
     </a>

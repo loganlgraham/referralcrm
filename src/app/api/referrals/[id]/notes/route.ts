@@ -6,10 +6,12 @@ import { createReferralNoteSchema } from '@/utils/validators';
 import { getCurrentSession } from '@/lib/auth';
 import { canViewReferral } from '@/lib/rbac';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
+import { renderNoteEmail } from '@/lib/email-templates/referral-ops';
 import { logReferralActivity } from '@/lib/server/activities';
 import { buildReferralLink, getReferralAppBaseUrl } from '@/lib/referral-links';
 import { createAdminNotifications } from '@/lib/server/notifications';
 import { maybeNotifyAdminsOnUpdateRequestResponse } from '@/lib/server/update-request-response';
+import { partitionNoteCopy } from '@/lib/server/cc-recipients';
 
 type DeliveryFailureReason = 'missing_configuration' | 'no_recipients' | 'unknown';
 
@@ -78,18 +80,18 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     recipients.push({ ...recipient, email: recipient.email.trim() });
   };
 
-  if (
-    requestedTargets.has('agent') &&
-    referral.assignedAgent &&
-    'email' in referral.assignedAgent &&
-    referral.assignedAgent.email &&
-    !note.hiddenFromAgent
-  ) {
-    addRecipient({
-      email: referral.assignedAgent.email as string,
-      name: (referral.assignedAgent as any).name || 'Agent',
-      target: 'agent'
-    });
+  if (requestedTargets.has('agent') && !note.hiddenFromAgent) {
+    const agentSlots = [referral.assignedAgent, referral.buySideAgent, referral.sellSideAgent];
+    for (const slot of agentSlots) {
+      if (!slot || typeof slot !== 'object' || !('email' in slot) || !slot.email) {
+        continue;
+      }
+      addRecipient({
+        email: slot.email as string,
+        name: (slot as { name?: string }).name || 'Agent',
+        target: 'agent',
+      });
+    }
   }
 
   if (
@@ -122,9 +124,28 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     }
   }
 
+  const onlyAdminTarget = requestedTargets.size === 1 && requestedTargets.has('admin');
+  const noteCopy = partitionNoteCopy({
+    toEmails: recipients.map((recipient) => recipient.email),
+    ccInput: parsed.data.ccEmails ?? [],
+    promoteWhenNoRecipients: onlyAdminTarget && recipients.length === 0,
+  });
+
+  if (noteCopy.promotedTo.length > 0) {
+    for (const email of noteCopy.promotedTo) {
+      addRecipient({
+        email,
+        name: 'Admin',
+        target: 'admin',
+      });
+    }
+  }
+
   let emailedTargets: ('agent' | 'mc' | 'admin')[] = [];
   let deliveryFailed = false;
   let deliveryFailureReason: DeliveryFailureReason | undefined;
+  let copiedTo: string[] = [];
+  let promotedTo: string[] = [];
 
   if (requestedTargets.size > 0) {
     if (!isTransactionalEmailConfigured()) {
@@ -140,28 +161,27 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       const borrowerName = referral.borrower?.name ?? 'this referral';
       const authorName = note.authorName ?? 'A team member';
       const plainContent = note.content;
-      const htmlContent = note.content.replace(/\n/g, '<br />');
+
+      const rendered = renderNoteEmail({
+        authorName,
+        borrowerName,
+        plainContent,
+        referralLink,
+      });
 
       const delivered = await sendTransactionalEmail({
         to: recipients.map((recipient) => recipient.email),
+        cc: noteCopy.cc.length > 0 ? noteCopy.cc : undefined,
         subject: `New note on ${borrowerName}`,
-        html: `<p>${authorName} added a new note on ${borrowerName}.</p>
-        <blockquote style="margin: 1rem 0; padding-left: 1rem; border-left: 4px solid #cbd5f5;">${htmlContent}</blockquote>
-        ${
-          referralLink
-            ? `<p>Review the referral: <a href="${referralLink}">${referralLink}</a></p>`
-            : ''
-        }`,
-        text: `${authorName} added a new note on ${borrowerName}.
-
-${plainContent}
-
-${referralLink ? `Review the referral: ${referralLink}` : ''}`
+        html: rendered.html,
+        text: rendered.text,
       });
 
       if (delivered) {
-        emailedTargets = recipients.map((recipient) => recipient.target);
+        emailedTargets = [...new Set(recipients.map((recipient) => recipient.target))];
         note.emailedTargets = emailedTargets;
+        copiedTo = noteCopy.cc;
+        promotedTo = noteCopy.promotedTo;
       } else {
         deliveryFailed = true;
         deliveryFailureReason = 'unknown';
@@ -223,6 +243,10 @@ ${referralLink ? `Review the referral: ${referralLink}` : ''}`
       hiddenFromAgent: saved.hiddenFromAgent,
       hiddenFromMc: saved.hiddenFromMc,
       emailedTargets,
+      copiedTo,
+      promotedTo,
+      pinned: false,
+      pinnedAt: null,
       deliveryFailed,
       deliveryFailureReason
     },

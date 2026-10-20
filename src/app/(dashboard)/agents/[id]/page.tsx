@@ -5,13 +5,15 @@ import { getCurrentSession } from '@/lib/auth';
 import { getAgentProfile } from '@/lib/server/people';
 import { getReferrals } from '@/lib/server/referrals';
 import { PersonNotes } from '@/components/people/person-notes';
-import { AgentNpsEditor } from '@/components/people/agent-nps-editor';
 import { PersonDealsTable } from '@/components/people/person-deals-table';
 import { AgentOverviewCard } from '@/components/people/agent-overview-card';
 import { PersonDeleteSection } from '@/components/people/person-delete-section';
+import { AgentActivityCard } from '@/components/people/agent-activity-card';
 import { ReferralTable, type ReferralRow } from '@/components/tables/referral-table';
 import { Pagination } from '@/components/tables/pagination';
 import { formatCurrency, formatDecimal } from '@/utils/formatters';
+import { StatTile } from '@/components/ui/stat-tile';
+import { EmptyState } from '@/components/ui/empty-state';
 
 interface AgentDetailPageProps {
   params: { id: string };
@@ -36,9 +38,9 @@ export default async function AgentDetailPage({ params, searchParams }: AgentDet
   const isAdmin = session.user.role === 'admin';
   const isAgent = session.user.role === 'agent';
   const isViewingOwnProfile = isAgent && session.user.id === agent._id;
-  const canEditNps = isAdmin;
   const canViewNotes = isAdmin;
   const canViewDeals = !isAgent || isViewingOwnProfile;
+  const canViewActivity = !isAgent || isViewingOwnProfile;
 
   const validPageSizes = [20, 25, 50, 100];
   const pageSizeParam = searchParams.pageSize ? Number(searchParams.pageSize) : 25;
@@ -131,28 +133,20 @@ export default async function AgentDetailPage({ params, searchParams }: AgentDet
   ];
 
   return (
-    <div className="space-y-6">
-      <AgentOverviewCard agent={agent} isAdmin={isAdmin} />
-      <div className="rounded-md bg-surface-raised p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-foreground">Performance snapshot</h2>
-        <div className="mt-4 grid gap-4 text-sm text-foreground-muted md:grid-cols-3">
+    <div className="space-y-5">
+      <AgentOverviewCard agent={agent} isAdmin={isAdmin} canViewKpiScore={canViewActivity} />
+      <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+        <h2 className="text-eyebrow text-foreground-muted">Performance snapshot</h2>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
           {metricCards.map((card) => (
-            <div key={card.label} className="rounded border border-border p-4">
-              <p className="text-xs uppercase text-foreground-subtle">{card.label}</p>
-              <p className="mt-1 text-lg font-semibold text-foreground">{card.value}</p>
-            </div>
+            <StatTile key={card.label} label={card.label} value={card.value} />
           ))}
         </div>
-        {canEditNps && (
-          <div className="mt-6">
-            <AgentNpsEditor agentId={agent._id} initialScore={agent.metrics.npsScore ?? null} />
-          </div>
-        )}
       </div>
       {canViewDeals && (
         <>
-          <div className="rounded-md bg-surface-raised p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-foreground">Referrals</h2>
+          <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+            <h2 className="text-eyebrow text-foreground-muted">Referrals</h2>
             <div className="mt-4 space-y-4">
               {referralItems.length > 0 ? (
                 <>
@@ -171,14 +165,15 @@ export default async function AgentDetailPage({ params, searchParams }: AgentDet
                   />
                 </>
               ) : (
-                <div className="rounded-lg border border-dashed border-border p-10 text-center text-sm text-foreground-subtle">
-                  No referrals yet.
-                </div>
+                <EmptyState
+                  title="No referrals yet"
+                  description="Referrals paired with this agent will show up here."
+                />
               )}
             </div>
           </div>
-          <div className="rounded-md bg-surface-raised p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-foreground">Deals</h2>
+          <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
+            <h2 className="text-eyebrow text-foreground-muted">Deals</h2>
             <div className="mt-4">
               <PersonDealsTable deals={agent.deals} context="agent" />
             </div>
@@ -193,6 +188,7 @@ export default async function AgentDetailPage({ params, searchParams }: AgentDet
           description="Only admins can view these notes. They remain hidden from the agent by default."
         />
       )}
+      {canViewActivity ? <AgentActivityCard agentId={params.id} /> : null}
       {isAdmin && (
         <PersonDeleteSection
           id={params.id}

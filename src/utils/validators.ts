@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { REFERRAL_STATUSES, REFERRAL_STATUS_VALUES, REFERRAL_TIMELINE_VALUES } from '@/constants/referrals';
+import {
+  LOST_REASON_VALUES,
+  REFERRAL_STATUSES,
+  REFERRAL_STATUS_VALUES,
+  REFERRAL_TIMELINE_VALUES
+} from '@/constants/referrals';
 import { DEAL_STATUS_VALUES, TERMINATED_REASON_VALUES } from '@/constants/deals';
 
 const zipArraySchema = z
@@ -16,7 +21,7 @@ export const createReferralSchema = z.object({
   clientType: z.enum(['Seller', 'Buyer', 'Both']),
   lookingInZip: z.string().regex(/^\d{5}$/),
   lookingInZips: zipArraySchema.optional(),
-  borrowerCurrentAddress: z.string().min(1),
+  borrowerCurrentAddress: z.string().optional(),
   stageOnTransfer: z.enum(['Pre-approval TBD', 'Pre-approved']),
   loanFileNumber: z.string().optional(),
   initialNotes: z.string().optional(),
@@ -34,6 +39,11 @@ export const updateReferralSchema = z.object({
   buyStatus: z.enum(REFERRAL_STATUS_VALUES).optional(),
   sellStatus: z.enum(REFERRAL_STATUS_VALUES).optional(),
   terminatedReason: z.enum(TERMINATED_REASON_VALUES).nullable().optional(),
+  // Optional rather than required-on-Lost: this schema backs the general edit form,
+  // which resubmits the current status. Requiring it would block edits to referrals
+  // that were lost before reasons were captured. A missing reason is treated as
+  // counting against the agent, so omitting it cannot understate losses.
+  lostReason: z.enum(LOST_REASON_VALUES).nullable().optional(),
   assignedAgent: z.string().optional(),
   referralFeeBasisPoints: z.number().int().min(0).optional(),
   ahaBucket: z.enum(['AHA', 'AHA_OOS']).nullable().optional(),
@@ -79,9 +89,13 @@ export const updateStatusSchema = z.object({
   side: z.enum(['buy', 'sell']).optional(),
   source: z.enum(['referral_table', 'referral_detail']).optional(),
   terminatedReason: z.enum(TERMINATED_REASON_VALUES).nullable().optional(),
+  lostReason: z.enum(LOST_REASON_VALUES).nullable().optional(),
+  terminateDeal: z.boolean().optional(),
   closingDate: z.string().optional(),
   sendClosedEmails: z.boolean().optional(),
   sendAgentNpsEmail: z.boolean().optional(),
+  /** Buy-side client outcome: financing with AFC vs another lender. Sell-side forced false server-side. */
+  usedAfc: z.boolean().optional(),
   contractDetails: z
     .object({
       propertyAddress: z.string().min(1),
@@ -108,20 +122,59 @@ export const updateStatusSchema = z.object({
       path: ['terminatedReason'],
     });
   }
+  if (data.status === 'Lost' && !data.lostReason) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Please tell us why this referral was lost.',
+      path: ['lostReason'],
+    });
+  }
+  if (data.terminateDeal) {
+    if (
+      data.status !== 'Active Lead' &&
+      data.status !== 'Lost' &&
+      data.status !== 'Showing Homes' &&
+      data.status !== 'In Communication'
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'terminateDeal requires status Active Lead, In Communication, or Lost.',
+        path: ['status'],
+      });
+    }
+    if (!data.terminatedReason) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Terminated reason is required when terminateDeal is true.',
+        path: ['terminatedReason'],
+      });
+    }
+  }
 });
 
 export const createReferralNoteSchema = z.object({
   content: z.string().min(1),
   hiddenFromAgent: z.boolean().optional(),
   hiddenFromMc: z.boolean().optional(),
-  emailTargets: z.array(z.enum(['agent', 'mc', 'admin'])).optional()
+  emailTargets: z.array(z.enum(['agent', 'mc', 'admin'])).optional(),
+  ccEmails: z.array(z.string().max(320)).max(25).optional()
 });
 
-export const updateReferralNoteSchema = z.object({
-  content: z.string().min(1),
-  hiddenFromAgent: z.boolean().optional(),
-  hiddenFromMc: z.boolean().optional()
-});
+export const updateReferralNoteSchema = z
+  .object({
+    content: z.string().min(1).optional(),
+    hiddenFromAgent: z.boolean().optional(),
+    hiddenFromMc: z.boolean().optional(),
+    pinned: z.boolean().optional()
+  })
+  .refine(
+    (value) =>
+      value.content !== undefined ||
+      value.hiddenFromAgent !== undefined ||
+      value.hiddenFromMc !== undefined ||
+      value.pinned !== undefined,
+    { message: 'Nothing to update' }
+  );
 
 export const createAgentNoteSchema = z.object({
   content: z.string().min(1)
@@ -131,12 +184,17 @@ export const createLenderNoteSchema = z.object({
   content: z.string().min(1)
 });
 
+const POST_TERMINATION_REFERRAL_STATUSES = ['Active Lead', 'In Communication', 'Lost'] as const;
+
 export const paymentSchema = z.object({
   referralId: z.string().min(1),
   status: z.enum(DEAL_STATUS_VALUES).default('under_contract'),
   expectedAmountCents: z.number().int().min(0),
   receivedAmountCents: z.number().int().min(0).optional(),
   terminatedReason: z.enum(TERMINATED_REASON_VALUES).nullable().optional(),
+  /** After a deal is terminated, park the referral here instead of writing Terminated. */
+  nextReferralStatus: z.enum(POST_TERMINATION_REFERRAL_STATUSES).optional(),
+  lostReason: z.enum(LOST_REASON_VALUES).nullable().optional(),
   agentAttribution: z.enum(['AHA', 'AHA_OOS', 'OUTSIDE_AGENT']).nullable().optional(),
   agentId: z
     .union([z.string().trim().regex(/^[0-9a-fA-F]{24}$/), z.literal(null)])

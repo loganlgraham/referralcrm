@@ -1,13 +1,19 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSWRConfig } from 'swr';
 import { toast } from 'sonner';
-import { Trash2, Pencil } from 'lucide-react';
+import { Trash2, Pencil, Pin, PinOff } from 'lucide-react';
 import { formatInTimeZone } from 'date-fns-tz';
 
 import { SLA_TIME_ZONE } from '@/utils/sla-insights';
+import { splitPinnedNotes } from '@/utils/referral-notes-order';
 import { shouldDefaultEmailMcForAgentNotes } from '@/utils/referral-email-defaults';
+import { Button } from '@/components/ui/button';
+import { railCardClasses, railTitleClasses } from '@/components/referrals/referral-rail';
+import { Textarea } from '@/components/ui/input';
+import { EmptyState } from '@/components/ui/empty-state';
+import { formatEmailList, openNoteCcToast } from '@/components/referrals/note-cc-toast';
 
 interface StoredReferralNote {
   id: string;
@@ -18,6 +24,8 @@ interface StoredReferralNote {
   hiddenFromAgent?: boolean;
   hiddenFromMc?: boolean;
   emailedTargets?: ('agent' | 'mc' | 'admin')[];
+  pinned?: boolean;
+  pinnedAt?: string | null;
 }
 
 type DeliveryFailureReason = 'missing_configuration' | 'no_recipients' | 'unknown';
@@ -25,6 +33,15 @@ type DeliveryFailureReason = 'missing_configuration' | 'no_recipients' | 'unknow
 interface ReferralNoteResponse extends StoredReferralNote {
   deliveryFailed?: boolean;
   deliveryFailureReason?: DeliveryFailureReason;
+  copiedTo?: string[];
+  promotedTo?: string[];
+}
+
+function describeNoteEmailAudience(parts: string[]): string {
+  if (parts.length === 0) {
+    return 'This note will be emailed.';
+  }
+  return `This note will email ${formatEmailList(parts)}.`;
 }
 
 type ViewerRole = 'admin' | 'manager' | 'agent' | 'mc' | 'viewer' | string;
@@ -63,7 +80,7 @@ function ToggleControl({ label, checked, onChange, disabled }: ToggleControlProp
   };
 
   const trackClasses = `relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${
-    disabled ? 'bg-surface-subtle' : checked ? 'bg-primary-600' : 'bg-surface-subtle'
+    disabled ? 'bg-surface-subtle' : checked ? 'bg-primary' : 'bg-surface-subtle'
   }`;
 
   const thumbClasses = `inline-block h-4 w-4 transform rounded-full bg-surface-raised shadow transition ${
@@ -78,7 +95,7 @@ function ToggleControl({ label, checked, onChange, disabled }: ToggleControlProp
       aria-label={label}
       onClick={handleToggle}
       disabled={disabled}
-      className={`inline-flex items-center gap-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 ${
+      className={`inline-flex items-center gap-2 text-xs font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
         disabled ? 'cursor-not-allowed text-foreground-subtle' : 'cursor-pointer text-foreground-muted'
       }`}
     >
@@ -114,6 +131,7 @@ export function ReferralNotes({
   const [editHiddenFromAgent, setEditHiddenFromAgent] = useState(false);
   const [editHiddenFromMc, setEditHiddenFromMc] = useState(false);
   const [editingNotes, setEditingNotes] = useState<Set<string>>(new Set());
+  const [pinningNotes, setPinningNotes] = useState<Set<string>>(new Set());
   const { mutate } = useSWRConfig();
 
   const activityFeedKey = `/api/referrals/${referralId}/activities`;
@@ -121,29 +139,33 @@ export function ReferralNotes({
   const canControlVisibility = viewerRole === 'admin' || viewerRole === 'manager';
   const hasAgentEmail = Boolean(agentContact?.email);
   const hasMcEmail = Boolean(mcContact?.email);
-  const shouldDefaultEmailMc =
-    viewerRole === 'agent' &&
-    hasMcEmail &&
-    shouldDefaultEmailMcForAgentNotes({
-      hasAnyPayments,
-      hasAnyUsedAfcTrue
-    });
+  const shouldDefaultEmailMc = shouldDefaultEmailMcForAgentNotes({
+    viewerRole,
+    hasMcEmail,
+    hasAnyPayments,
+    hasAnyUsedAfcTrue,
+  });
   const [emailMc, setEmailMc] = useState(() => shouldDefaultEmailMc);
+  const [ccEmails, setCcEmails] = useState<string[]>([]);
+  const ccToastOpenRef = useRef(false);
+  const sendingEmailRef = useRef(false);
   const hasAdminEmails = Array.isArray(adminContacts)
     ? adminContacts.some((contact) => contact?.email)
     : false;
   const agentEmailDisabled = saving || hiddenFromAgent || !hasAgentEmail;
   const mcEmailDisabled = saving || hiddenFromMc || !hasMcEmail;
   const adminEmailDisabled = saving || !hasAdminEmails;
+  const agentEmailOn = emailAgent && hasAgentEmail && !hiddenFromAgent;
+  const mcEmailOn = emailMc && hasMcEmail && !hiddenFromMc;
+  const adminEmailOn = emailAdmin && hasAdminEmails;
+  const sendingEmail = agentEmailOn || mcEmailOn || adminEmailOn;
+  sendingEmailRef.current = sendingEmail;
 
   useEffect(() => {
     setNotes([...initialNotes]);
   }, [initialNotes]);
 
-  const sortedNotes = useMemo(
-    () => [...notes].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
-    [notes]
-  );
+  const { pinnedNotes, unpinnedNotes: sortedNotes } = useMemo(() => splitPinnedNotes(notes), [notes]);
 
   const previewNotes = useMemo(() => sortedNotes.slice(0, 2), [sortedNotes]);
 
@@ -165,6 +187,47 @@ export function ReferralNotes({
     }
   }, [hasAdminEmails, emailAdmin]);
 
+  useEffect(() => {
+    if (!sendingEmail) {
+      setCcEmails([]);
+    }
+  }, [sendingEmail]);
+
+  const openCcToast = (overrides?: { agent?: boolean; mc?: boolean; admin?: boolean }) => {
+    if (ccToastOpenRef.current || saving) {
+      return;
+    }
+
+    const flags = {
+      agent: overrides?.agent ?? agentEmailOn,
+      mc: overrides?.mc ?? mcEmailOn,
+      admin: overrides?.admin ?? adminEmailOn,
+    };
+    const audience: string[] = [];
+    if (flags.agent) {
+      audience.push(viewerRole === 'agent' ? 'you' : agentContact?.name?.trim() || 'the agent');
+    }
+    if (flags.mc) {
+      audience.push(mcContact?.name?.trim() || 'the mortgage consultant');
+    }
+    if (flags.admin) {
+      audience.push('admins');
+    }
+
+    ccToastOpenRef.current = true;
+    void openNoteCcToast({
+      description: describeNoteEmailAudience(audience),
+      admins: adminContacts ?? [],
+      initialEmails: ccEmails,
+    }).then((result) => {
+      ccToastOpenRef.current = false;
+      if (result === null || !sendingEmailRef.current) {
+        return;
+      }
+      setCcEmails(result);
+    });
+  };
+
   const resetForm = () => {
     setContent('');
     setHiddenFromAgent(false);
@@ -172,6 +235,7 @@ export function ReferralNotes({
     setEmailAgent(false);
     setEmailMc(shouldDefaultEmailMc);
     setEmailAdmin(false);
+    setCcEmails([]);
   };
 
   const handleDropdownToggle = () => {
@@ -198,6 +262,41 @@ export function ReferralNotes({
       setDeletingNotes((previous) => {
         const next = new Set(previous);
         next.delete(noteId);
+        return next;
+      });
+    }
+  };
+
+  const handleTogglePin = async (note: StoredReferralNote) => {
+    const nextPinned = !note.pinned;
+    setPinningNotes((previous) => new Set(previous).add(note.id));
+    try {
+      const response = await fetch(`/api/referrals/${referralId}/notes/${note.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ pinned: nextPinned })
+      });
+      if (!response.ok) {
+        throw new Error(nextPinned ? 'Unable to pin note' : 'Unable to unpin note');
+      }
+      const updated = (await response.json()) as StoredReferralNote;
+      setNotes((previous) =>
+        previous.map((existing) =>
+          existing.id === note.id
+            ? { ...existing, pinned: updated.pinned, pinnedAt: updated.pinnedAt ?? null }
+            : existing
+        )
+      );
+      void mutate(activityFeedKey);
+      toast.success(nextPinned ? 'Note pinned' : 'Note unpinned');
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : 'Unable to update note');
+    } finally {
+      setPinningNotes((previous) => {
+        const next = new Set(previous);
+        next.delete(note.id);
         return next;
       });
     }
@@ -295,14 +394,21 @@ export function ReferralNotes({
           content: content.trim(),
           hiddenFromAgent: canControlVisibility ? hiddenFromAgent : undefined,
           hiddenFromMc: canControlVisibility ? hiddenFromMc : undefined,
-          emailTargets: emailTargets.length > 0 ? emailTargets : undefined
+          emailTargets: emailTargets.length > 0 ? emailTargets : undefined,
+          ccEmails: emailTargets.length > 0 && ccEmails.length > 0 ? ccEmails : undefined
         })
       });
       if (!response.ok) {
         throw new Error('Unable to save note');
       }
       const created = (await response.json()) as ReferralNoteResponse;
-      const { deliveryFailed, deliveryFailureReason, ...notePayload } = created;
+      const {
+        deliveryFailed,
+        deliveryFailureReason,
+        copiedTo: copiedRaw,
+        promotedTo: promotedRaw,
+        ...notePayload
+      } = created;
       setNotes((previous) => [
         {
           ...notePayload,
@@ -316,20 +422,29 @@ export function ReferralNotes({
       resetForm();
       void mutate(activityFeedKey);
 
-      const emailSummary =
+      const copiedTo = Array.isArray(copiedRaw) ? copiedRaw : [];
+      const promotedTo = Array.isArray(promotedRaw) ? promotedRaw : [];
+      const emailedNames =
         Array.isArray(notePayload.emailedTargets) && notePayload.emailedTargets.length > 0
-          ? ` Email sent to ${notePayload.emailedTargets
-              .map((target) => {
-                if (target === 'agent') {
-                  return agentContact?.name || 'agent';
-                }
-                if (target === 'mc') {
-                  return mcContact?.name || 'MC';
-                }
-                return 'admins';
-              })
-              .join(' & ')}.`
-          : '';
+          ? notePayload.emailedTargets.map((target) => {
+              if (target === 'agent') {
+                return agentContact?.name || 'agent';
+              }
+              if (target === 'mc') {
+                return mcContact?.name || 'MC';
+              }
+              return 'admins';
+            })
+          : [];
+      let emailSummary = '';
+      if (!deliveryFailed && promotedTo.length > 0) {
+        emailSummary = ` Email sent to ${formatEmailList(promotedTo)}.`;
+      } else if (!deliveryFailed && emailedNames.length > 0) {
+        emailSummary = ` Email sent to ${emailedNames.join(' & ')}.`;
+        if (copiedTo.length > 0) {
+          emailSummary += ` Copied to ${formatEmailList(copiedTo)}.`;
+        }
+      }
       toast.success(`Note added.${emailSummary}`.trim());
 
       if (deliveryFailed && emailTargets.length > 0) {
@@ -361,21 +476,40 @@ export function ReferralNotes({
     const isDeleting = deletingNotes.has(note.id);
     const isEditing = editingNoteId === note.id;
     const isEditingNote = editingNotes.has(note.id);
+    const isPinning = pinningNotes.has(note.id);
 
     return (
-      <div key={note.id} className="rounded border border-border bg-surface-raised px-3 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs font-semibold text-foreground-muted">
-          <span className="truncate">
-            {note.authorName} · {note.authorRole}
-          </span>
-          <div className="flex items-center gap-2">
-            <span className="text-foreground-subtle">{formatTimestamp(note.createdAt)}</span>
+      <div key={note.id} className="group py-3.5 first:pt-0 last:pb-0">
+        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="truncate text-sm font-semibold text-foreground">{note.authorName}</span>
+            <span className="rounded-full bg-surface-muted px-2 py-0.5 text-[11px] font-semibold capitalize text-foreground-muted">
+              {note.authorRole}
+            </span>
+            {note.pinned ? <Pin className="h-3.5 w-3.5 text-primary" aria-hidden /> : null}
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-numeric text-xs text-foreground-subtle">{formatTimestamp(note.createdAt)}</span>
             {!isEditing && (
               <>
+                {canControlVisibility && (
+                  <button
+                    type="button"
+                    onClick={() => handleTogglePin(note)}
+                    disabled={isPinning}
+                    className={`inline-flex items-center rounded-md p-1 transition hover:bg-primary/10 hover:text-primary-hover disabled:cursor-not-allowed disabled:opacity-50 ${
+                      note.pinned ? 'text-primary' : 'text-foreground-subtle'
+                    }`}
+                    aria-label={note.pinned ? 'Unpin note' : 'Pin note'}
+                    title={note.pinned ? 'Unpin note' : 'Pin note'}
+                  >
+                    {note.pinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => handleEditStart(note)}
-                  className="inline-flex items-center rounded p-1 text-foreground-subtle transition hover:text-primary-700 hover:bg-primary-700/10"
+                  className="inline-flex items-center rounded-md p-1 text-foreground-subtle transition hover:bg-primary/10 hover:text-primary-hover"
                   aria-label="Edit note"
                 >
                   <Pencil className="h-3.5 w-3.5" />
@@ -385,7 +519,7 @@ export function ReferralNotes({
                     type="button"
                     onClick={() => handleDelete(note.id)}
                     disabled={isDeleting}
-                    className="inline-flex items-center rounded p-1 text-foreground-subtle transition hover:text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex items-center rounded-md p-1 text-foreground-subtle transition hover:bg-danger-soft hover:text-danger disabled:cursor-not-allowed disabled:opacity-50"
                     aria-label="Delete note"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -397,11 +531,10 @@ export function ReferralNotes({
         </div>
         {isEditing ? (
           <div className="mt-2 space-y-3">
-            <textarea
+            <Textarea
               value={editContent}
               onChange={(event) => setEditContent(event.target.value)}
               rows={3}
-              className="w-full rounded border border-border px-3 py-2 text-sm text-foreground-muted focus:border-primary-500 focus:outline-none"
               placeholder="Edit note content"
               disabled={isEditingNote}
             />
@@ -422,31 +555,33 @@ export function ReferralNotes({
               </div>
             )}
             <div className="flex flex-wrap gap-2">
-              <button
+              <Button
                 type="button"
+                size="sm"
                 onClick={() => handleEditSave(note.id)}
-                disabled={isEditingNote || !editContent.trim()}
-                className="inline-flex items-center rounded bg-primary-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
+                disabled={!editContent.trim()}
+                loading={isEditingNote}
               >
                 {isEditingNote ? 'Saving…' : 'Save'}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                variant="secondary"
+                size="sm"
                 onClick={handleEditCancel}
                 disabled={isEditingNote}
-                className="inline-flex items-center rounded border border-border px-3 py-2 text-sm font-semibold text-foreground-muted transition hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-70"
               >
                 Cancel
-              </button>
+              </Button>
             </div>
           </div>
         ) : (
           <>
-            <p className="mt-2 whitespace-pre-line text-sm text-foreground-muted">{note.content}</p>
+            <p className="mt-1.5 whitespace-pre-line text-sm leading-relaxed text-foreground">{note.content}</p>
             {showBadges && (
-              <div className="mt-2 flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-wide">
+              <div className="mt-2 flex flex-wrap gap-2 text-xs font-medium">
                 {showVisibilityBadge && (
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-700">
+                  <span className="rounded-full bg-warning-soft px-2 py-0.5 text-warning">
                     {[note.hiddenFromAgent ? 'Hidden from agent' : null, note.hiddenFromMc ? 'Hidden from MC' : null]
                       .filter(Boolean)
                       .join(' • ')}
@@ -475,57 +610,113 @@ export function ReferralNotes({
     );
   };
 
+  const totalNotes = pinnedNotes.length + sortedNotes.length;
+
   return (
-    <div className="space-y-4 rounded-lg border border-border bg-surface-raised p-5 shadow-sm">
-      <div>
-        <h2 className="text-lg font-semibold text-foreground">Notes</h2>
-        <p className="text-sm text-foreground-subtle">Capture context and decisions for this referral</p>
+    <section className={railCardClasses}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className={railTitleClasses}>Notes</h2>
+          <p className="mt-0.5 text-[13px] text-foreground-muted">Updates and decisions for this referral.</p>
+        </div>
+        {totalNotes > 0 ? (
+          <span className="text-numeric rounded-full bg-surface-muted px-2.5 py-0.5 text-xs font-semibold text-foreground-muted">
+            {totalNotes}
+          </span>
+        ) : null}
       </div>
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <textarea
+      <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+        <Textarea
           value={content}
           onChange={(event) => setContent(event.target.value)}
           rows={3}
-          className="w-full rounded border border-border px-3 py-2 text-sm text-foreground-muted focus:border-primary-500 focus:outline-none"
           placeholder="Add a note with borrower updates or next steps"
           disabled={saving}
         />
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-          {canControlVisibility && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            {canControlVisibility && (
+              <ToggleControl
+                label="Hide from agent"
+                checked={hiddenFromAgent}
+                onChange={(value) => setHiddenFromAgent(value)}
+                disabled={saving}
+              />
+            )}
+            {canControlVisibility && (
+              <ToggleControl
+                label="Hide from MC"
+                checked={hiddenFromMc}
+                onChange={(value) => setHiddenFromMc(value)}
+                disabled={saving}
+              />
+            )}
             <ToggleControl
-              label="Hide from agent"
-              checked={hiddenFromAgent}
-              onChange={(value) => setHiddenFromAgent(value)}
-              disabled={saving}
+              label={viewerRole === 'agent' ? 'Email myself this note' : 'Email agent'}
+              checked={emailAgent}
+              onChange={(value) => {
+                setEmailAgent(value);
+                if (value) {
+                  openCcToast({ agent: true });
+                }
+              }}
+              disabled={agentEmailDisabled}
             />
-          )}
-          {canControlVisibility && (
             <ToggleControl
-              label="Hide from MC"
-              checked={hiddenFromMc}
-              onChange={(value) => setHiddenFromMc(value)}
-              disabled={saving}
+              label="Email MC"
+              checked={emailMc}
+              onChange={(value) => {
+                setEmailMc(value);
+                if (value) {
+                  openCcToast({ mc: true });
+                }
+              }}
+              disabled={mcEmailDisabled}
             />
-          )}
-          <ToggleControl
-            label={viewerRole === 'agent' ? 'Email myself this note' : 'Email agent'}
-            checked={emailAgent}
-            onChange={(value) => setEmailAgent(value)}
-            disabled={agentEmailDisabled}
-          />
-          <ToggleControl
-            label="Email MC"
-            checked={emailMc}
-            onChange={(value) => setEmailMc(value)}
-            disabled={mcEmailDisabled}
-          />
-          <ToggleControl
-            label="Email admin"
-            checked={emailAdmin}
-            onChange={(value) => setEmailAdmin(value)}
-            disabled={adminEmailDisabled}
-          />
+            <ToggleControl
+              label="Email admin"
+              checked={emailAdmin}
+              onChange={(value) => {
+                setEmailAdmin(value);
+                if (value) {
+                  openCcToast({ admin: true });
+                }
+              }}
+              disabled={adminEmailDisabled}
+            />
+          </div>
+          <div className="flex gap-2">
+            {content.trim() ? (
+              <Button type="button" variant="ghost" size="sm" disabled={saving} onClick={resetForm}>
+                Cancel
+              </Button>
+            ) : null}
+            <Button type="submit" size="sm" disabled={!content.trim()} loading={saving}>
+              {saving ? 'Saving…' : 'Save note'}
+            </Button>
+          </div>
         </div>
+        {ccEmails.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs font-medium text-foreground-muted">Also copying</span>
+            {ccEmails.map((email) => (
+              <span
+                key={email}
+                className="rounded-full bg-surface-subtle px-2 py-0.5 text-xs text-foreground-muted"
+              >
+                {email}
+              </span>
+            ))}
+            <button
+              type="button"
+              onClick={() => openCcToast()}
+              disabled={saving}
+              className="text-xs font-semibold text-primary hover:text-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Edit
+            </button>
+          </div>
+        ) : null}
         {(() => {
           const missingMessages: string[] = [];
           if (!hasAgentEmail) {
@@ -538,64 +729,54 @@ export function ReferralNotes({
             missingMessages.push('Add an admin user with an email address to notify them automatically.');
           }
           return missingMessages.length > 0 ? (
-            <ul className="space-y-1 text-xs text-foreground-subtle">
+            <ul className="space-y-0.5 text-xs text-foreground-subtle">
               {missingMessages.map((message) => (
                 <li key={message}>{message}</li>
               ))}
             </ul>
           ) : null;
         })()}
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="submit"
-            disabled={saving || !content.trim()}
-            className="inline-flex items-center rounded bg-primary-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-800 disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {saving ? 'Saving…' : 'Save note'}
-          </button>
-          <button
-            type="button"
-            disabled={saving}
-            onClick={resetForm}
-            className="inline-flex items-center rounded border border-border px-3 py-2 text-sm font-semibold text-foreground-muted transition hover:bg-surface-subtle disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            Cancel
-          </button>
-        </div>
       </form>
-      <div>
+
+      {pinnedNotes.length > 0 && (
+        <div className="mt-5">
+          <p className="flex items-center gap-1.5 text-eyebrow text-primary">
+            <Pin className="h-3 w-3" aria-hidden />
+            Pinned
+          </p>
+          <div className="mt-2 divide-y divide-border">{pinnedNotes.map(renderNoteCard)}</div>
+        </div>
+      )}
+
+      <div className={pinnedNotes.length > 0 ? 'mt-5 border-t border-border pt-4' : 'mt-5'}>
         {sortedNotes.length === 0 ? (
-          <p className="text-sm text-foreground-subtle">No notes yet.</p>
+          pinnedNotes.length > 0 ? null : (
+            <EmptyState
+              compact
+              title="No notes yet"
+              description="Add the first note to capture borrower updates or next steps."
+            />
+          )
         ) : (
-          <div className="space-y-2">
-            {!showNotesDropdown && (
-              <div className="space-y-2">
-                {previewNotes.map(renderNoteCard)}
-              </div>
-            )}
+          <>
+            <div className="divide-y divide-border">
+              {(showNotesDropdown ? sortedNotes : previewNotes).map(renderNoteCard)}
+            </div>
             {sortedNotes.length > 2 && (
               <button
                 type="button"
                 onClick={handleDropdownToggle}
-                className="flex w-full items-center justify-between rounded border border-border bg-surface-muted px-3 py-2 text-left text-sm font-semibold text-foreground-muted transition hover:bg-surface-subtle"
+                className="mt-3 inline-flex items-center gap-1 text-[13px] font-semibold text-primary transition hover:text-primary-hover"
               >
-                <span>
-                  {showNotesDropdown ? 'Hide note drawer' : `Show all notes (${sortedNotes.length})`}
-                </span>
+                {showNotesDropdown ? 'Show fewer notes' : `Show all notes (${sortedNotes.length})`}
                 <span className={`transition-transform ${showNotesDropdown ? 'rotate-180' : ''}`} aria-hidden>
                   ▾
                 </span>
               </button>
             )}
-            {showNotesDropdown && (
-              <div className="max-h-80 space-y-2 overflow-y-auto rounded border border-border bg-surface-muted p-2">
-                {sortedNotes.map(renderNoteCard)}
-              </div>
-            )}
-
-          </div>
+          </>
         )}
       </div>
-    </div>
+    </section>
   );
 }

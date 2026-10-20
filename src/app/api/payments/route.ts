@@ -1,5 +1,6 @@
 import {
   addMonths,
+  addWeeks,
   differenceInCalendarDays,
   differenceInDays,
   endOfDay,
@@ -9,6 +10,8 @@ import {
   startOfMonth,
   startOfWeek,
   startOfYear,
+  subMonths,
+  subWeeks,
   subYears
 } from 'date-fns';
 import { NextRequest, NextResponse } from 'next/server';
@@ -18,11 +21,18 @@ import { Types, PipelineStage } from 'mongoose';
 import { Payment } from '@/models/payment';
 import { paymentSchema } from '@/utils/validators';
 import { getCurrentSession } from '@/lib/auth';
+import { canManageReferral } from '@/lib/rbac';
 import { Agent } from '@/models/agent';
+import type { Session } from 'next-auth';
 import { Referral } from '@/models/referral';
 import { LenderMC } from '@/models/lender';
 import { User } from '@/models/user';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
+import {
+  renderAgentCloseEmail,
+  renderBorrowerCloseEmail,
+  renderPaymentSentEmail,
+} from '@/lib/email-templates/close-nps';
 import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { buildReferralLink, getReferralAppBaseUrl } from '@/lib/referral-links';
@@ -31,6 +41,7 @@ import { dealStatusToDisplay } from '@/lib/format-notification-content';
 import { createAdminNotifications } from '@/lib/server/notifications';
 import { mapDealStatusToReferralStatus } from '@/lib/server/referral-deal-status-mapper';
 import { type DealStatus } from '@/constants/deals';
+import { type FeeBreakdownVerificationStatus } from '@/lib/fee-verification';
 import {
   deriveReferralStatusFromSides,
   getAgentIdForSide,
@@ -98,6 +109,8 @@ type PaymentWithReferral = {
   agentDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
   feeBreakdownEmailSentAt?: Date | null;
   feeBreakdownEmailSentBy?: string | null;
+  feeBreakdownVerificationStatus?: FeeBreakdownVerificationStatus | null;
+  feeBreakdownVerifiedAt?: Date | null;
   closingDatePushbackCount?: number | null;
   closingDatePushbacks?: Array<{
     previousClosingDate?: Date | null;
@@ -135,6 +148,81 @@ const isAgentAttributedDeal = (
   usedAssignedAgent: boolean | null | undefined,
   agentAttribution: string | null | undefined
 ): boolean => usedAssignedAgent === true && agentAttribution !== 'OUTSIDE_AGENT';
+
+function refId(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'bigint') return String(value);
+  if (typeof value !== 'object') return null;
+  const record = value as { _id?: unknown; toHexString?: () => string; toString?: () => string };
+  if (record._id != null && record._id !== value) {
+    return refId(record._id);
+  }
+  if (typeof record.toHexString === 'function') {
+    return record.toHexString();
+  }
+  if (typeof record.toString === 'function') {
+    const text = record.toString();
+    if (text && text !== '[object Object]') return text;
+  }
+  return null;
+}
+
+type ReferralAccessSource = {
+  assignedAgent?: unknown;
+  buySideAgent?: unknown;
+  sellSideAgent?: unknown;
+  lender?: unknown;
+  org?: string | null;
+};
+
+async function callerMayManageReferral(
+  session: Session,
+  referral: ReferralAccessSource | null,
+  knownAgentId?: string | null
+): Promise<boolean> {
+  const role = session.user?.role;
+  if (role === 'admin' || role === 'manager') return true;
+  if (!referral || !session.user?.id) return false;
+
+  if (
+    canManageReferral(session, {
+      assignedAgent: referral.assignedAgent,
+      buySideAgent: referral.buySideAgent,
+      sellSideAgent: referral.sellSideAgent,
+      lender: referral.lender,
+      org: referral.org ?? '',
+    })
+  ) {
+    return true;
+  }
+
+  const slotIds = [referral.assignedAgent, referral.buySideAgent, referral.sellSideAgent]
+    .map(refId)
+    .filter((id): id is string => Boolean(id));
+
+  if (role === 'agent') {
+    let agentId = knownAgentId ?? null;
+    if (!agentId) {
+      const agent = await Agent.findOne({ userId: session.user.id })
+        .select('_id')
+        .lean<{ _id: unknown } | null>();
+      agentId = agent?._id ? String(agent._id) : null;
+    }
+    return Boolean(agentId && slotIds.includes(agentId));
+  }
+
+  if (role === 'mc') {
+    const lenderId = refId(referral.lender);
+    const lender = await LenderMC.findOne({ userId: session.user.id })
+      .select('_id')
+      .lean<{ _id: unknown } | null>();
+    const mcLenderId = lender?._id ? String(lender._id) : null;
+    return Boolean(mcLenderId && lenderId === mcLenderId);
+  }
+
+  return false;
+}
 
 const EXPECTED_REVENUE_STATUSES: DealStatus[] = [
   'under_contract',
@@ -231,10 +319,28 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         timeframeStart = startOfWeek(now, { weekStartsOn: 1 });
         timeframeEnd = endOfWeek(now, { weekStartsOn: 1 });
         break;
+      case 'last_week': {
+        const lastWeek = subWeeks(now, 1);
+        timeframeStart = startOfWeek(lastWeek, { weekStartsOn: 1 });
+        timeframeEnd = endOfWeek(lastWeek, { weekStartsOn: 1 });
+        break;
+      }
+      case 'next_week': {
+        const nextWeek = addWeeks(now, 1);
+        timeframeStart = startOfWeek(nextWeek, { weekStartsOn: 1 });
+        timeframeEnd = endOfWeek(nextWeek, { weekStartsOn: 1 });
+        break;
+      }
       case 'month':
         timeframeStart = startOfMonth(now);
         timeframeEnd = endOfMonth(now);
         break;
+      case 'last_month': {
+        const lastMonth = subMonths(now, 1);
+        timeframeStart = startOfMonth(lastMonth);
+        timeframeEnd = endOfMonth(lastMonth);
+        break;
+      }
       case 'next_month': {
         const nextMonth = addMonths(now, 1);
         timeframeStart = startOfMonth(nextMonth);
@@ -272,7 +378,19 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       .lean<{ _id: Types.ObjectId }[]>();
     const designationAgentIds = agentsWithDesignation.map((a) => a._id);
     if (designationAgentIds.length > 0) {
-      filter.agentId = { $in: designationAgentIds };
+      const referralsWithDesignatedAgent = await Referral.find({
+        assignedAgent: { $in: designationAgentIds },
+      })
+        .select('_id')
+        .lean<{ _id: Types.ObjectId }[]>();
+
+      filter.$or = [
+        { agentId: { $in: designationAgentIds } },
+        {
+          agentId: null,
+          referralId: { $in: referralsWithDesignatedAgent.map((referral) => referral._id) },
+        },
+      ];
     } else {
       // No agents match the designation -> no payments
       return NextResponse.json({
@@ -306,7 +424,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       });
     }
 
-    const referralDocs = await Referral.find({ assignedAgent: agentRecord._id })
+    const referralDocs = await Referral.find({
+      $or: [
+        { assignedAgent: agentRecord._id },
+        { buySideAgent: agentRecord._id },
+        { sellSideAgent: agentRecord._id },
+      ],
+    })
       .select('_id')
       .lean<{ _id: Types.ObjectId }[]>();
 
@@ -683,6 +807,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         if (!s || s === 'cron' || s === 'system') return null;
         return sentByUserMap.get(s) ?? null;
       })(),
+      feeBreakdownVerificationStatus: payment.feeBreakdownVerificationStatus ?? null,
+      feeBreakdownVerifiedAt: payment.feeBreakdownVerifiedAt ? payment.feeBreakdownVerifiedAt.toISOString() : null,
       agent: agentId
         ? {
             id: agentId,
@@ -773,6 +899,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     sessionAgentId = agentRecord?._id ?? null;
   }
 
+  const mayManageReferral = await callerMayManageReferral(
+    session,
+    referralForCreate,
+    sessionAgentId ? String(sessionAgentId) : null
+  );
+  if (!mayManageReferral) {
+    return new NextResponse('Forbidden', { status: 403 });
+  }
+
   const creatorSide = resolveAgentSideForReferral(
     {
       buySideAgent: referralForCreate.buySideAgent as Types.ObjectId | null,
@@ -856,7 +991,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   });
   if (referralForCreate) {
     let referralUpdated = false;
-    let previousReferralStatusForLostLog: string | null = null;
+    const previousReferralStatus = referralForCreate.status ?? null;
     if (parsed.data.propertyAddress !== undefined) {
       referralForCreate.propertyAddress = parsed.data.propertyAddress ?? '';
       referralUpdated = true;
@@ -897,9 +1032,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     if (isOutsideAgent) {
-      const previousReferralStatus = referralForCreate.status ?? null;
       const now = new Date();
-      previousReferralStatusForLostLog = previousReferralStatus;
 
       referralForCreate.estPurchasePriceCents = 0;
       referralForCreate.referralFeeDueCents = 0;
@@ -929,24 +1062,28 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
       referralForCreate.audit.push(auditEntry as any);
       referralUpdated = true;
-
-      await Payment.updateMany(
-        { referralId: referralForCreate._id },
-        { $set: { expectedAmountCents: 0, receivedAmountCents: 0 } }
-      );
-
     }
 
     if (referralUpdated) {
       await referralForCreate.save();
     }
-    if (previousReferralStatusForLostLog && previousReferralStatusForLostLog !== 'Lost') {
+
+    const sideLabel = resolvedSide === 'sell' ? 'sell-side' : 'buy-side';
+    await logReferralActivity({
+      referralId: referralForCreate._id.toString(),
+      actorRole: session.user.role,
+      actorId: session.user.id,
+      channel: 'update',
+      content: `Deal created (${dealStatusToDisplay(payment.status)}, ${sideLabel})`,
+    });
+
+    if (previousReferralStatus !== referralForCreate.status) {
       await logReferralActivity({
         referralId: referralForCreate._id.toString(),
         actorRole: session.user.role,
         actorId: session.user.id,
         channel: 'status',
-        content: `Status changed from ${previousReferralStatusForLostLog} to Lost`,
+        content: `Status changed from ${previousReferralStatus ?? 'Unknown'} to ${referralForCreate.status}`,
       });
     }
   }
@@ -1003,8 +1140,13 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   }
 
   const referral = await Referral.findById(existingPayment.referralId)
-    .populate('assignedAgent', 'name email _id ahaDesignation')
-    .populate('lender', 'name email _id');
+    .populate('assignedAgent', 'name email _id userId ahaDesignation')
+    .populate('buySideAgent', 'userId')
+    .populate('sellSideAgent', 'userId')
+    .populate('lender', 'name email _id userId');
+  if (!(await callerMayManageReferral(session, referral))) {
+    return new NextResponse('Forbidden', { status: 403 });
+  }
   const isAgentOrigin = referral?.origin === 'agent';
 
   // Check if assigned agent has AGIT designation - skip automated emails if so
@@ -1012,6 +1154,25 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   const hasAgitAgent = assignedAgentDesignation === 'AGIT';
 
   const previousStatus = existingPayment.status;
+  const isTerminatingNow = parsed.data.status === 'terminated' && previousStatus !== 'terminated';
+  if (isTerminatingNow && !parsed.data.nextReferralStatus) {
+    return NextResponse.json(
+      {
+        error: {
+          fieldErrors: {
+            nextReferralStatus: ['Choose whether the customer is still shopping before terminating this deal.'],
+          },
+        },
+      },
+      { status: 422 }
+    );
+  }
+  if (isTerminatingNow && parsed.data.nextReferralStatus === 'Lost' && !parsed.data.lostReason) {
+    return NextResponse.json(
+      { error: { fieldErrors: { lostReason: ['Please tell us why this referral was lost.'] } } },
+      { status: 422 }
+    );
+  }
   const isClosingNow = parsed.data.status === 'closed' && previousStatus !== 'closed';
   const isPayingNow = parsed.data.status === 'paid' && previousStatus !== 'paid';
 
@@ -1130,8 +1291,15 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     nextReceivedAmountCents = 0;
   }
 
+  if (parsed.data.status === 'terminated') {
+    nextExpectedAmountCents = 0;
+    nextReceivedAmountCents = 0;
+  }
+
   const updatePayload: Record<string, unknown> = { ...parsed.data };
   delete updatePayload.referralId;
+  delete updatePayload.nextReferralStatus;
+  delete updatePayload.lostReason;
   updatePayload.contractPriceCents = nextContractPriceCents ?? null;
   updatePayload.commissionBasisPoints = nextCommissionBasisPoints ?? null;
   updatePayload.commissionFlatFeeCents = isAgentOrigin ? null : nextCommissionFlatFeeCents ?? null;
@@ -1291,11 +1459,6 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         referral.markModified('audit');
         referralStatusChanged = true;
       }
-
-      await Payment.updateMany(
-        { referralId: referral._id },
-        { $set: { expectedAmountCents: 0, receivedAmountCents: 0 } }
-      );
     }
 
     if (
@@ -1307,7 +1470,9 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         previousStatus === 'terminated' && parsed.data.status !== 'terminated';
       const nextReferralStatus = isReactivatedFromTerminated
         ? 'Active Lead'
-        : mapDealStatusToReferralStatus(parsed.data.status as DealStatus);
+        : parsed.data.status === 'terminated' && parsed.data.nextReferralStatus
+          ? parsed.data.nextReferralStatus
+          : mapDealStatusToReferralStatus(parsed.data.status as DealStatus);
       if (effectiveSide === 'sell') {
         referral.sellStatus = nextReferralStatus;
       } else {
@@ -1318,6 +1483,49 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         referral.sellStatus ?? referral.status,
         referral.clientType ?? null
       );
+
+      if (parsed.data.nextReferralStatus === 'Lost') {
+        const previousLostReason = referral.lostReason ?? null;
+        const nextLostReason =
+          nextSummaryStatus === 'Lost' ? parsed.data.lostReason ?? previousLostReason : null;
+        if (nextLostReason !== previousLostReason) {
+          referral.lostReason = nextLostReason;
+          referral.lostReasonSource = nextLostReason ? 'reported' : null;
+          const lostReasonAudit: Record<string, unknown> = {
+            actorRole: session.user.role,
+            field: 'lostReason',
+            previousValue: previousLostReason,
+            newValue: nextLostReason,
+            timestamp: now,
+          };
+          const lostReasonActorId = resolveAuditActorId(session.user.id);
+          if (lostReasonActorId) {
+            lostReasonAudit.actorId = lostReasonActorId;
+          }
+          referral.audit = Array.isArray(referral.audit) ? referral.audit : [];
+          referral.audit.push(lostReasonAudit as any);
+          referral.markModified('audit');
+        }
+        referral.estPurchasePriceCents = 0;
+        referral.referralFeeDueCents = 0;
+        if (referral.autoUpdateRemindersEnabled !== false) {
+          referral.autoUpdateRemindersEnabled = false;
+          const reminderAudit: Record<string, unknown> = {
+            actorRole: session.user.role,
+            field: 'autoUpdateRemindersEnabled',
+            previousValue: true,
+            newValue: false,
+            timestamp: now,
+          };
+          const reminderActorId = resolveAuditActorId(session.user.id);
+          if (reminderActorId) {
+            reminderAudit.actorId = reminderActorId;
+          }
+          referral.audit = Array.isArray(referral.audit) ? referral.audit : [];
+          referral.audit.push(reminderAudit as any);
+          referral.markModified('audit');
+        }
+      }
 
       if (previousReferralStatus !== nextSummaryStatus) {
         const auditEntry: Record<string, unknown> = {
@@ -1473,6 +1681,16 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       });
     }
 
+    if (parsed.data.status && parsed.data.status !== previousStatus) {
+      await logReferralActivity({
+        referralId: referral._id,
+        actorRole: session.user.role,
+        actorId: session.user.id,
+        channel: 'status',
+        content: `Deal status changed from ${dealStatusToDisplay(previousStatus)} to ${dealStatusToDisplay(payment.status)}`,
+      });
+    }
+
     if (referralStatusChanged && previousReferralStatus !== referral.status) {
       await logReferralActivity({
         referralId: referral._id,
@@ -1505,7 +1723,6 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
           
           if (agentId) {
             // Get full agent name from database if needed
-            const { Agent } = await import('@/models/agent');
             const agentDoc = await Agent.findById(agentId)
               .select('name')
               .lean<{ name?: string } | null>();
@@ -1531,21 +1748,16 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
 
               const agentSurveyUrl = `${origin}/nps/agent?token=${agentSurveyToken}`;
 
+              const borrowerEmailContent = renderBorrowerCloseEmail({
+                borrowerFirstName,
+                agentName: agentFullName,
+                surveyUrl: agentSurveyUrl,
+              });
               const borrowerSurveySent = await sendTransactionalEmail({
                 to: [borrowerEmail],
                 subject: 'Congrats on Your New Home!',
-                html: `
-                  <div style="font-family: Inter, system-ui, -apple-system, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
-                    <p>Hi ${borrowerFirstName},</p>
-                    <p>Congratulations on closing on your home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent, ${agentFullName}—your feedback means a lot and helps others tremendously. Wishing you all the best!</p>
-                    <p style="margin: 20px 0 0 0;">
-                      <a href="${agentSurveyUrl}" style="display: inline-block; padding: 10px 16px; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; text-decoration: none;">
-                        Rate Your Agent
-                      </a>
-                    </p>
-                  </div>
-                `,
-                text: `Hi ${borrowerFirstName},\n\nCongratulations on closing on your home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent, ${agentFullName}—your feedback means a lot and helps others tremendously. Wishing you all the best!\n\nRate your agent: ${agentSurveyUrl}`,
+                html: borrowerEmailContent.html,
+                text: borrowerEmailContent.text,
               });
               if (borrowerSurveySent === true) {
                 await logReferralActivity({
@@ -1585,32 +1797,17 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
                 lenderSurveyUrl = `${origin}/nps/lender?token=${lenderSurveyToken}`;
               }
 
-              const mcQuestion =
-                'If you have a quick moment: on a scale of 0-10, how likely are you to recommend American Financing to a client or colleague?';
-              const mcBlockHtml = lenderSurveyUrl
-                ? `
-                    <p style="margin: 20px 0 0 0;">${mcQuestion}</p>
-                    <p style="margin: 20px 0 0 0;">
-                      <a href="${lenderSurveyUrl}" style="display: inline-block; padding: 10px 16px; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; text-decoration: none;">
-                        Rate Your Mortgage Consultant
-                      </a>
-                    </p>
-                  `
-                : '';
-              const mcBlockText = lenderSurveyUrl
-                ? `\n\n${mcQuestion}\n\nRate your mortgage consultant: ${lenderSurveyUrl}`
-                : '';
+              const agentCloseEmail = renderAgentCloseEmail({
+                agentFirstName,
+                borrowerDisplayName,
+                lenderSurveyUrl,
+              });
 
               const agentCloseSurveySent = await sendTransactionalEmail({
                 to: [agent.email],
                 subject: 'Congratulations on Your Closed Deal!',
-                html: `
-                  <div style="font-family: Inter, system-ui, -apple-system, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
-                    <p>Hi ${agentFirstName},</p>
-                    <p>Congratulations on closing your deal with ${borrowerDisplayName}! Great work getting this referral across the finish line.</p>${mcBlockHtml}
-                  </div>
-                `,
-                text: `Hi ${agentFirstName},\n\nCongratulations on closing your deal with ${borrowerDisplayName}! Great work getting this referral across the finish line.${mcBlockText}`,
+                html: agentCloseEmail.html,
+                text: agentCloseEmail.text,
               });
               if (agentCloseSurveySent === true && lenderSurveyUrl) {
                 const lenderPop = referral.lender as { name?: string | null } | null | undefined;
@@ -1658,25 +1855,18 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
       const referralLink = referral ? buildReferralLink(referral._id.toString()) : null;
       const agentName = session.user.name ?? 'An agent';
 
-      const textBody = [
-        `${agentName} marked the referral fee as Payment Sent for ${borrowerName}.`,
-        `Amount: ${formattedAmount}.`,
-        referralLink ? `View the referral: ${referralLink}` : '',
-      ]
-        .filter(Boolean)
-        .join('\n');
-
-      const htmlBody = `
-        <p>${agentName} marked the referral fee as <strong>Payment Sent</strong> for ${borrowerName}.</p>
-        <p>Amount: <strong>${formattedAmount}</strong></p>
-        ${referralLink ? `<p><a href="${referralLink}" style="color:#2563eb;">View referral details</a></p>` : ''}
-      `;
+      const rendered = renderPaymentSentEmail({
+        agentName,
+        borrowerName,
+        formattedAmount,
+        referralLink,
+      });
 
       await sendTransactionalEmail({
         to: adminEmails,
         subject: `${agentName} sent a referral payment for ${borrowerName}`,
-        text: textBody,
-        html: htmlBody,
+        text: rendered.text,
+        html: rendered.html,
       });
     }
   }
@@ -1715,6 +1905,17 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
   const payment = await Payment.findById(id);
   if (!payment) {
     return new NextResponse('Not found', { status: 404 });
+  }
+
+  const referral = await Referral.findById(payment.referralId)
+    .select('assignedAgent buySideAgent sellSideAgent lender org')
+    .populate('assignedAgent', 'userId')
+    .populate('buySideAgent', 'userId')
+    .populate('sellSideAgent', 'userId')
+    .populate('lender', 'userId')
+    .lean<ReferralAccessSource | null>();
+  if (!(await callerMayManageReferral(session, referral))) {
+    return new NextResponse('Forbidden', { status: 403 });
   }
 
   await payment.deleteOne();

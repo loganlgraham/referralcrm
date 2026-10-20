@@ -10,7 +10,7 @@ export interface ScheduledReportDocument {
   customStartDate?: string | null;
   customEndDate?: string | null;
   metrics: string[];
-  network: 'ALL' | 'AHA' | 'AHA_OOS';
+  network: 'ALL' | 'AHA' | 'AHA_OOS' | 'AGIT';
   recipients: string[];
   cadence: ScheduledReportCadence;
   attachCsv: boolean;
@@ -30,7 +30,7 @@ const scheduledReportSchema = new Schema<ScheduledReportDocument>(
     customStartDate: { type: String, default: null },
     customEndDate: { type: String, default: null },
     metrics: { type: [String], required: true, default: [] },
-    network: { type: String, enum: ['ALL', 'AHA', 'AHA_OOS'], default: 'ALL' },
+    network: { type: String, enum: ['ALL', 'AHA', 'AHA_OOS', 'AGIT'], default: 'ALL' },
     recipients: { type: [String], required: true, default: [] },
     cadence: { type: String, enum: ['daily', 'weekly', 'monthly'], required: true },
     attachCsv: { type: Boolean, default: false },

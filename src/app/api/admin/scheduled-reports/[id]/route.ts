@@ -14,7 +14,7 @@ type PatchPayload = {
   customStartDate?: string | null;
   customEndDate?: string | null;
   metrics?: string[];
-  network?: 'ALL' | 'AHA' | 'AHA_OOS';
+  network?: 'ALL' | 'AHA' | 'AHA_OOS' | 'AGIT';
   recipients?: string[] | string;
   cadence?: 'daily' | 'weekly' | 'monthly';
   attachCsv?: boolean;
@@ -44,7 +44,13 @@ export async function PATCH(request: NextRequest, context: { params: { id: strin
   if (payload.customStartDate !== undefined) update.customStartDate = payload.customStartDate;
   if (payload.customEndDate !== undefined) update.customEndDate = payload.customEndDate;
   if (payload.metrics !== undefined) update.metrics = payload.metrics;
-  if (payload.network !== undefined) update.network = payload.network;
+  if (payload.network !== undefined) {
+    const allowedNetworks = new Set(['ALL', 'AHA', 'AHA_OOS', 'AGIT']);
+    if (!allowedNetworks.has(payload.network)) {
+      return new NextResponse('Invalid network filter', { status: 400 });
+    }
+    update.network = payload.network;
+  }
   if (payload.attachCsv !== undefined) update.attachCsv = Boolean(payload.attachCsv);
   if (payload.enabled !== undefined) update.enabled = Boolean(payload.enabled);
 

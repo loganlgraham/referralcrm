@@ -12,32 +12,34 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['var(--font-sans)', ...fontFamily.sans]
+        sans: ['var(--font-sans)', ...fontFamily.sans],
+        display: ['var(--font-display)', ...fontFamily.sans],
+        manrope: ['var(--font-manrope)', ...fontFamily.sans],
+        mono: ['var(--font-mono)', ...fontFamily.mono]
       },
       colors: {
         // Legacy brand token kept for backwards compatibility with any
         // component that still references `bg-brand` / `text-brand`.
         brand: {
-          DEFAULT: '#1F2937',
-          light: '#334155',
-          dark: '#0F172A'
+          DEFAULT: '#0F172A',
+          light: '#24304C',
+          dark: '#04070E'
         },
-        // Primary = slate brand. primary-600 (#1F2937) matches the original
-        // `brand.DEFAULT`; tints above/below are the Tailwind gray scale so
-        // `bg-primary-50` / `text-primary-700` read the way the old brand did.
+        // Navy (matching the sidebar) gives interactive work a consistent signal.
+        // `hover` and `active` lift rather than darken — near-black has nowhere
+        // darker to go, so the usual 600→700 step reads as no feedback at all.
         primary: {
           DEFAULT: 'hsl(var(--primary) / <alpha-value>)',
+          hover: 'hsl(var(--primary-hover) / <alpha-value>)',
+          active: 'hsl(var(--primary-active) / <alpha-value>)',
           foreground: 'hsl(var(--primary-foreground) / <alpha-value>)',
-          50: '#F9FAFB',
-          100: '#F3F4F6',
-          200: '#E5E7EB',
-          300: '#D1D5DB',
-          400: '#9CA3AF',
-          500: '#4B5563',
-          600: '#1F2937',
-          700: '#111827',
-          800: '#0B1220',
-          900: '#030712'
+          soft: 'hsl(var(--primary-soft) / <alpha-value>)'
+        },
+        signal: {
+          DEFAULT: 'hsl(var(--signal) / <alpha-value>)',
+          foreground: 'hsl(var(--signal-foreground) / <alpha-value>)',
+          soft: 'hsl(var(--signal-soft) / <alpha-value>)',
+          dark: '#B9472E'
         },
         // Semantic tokens backed by CSS variables declared in globals.css.
         surface: {
@@ -75,20 +77,30 @@ const config: Config = {
           DEFAULT: 'hsl(var(--info) / <alpha-value>)',
           foreground: 'hsl(var(--info-foreground) / <alpha-value>)',
           soft: 'hsl(var(--info-soft) / <alpha-value>)'
+        },
+        accent: {
+          DEFAULT: 'hsl(var(--accent) / <alpha-value>)',
+          foreground: 'hsl(var(--accent-foreground) / <alpha-value>)',
+          soft: 'hsl(var(--accent-soft) / <alpha-value>)'
         }
       },
       borderRadius: {
-        card: '14px',
+        // Softened to match the 16px card radius without touching the ~300
+        // existing `rounded-md` / `rounded-lg` call sites.
+        md: '8px',
+        lg: '10px',
+        card: '16px',
         pill: '9999px'
       },
       boxShadow: {
-        card: '0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px -12px rgba(15, 23, 42, 0.12)',
-        raised: '0 4px 12px rgba(15, 23, 42, 0.06), 0 20px 40px -16px rgba(15, 23, 42, 0.18)',
-        focus: '0 0 0 4px hsl(var(--ring) / 0.25)'
+        resting: '0 1px 2px rgba(20, 20, 60, 0.04)',
+        card: '0 1px 2px rgba(20, 20, 60, 0.04), 0 10px 30px -14px rgba(20, 20, 60, 0.14)',
+        raised: '0 4px 14px rgba(20, 20, 60, 0.06), 0 24px 48px -18px rgba(20, 20, 60, 0.20)',
+        focus: '0 0 0 4px hsl(var(--ring) / 0.22)'
       },
       fontSize: {
         eyebrow: ['0.6875rem', { lineHeight: '1rem', letterSpacing: '0.18em', fontWeight: '600' }],
-        display: ['2rem', { lineHeight: '2.4rem', letterSpacing: '-0.02em', fontWeight: '600' }],
+        display: ['2rem', { lineHeight: '2.3rem', letterSpacing: '-0.035em', fontWeight: '650' }],
         title: ['1.25rem', { lineHeight: '1.6rem', letterSpacing: '-0.01em', fontWeight: '600' }]
       },
       keyframes: {

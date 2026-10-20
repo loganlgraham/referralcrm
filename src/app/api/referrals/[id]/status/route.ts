@@ -12,6 +12,7 @@ import { calculateReferralFeeDue } from '@/utils/referral';
 import { DEFAULT_AGENT_COMMISSION_BPS, DEFAULT_REFERRAL_FEE_BPS } from '@/constants/referrals';
 import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
+import { dealStatusToDisplay } from '@/lib/format-notification-content';
 import { inferStateFromPostalCode } from '@/utils/location';
 import { calculateBusinessMinutesBetween } from '@/utils/sla-insights';
 import { createAdminNotifications } from '@/lib/server/notifications';
@@ -21,6 +22,7 @@ import { generateAndReconcileAdminTasks } from '@/lib/server/admin-task-reconcil
 import { mapReferralStatusToDealStatus } from '@/lib/server/referral-deal-status-mapper';
 import { type ReferralStatus } from '@/constants/referrals';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
+import { renderAgentCloseEmail, renderBorrowerCloseEmail } from '@/lib/email-templates/close-nps';
 import { getReferralAppBaseUrl } from '@/lib/referral-links';
 import { createNPSToken } from '@/lib/server/nps';
 import {
@@ -117,7 +119,8 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     currentAgentId
   );
   const preferredAgentSideForRequest =
-    session.user.role === 'agent' && parsed.data.status === 'Lost'
+    session.user.role === 'agent' &&
+    (parsed.data.status === 'Lost' || Boolean(parsed.data.terminateDeal))
       ? sideFromAssignedDeal ?? sideFromAgent
       : sideFromAgent;
   let requestSide: ReferralSide =
@@ -197,11 +200,35 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     }
 
     referral.audit.push(auditEntry as any);
+
+    // Keyed on the derived aggregate status, not the requested side status: a
+    // single-side loss on a Both referral does not aggregate to Lost and must not
+    // record a reason. A payload without a reason leaves an existing one alone so
+    // that changing one side cannot wipe the other side's reported reason.
+    const previousLostReason = referral.lostReason ?? null;
+    const nextLostReason =
+      referral.status === 'Lost' ? parsed.data.lostReason ?? previousLostReason : null;
+    if (nextLostReason !== previousLostReason) {
+      referral.lostReason = nextLostReason;
+      referral.lostReasonSource = nextLostReason ? 'reported' : null;
+      referral.audit.push({
+        actorRole: session.user.role,
+        actorId: actorId ?? undefined,
+        field: 'lostReason',
+        previousValue: previousLostReason,
+        newValue: nextLostReason,
+        timestamp: now
+      } as any);
+    }
   }
 
   let createdDeal: any = null;
   let syncedDeal: any = null;
-  let syncError: { code: 'agent_record_missing' | 'deal_unassigned' | 'deal_missing'; message: string } | null = null;
+  type StatusSyncError = {
+    code: 'agent_record_missing' | 'deal_unassigned' | 'deal_missing';
+    message: string;
+  };
+  let syncError: StatusSyncError | null = null;
   const sla = (referral.sla ??= {} as any);
   let slaModified = false;
 
@@ -334,7 +361,11 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   if (shouldPersistReferralStatus && parsed.data.status === 'Under Contract') {
     const details = parsed.data.contractDetails;
     const underContractSide: ReferralSide = details?.dealSide ?? requestSide;
-    const underContractUsedAfc = !isSellSide(underContractSide);
+    const underContractUsedAfc = isSellSide(underContractSide)
+      ? false
+      : typeof parsed.data.usedAfc === 'boolean'
+        ? parsed.data.usedAfc
+        : true;
 
     if (details) {
       const propertyAddress = details.propertyAddress.trim();
@@ -494,7 +525,13 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   }
 
   const mappedDealStatus = mapReferralStatusToDealStatus(nextStatus as ReferralStatus);
-  if (mappedDealStatus && parsed.data.status !== 'Under Contract') {
+  const shouldTerminateAttributedDeal = Boolean(parsed.data.terminateDeal);
+
+  const buildAttributedDealQuery = (): {
+    dealQuery: Record<string, unknown>;
+    canSyncDealStatus: boolean;
+    querySyncError: StatusSyncError | null;
+  } => {
     const dealQuery: Record<string, unknown> = {
       referralId: referral._id,
       usedAssignedAgent: true,
@@ -502,15 +539,100 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       side: requestSide,
     };
     let canSyncDealStatus = true;
+    let querySyncError: StatusSyncError | null = null;
 
     if (session.user.role === 'agent' && !currentAgentId) {
       canSyncDealStatus = false;
-      syncError = {
+      querySyncError = {
         code: 'agent_record_missing',
         message: 'Unable to sync deal status because your agent profile could not be resolved.',
       };
     } else if (session.user.role === 'agent' && currentAgentId) {
       dealQuery.agentId = currentAgentId;
+    }
+
+    return { dealQuery, canSyncDealStatus, querySyncError };
+  };
+
+  const forceLostForUnassignedDeal = async (): Promise<StatusSyncError | null> => {
+    if (session.user.role !== 'agent' || !currentAgentId) {
+      return null;
+    }
+    const unassignedDealQuery: Record<string, unknown> = {
+      referralId: referral._id,
+      side: requestSide,
+      $or: [{ usedAssignedAgent: false }, { agentAttribution: 'OUTSIDE_AGENT' }],
+    };
+    const latestUnassignedDeal = await Payment.findOne(unassignedDealQuery).sort({ createdAt: -1 });
+
+    if (latestUnassignedDeal) {
+      if (requestSide === 'sell') {
+        referral.sellStatus = 'Lost';
+      } else {
+        referral.buyStatus = 'Lost';
+      }
+      if (referral.status !== 'Lost') {
+        const auditEntry: Record<string, unknown> = {
+          actorRole: session.user.role,
+          field: 'status',
+          previousValue: referral.status,
+          newValue: 'Lost',
+          timestamp: now,
+        };
+        if (actorId) {
+          auditEntry.actorId = actorId;
+        }
+        referral.audit = referral.audit || [];
+        referral.audit.push(auditEntry as any);
+        referral.status = 'Lost';
+        referral.statusLastUpdated = now;
+      }
+      shouldPersistReferralStatus = true;
+      return {
+        code: 'deal_unassigned',
+        message:
+          'This referral is tied to an unassigned/outside-agent deal. We moved your referral status to Lost.',
+      };
+    }
+
+    if (!shouldTerminateAttributedDeal) {
+      return {
+        code: 'deal_missing',
+        message:
+          'No attributed deal was found for this referral side, so the status could not be synced to a deal.',
+      };
+    }
+
+    return null;
+  };
+
+  if (shouldTerminateAttributedDeal) {
+    const { dealQuery, canSyncDealStatus, querySyncError } = buildAttributedDealQuery();
+    if (querySyncError) {
+      syncError = querySyncError;
+    }
+    const latestAttributedDeal = canSyncDealStatus
+      ? await Payment.findOne(dealQuery).sort({ createdAt: -1 })
+      : null;
+
+    if (latestAttributedDeal) {
+      latestAttributedDeal.status = 'terminated';
+      latestAttributedDeal.terminatedReason =
+        parsed.data.terminatedReason ?? latestAttributedDeal.terminatedReason;
+      latestAttributedDeal.expectedAmountCents = 0;
+      await latestAttributedDeal.save();
+      syncedDeal = latestAttributedDeal.toObject();
+    } else if (
+      session.user.role === 'agent' &&
+      parsed.data.source === 'referral_table' &&
+      !syncError
+    ) {
+      syncError = await forceLostForUnassignedDeal();
+    }
+  } else if (mappedDealStatus && parsed.data.status !== 'Under Contract') {
+    const { dealQuery, canSyncDealStatus, querySyncError } = buildAttributedDealQuery();
+    if (querySyncError) {
+      syncError = querySyncError;
     }
 
     const latestAttributedDeal = canSyncDealStatus ? await Payment.findOne(dealQuery).sort({ createdAt: -1 }) : null;
@@ -521,6 +643,11 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         latestAttributedDeal.closingDate = parsed.data.closingDate
           ? new Date(parsed.data.closingDate)
           : latestAttributedDeal.closingDate ?? now;
+        if (isSellSide(requestSide)) {
+          latestAttributedDeal.usedAfc = false;
+        } else if (typeof parsed.data.usedAfc === 'boolean') {
+          latestAttributedDeal.usedAfc = parsed.data.usedAfc;
+        }
       }
       if (mappedDealStatus === 'terminated') {
         latestAttributedDeal.terminatedReason = parsed.data.terminatedReason ?? latestAttributedDeal.terminatedReason;
@@ -577,21 +704,16 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
               });
               const agentSurveyUrl = `${origin}/nps/agent?token=${agentSurveyToken}`;
 
+              const borrowerEmailContent = renderBorrowerCloseEmail({
+                borrowerFirstName,
+                agentName,
+                surveyUrl: agentSurveyUrl,
+              });
               const borrowerSurveySentStatus = await sendTransactionalEmail({
                 to: [borrowerEmail],
                 subject: 'Congrats on Your New Home!',
-                html: `
-                  <div style="font-family: Inter, system-ui, -apple-system, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
-                    <p>Hi ${borrowerFirstName},</p>
-                    <p>Congratulations on closing on your home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent, ${agentName}—your feedback means a lot and helps others tremendously. Wishing you all the best!</p>
-                    <p style="margin: 20px 0 0 0;">
-                      <a href="${agentSurveyUrl}" style="display: inline-block; padding: 10px 16px; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; text-decoration: none;">
-                        Rate Your Agent
-                      </a>
-                    </p>
-                  </div>
-                `,
-                text: `Hi ${borrowerFirstName},\n\nCongratulations on closing on your home! 🎉 If you have a quick moment, we'd really appreciate you leaving a rating for your agent, ${agentName}—your feedback means a lot and helps others tremendously. Wishing you all the best!\n\nRate your agent: ${agentSurveyUrl}`,
+                html: borrowerEmailContent.html,
+                text: borrowerEmailContent.text,
               });
               if (borrowerSurveySentStatus === true) {
                 await logReferralActivity({
@@ -624,32 +746,17 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
               const agentFirstName = agentName.split(' ')[0] || 'there';
               const borrowerDisplayName =
                 referral.borrower?.name || referral.borrower?.firstName || 'your client';
-              const mcQuestion =
-                'If you have a quick moment: on a scale of 0-10, how likely are you to recommend American Financing to a client or colleague?';
-              const mcBlockHtml = lenderSurveyUrl
-                ? `
-                    <p style="margin: 20px 0 0 0;">${mcQuestion}</p>
-                    <p style="margin: 20px 0 0 0;">
-                      <a href="${lenderSurveyUrl}" style="display: inline-block; padding: 10px 16px; border-radius: 10px; background: #0f172a; color: #fff; font-weight: 700; text-decoration: none;">
-                        Rate Your Mortgage Consultant
-                      </a>
-                    </p>
-                  `
-                : '';
-              const mcBlockText = lenderSurveyUrl
-                ? `\n\n${mcQuestion}\n\nRate your mortgage consultant: ${lenderSurveyUrl}`
-                : '';
+              const agentCloseEmail = renderAgentCloseEmail({
+                agentFirstName,
+                borrowerDisplayName,
+                lenderSurveyUrl,
+              });
 
               const agentCloseSurveySentStatus = await sendTransactionalEmail({
                 to: [agentEmail],
                 subject: 'Congratulations on Your Closed Deal!',
-                html: `
-                  <div style="font-family: Inter, system-ui, -apple-system, sans-serif; max-width: 640px; color: #0f172a; line-height: 1.5;">
-                    <p>Hi ${agentFirstName},</p>
-                    <p>Congratulations on closing your deal with ${borrowerDisplayName}! Great work getting this referral across the finish line.</p>${mcBlockHtml}
-                  </div>
-                `,
-                text: `Hi ${agentFirstName},\n\nCongratulations on closing your deal with ${borrowerDisplayName}! Great work getting this referral across the finish line.${mcBlockText}`,
+                html: agentCloseEmail.html,
+                text: agentCloseEmail.text,
               });
               if (agentCloseSurveySentStatus === true && lenderSurveyUrl) {
                 const lenderPopStatus = referral.lender as { name?: string | null } | null | undefined;
@@ -669,48 +776,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         }
       }
     } else if (dealMappedStatusUpdateFromTable && session.user.role === 'agent' && currentAgentId) {
-      const unassignedDealQuery: Record<string, unknown> = {
-        referralId: referral._id,
-        side: requestSide,
-        $or: [{ usedAssignedAgent: false }, { agentAttribution: 'OUTSIDE_AGENT' }],
-      };
-      const latestUnassignedDeal = await Payment.findOne(unassignedDealQuery).sort({ createdAt: -1 });
-
-      if (latestUnassignedDeal) {
-        if (requestSide === 'sell') {
-          referral.sellStatus = 'Lost';
-        } else {
-          referral.buyStatus = 'Lost';
-        }
-        if (referral.status !== 'Lost') {
-          const auditEntry: Record<string, unknown> = {
-            actorRole: session.user.role,
-            field: 'status',
-            previousValue: referral.status,
-            newValue: 'Lost',
-            timestamp: now,
-          };
-          if (actorId) {
-            auditEntry.actorId = actorId;
-          }
-          referral.audit = referral.audit || [];
-          referral.audit.push(auditEntry as any);
-          referral.status = 'Lost';
-          referral.statusLastUpdated = now;
-        }
-        shouldPersistReferralStatus = true;
-        syncError = {
-          code: 'deal_unassigned',
-          message:
-            'This referral is tied to an unassigned/outside-agent deal. We moved your referral status to Lost.',
-        };
-      } else {
-        syncError = {
-          code: 'deal_missing',
-          message:
-            'No attributed deal was found for this referral side, so the status could not be synced to a deal.',
-        };
-      }
+      syncError = await forceLostForUnassignedDeal();
     }
   }
   if (slaModified) {
@@ -718,6 +784,17 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   }
   if (shouldPersistReferralStatus || slaModified) {
     await referral.save();
+  }
+
+  if (createdDeal) {
+    const createdSide = createdDeal.side === 'sell' ? 'sell-side' : 'buy-side';
+    await logReferralActivity({
+      referralId: referral._id,
+      actorRole: session.user.role,
+      actorId: session.user.id,
+      channel: 'update',
+      content: `Deal created (${dealStatusToDisplay(createdDeal.status)}, ${createdSide})`,
+    });
   }
 
   if (shouldPersistReferralStatus && previousStatus !== referral.status) {

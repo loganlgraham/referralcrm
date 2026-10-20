@@ -29,7 +29,7 @@ export function Avatar({ name, email, size = 'md', highlighted = false, classNam
       aria-hidden
       className={cn(
         'inline-flex shrink-0 items-center justify-center rounded-full bg-surface-muted font-semibold text-foreground-muted ring-1 ring-inset ring-border',
-        highlighted && 'bg-primary-50 text-primary-700 ring-primary-200',
+        highlighted && 'bg-primary-soft text-primary ring-primary/20',
         sizeStyles[size],
         className
       )}

@@ -21,8 +21,8 @@ const TERMINAL_STATUSES = ['Closed', 'Lost'];
 const REMINDER_SEND_HOUR_MT = 8;
 
 interface GetNextSendAtParams {
-  pairedAt: Date | null | undefined;
-  lastAutoSentAt: Date | null | undefined;
+  pairedAt: Date | string | null | undefined;
+  lastAutoSentAt: Date | string | null | undefined;
   autoRemindersEnabled: boolean;
   status: string;
   now?: Date;

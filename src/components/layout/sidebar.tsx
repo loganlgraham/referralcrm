@@ -23,7 +23,9 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { Avatar } from '@/components/ui/avatar';
+import { BrandMark } from '@/components/ui/brand-mark';
 import { NotificationBell } from '@/components/layout/notification-bell';
+import { IntroduceClientCta } from '@/components/layout/introduce-client-cta';
 
 type Role = 'admin' | 'mc' | 'agent' | string;
 
@@ -55,7 +57,7 @@ export const navSections: NavSection[] = [
     items: [
       { href: '/agents', label: 'Agents', icon: Users, roles: ['admin'] },
       { href: '/find-agent', label: 'Find Referral Agent', icon: Search, roles: ['agent'] },
-      { href: '/lenders', label: 'Mortgage Consultants', icon: Building2, roles: ['admin', 'agent'] }
+      { href: '/lenders', label: 'Mortgage Consultants', icon: Building2, roles: ['admin'] }
     ]
   },
   {
@@ -96,7 +98,16 @@ function RoleLabel({ role }: { role: Role }) {
   return <span className="capitalize">{role}</span>;
 }
 
-export function Sidebar({ session, className }: { session: Session; className?: string }) {
+export function Sidebar({
+  session,
+  className,
+  needsUpdateCount = 0
+}: {
+  session: Session;
+  className?: string;
+  /** Referrals waiting on this agent, shown as a badge on the Referrals nav item. */
+  needsUpdateCount?: number;
+}) {
   const pathname = usePathname();
   const role = session.user.role;
   const sections = filterSections(role);
@@ -104,30 +115,34 @@ export function Sidebar({ session, className }: { session: Session; className?: 
   return (
     <aside
       className={cn(
-        'fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-border bg-surface-raised',
+        'fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-white/10 bg-primary text-white',
         className
       )}
     >
-      <div className="flex h-16 items-center justify-between gap-2 border-b border-border px-5">
+      <div className="relative flex h-[72px] items-center justify-between gap-2 border-b border-white/10 px-6">
         <Link
           href={role === 'admin' ? '/dashboard' : '/referrals'}
           className="group flex min-w-0 items-center gap-2.5 no-underline"
         >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-600 text-sm font-bold text-white shadow-sm">
-            R
-          </span>
-          <span className="flex min-w-0 flex-col leading-tight">
-            <span className="truncate text-sm font-semibold text-foreground">Referrio</span>
-            <span className="truncate text-[11px] text-foreground-subtle">AFC · AHA Network</span>
-          </span>
+          <BrandMark inverted variant="wordmark" wordmarkSize={24} />
         </Link>
-        <NotificationBell session={session} />
+        <NotificationBell session={session} inverted />
       </div>
 
-      <nav className="flex-1 overflow-y-auto scrollbar-thin px-3 py-4">
+      <div className="relative mx-5 mt-5 border-l-2 border-signal/70 pl-3">
+        <p className="route-label text-[9px] text-white/50">AFC · AHA network</p>
+      </div>
+
+      {role !== 'admin' && role !== 'mc' && (
+        <div className="px-3 pt-4">
+          <IntroduceClientCta />
+        </div>
+      )}
+
+      <nav className="relative flex-1 overflow-y-auto scrollbar-thin px-3 py-5">
         {sections.map((section) => (
-          <div key={section.label} className="mb-4 last:mb-0">
-            <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-foreground-subtle">
+          <div key={section.label} className="mb-5 last:mb-0">
+            <p className="route-label px-3 pb-2 text-[9px] text-white/40">
               {section.label}
             </p>
             <ul className="space-y-0.5">
@@ -138,31 +153,40 @@ export function Sidebar({ session, className }: { session: Session; className?: 
                 // Referrals parent shouldn't stay highlighted when admin tasks is active.
                 const excluded = item.href === '/referrals' && pathname.startsWith('/admin/tasks');
                 const active = (isExact || isNested) && !excluded;
+                const badgeCount = item.href === '/referrals' ? needsUpdateCount : 0;
                 return (
                   <li key={item.href}>
                     <Link
                       href={item.href}
                       className={cn(
-                        'group relative flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium no-underline transition',
+                        'group relative flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium no-underline transition',
                         active
-                          ? 'bg-primary-50 text-primary-700'
-                          : 'text-foreground-muted hover:bg-surface-muted hover:text-foreground'
+                          ? 'bg-white text-primary shadow-sm'
+                          : 'text-white/70 hover:bg-white/10 hover:text-white'
                       )}
                     >
                       {active && (
                         <span
                           aria-hidden
-                          className="absolute inset-y-1.5 left-0 w-0.5 rounded-r bg-primary-600"
+                          className="absolute -left-[3px] top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full border-[3px] border-primary bg-signal"
                         />
                       )}
                       <Icon
                         aria-hidden
                         className={cn(
                           'h-4 w-4 shrink-0',
-                          active ? 'text-primary-600' : 'text-foreground-subtle group-hover:text-foreground'
+                          active ? 'text-primary' : 'text-white/40 group-hover:text-white/75'
                         )}
                       />
                       {item.label}
+                      {badgeCount > 0 ? (
+                        <span
+                          className="ml-auto inline-flex h-5 min-w-[20px] items-center justify-center rounded-pill bg-signal px-1.5 font-mono text-[11px] font-semibold tabular-nums text-white"
+                          aria-label={`${badgeCount} referrals need an update`}
+                        >
+                          {badgeCount}
+                        </span>
+                      ) : null}
                     </Link>
                   </li>
                 );
@@ -188,31 +212,31 @@ function UserChip({ session }: { session: Session }) {
   };
 
   return (
-    <div className="relative border-t border-border p-3">
+    <div className="relative border-t border-white/10 p-3">
       <button
         type="button"
         onClick={() => setMenuOpen((prev) => !prev)}
-        className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left transition hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40"
+        className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
       >
         <Avatar name={name} highlighted size="md" />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-foreground">{name}</p>
-          <p className="truncate text-[11px] text-foreground-subtle">
+          <p className="truncate text-sm font-medium text-white">{name}</p>
+          <p className="truncate text-[11px] text-white/50">
             <RoleLabel role={role} />
           </p>
         </div>
       </button>
       {menuOpen && (
         <div
-          className="absolute bottom-full left-3 right-3 mb-2 overflow-hidden rounded-md border border-border bg-surface-raised shadow-raised animate-fade-in"
+          className="absolute bottom-full left-3 right-3 mb-2 overflow-hidden rounded-lg border border-white/10 bg-primary-hover shadow-raised animate-fade-in"
           onMouseLeave={() => setMenuOpen(false)}
         >
           <button
             type="button"
             onClick={handleSignOut}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-foreground transition hover:bg-surface-muted"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-white/80 transition hover:bg-white/10 hover:text-white"
           >
-            <LogOut className="h-4 w-4 text-foreground-subtle" />
+            <LogOut className="h-4 w-4 text-white/50" />
             Sign out
           </button>
         </div>

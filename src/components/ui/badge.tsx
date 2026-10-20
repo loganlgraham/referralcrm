@@ -3,6 +3,7 @@ import { cn } from '@/lib/cn';
 
 export type BadgeVariant =
   | 'neutral'
+  | 'primary'
   | 'success'
   | 'warning'
   | 'danger'
@@ -14,14 +15,15 @@ export type BadgeSize = 'sm' | 'md';
 
 const variantStyles: Record<BadgeVariant, string> = {
   neutral: 'bg-surface-muted text-foreground ring-1 ring-inset ring-border',
+  primary: 'bg-primary text-white',
   success: 'bg-success-soft text-[hsl(var(--success))] ring-1 ring-inset ring-[hsl(var(--success)/0.25)]',
   warning: 'bg-warning-soft text-[hsl(var(--warning))] ring-1 ring-inset ring-[hsl(var(--warning)/0.3)]',
   danger: 'bg-danger-soft text-[hsl(var(--danger))] ring-1 ring-inset ring-[hsl(var(--danger)/0.3)]',
   info: 'bg-info-soft text-[hsl(var(--info))] ring-1 ring-inset ring-[hsl(var(--info)/0.25)]',
-  // Indigo/violet — used for in-flight states (e.g. payment sent) so they
-  // visually separate from success/closed variants without collapsing into them.
-  progress: 'bg-[hsl(250_100%_97%)] text-[hsl(250_55%_45%)] ring-1 ring-inset ring-[hsl(250_70%_88%)]',
-  accent: 'bg-primary-50 text-primary-700 ring-1 ring-inset ring-primary-200',
+  // Signal orange — money or work in transit (payment sent). Reads as motion
+  // rather than completion, and ties back to the route motif.
+  progress: 'bg-signal-soft text-signal-dark ring-1 ring-inset ring-signal/30',
+  accent: 'bg-accent-soft text-accent ring-1 ring-inset ring-accent/25',
   outline: 'bg-transparent text-foreground-muted ring-1 ring-inset ring-border'
 };
 
@@ -44,7 +46,7 @@ export const Badge = forwardRef<HTMLSpanElement, BadgeProps>(function Badge(
     <span
       ref={ref}
       className={cn(
-        'inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-pill font-medium',
+        'inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-pill font-display font-medium tracking-[-0.01em]',
         variantStyles[variant],
         sizeStyles[size],
         className

@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  body { margin: 0; font-family: Manrope, sans-serif; color: #181B2A; background-color: #F5F6FA;
+    background-image: linear-gradient(rgba(223,227,236,0.28) 1px, transparent 1px), linear-gradient(90deg, rgba(223,227,236,0.2) 1px, transparent 1px);
+    background-size: 32px 32px; font-feature-settings: 'cv11','ss01'; }
+  a { color: #181B2A; text-decoration: none; text-underline-offset: 3px; }
+  a:hover { text-decoration: underline; text-decoration-color: rgba(24,27,42,0.4); }
+</style>
+</helmet>
+
+<div style="min-height:100dvh;width:100%;position:relative;overflow-x:hidden">
+
+  <aside style="position:absolute;inset:0 auto 0 0;z-index:40;display:flex;width:256px;flex-direction:column;border-right:1px solid rgba(255,255,255,0.1);background:#0F1729;color:#fff">
+    <div style="display:flex;height:72px;align-items:center;justify-content:space-between;gap:8px;border-bottom:1px solid rgba(255,255,255,0.1);padding:0 20px">
+      <span style="display:inline-flex;min-width:0;align-items:center;gap:10px">
+        <svg width="32" height="32" viewBox="-12.2 -18.05 124 124" style="flex-shrink:0" aria-label="Referrio" role="img">
+          <rect x="-12.2" y="-18.05" width="124" height="124" rx="27.9" fill="#FBFCFE"></rect>
+          <path d="M16 74.8V30.8A19 19 0 0 1 35 11.8H61" fill="none" stroke="#E2694B" stroke-width="14.5" stroke-linecap="round"></path>
+          <circle cx="82.4" cy="11.8" r="3.6" fill="#FBFCFE" stroke="#E2694B" stroke-width="6.8"></circle>
+          <circle cx="16" cy="74.8" r="10.2" fill="#0F1729"></circle>
+        </svg>
+        <span style="display:flex;min-width:0;flex-direction:column;gap:4px;line-height:1">
+          <span style="font-family:Manrope,sans-serif;font-size:28px;font-weight:700;letter-spacing:-0.035em;color:#FFFFFF;line-height:1;display:inline-flex;align-items:baseline;white-space:nowrap">Refe<svg viewBox="0 0 38 80" fill="none" aria-hidden="true" style="width:0.38em;height:0.8em;margin-left:-0.025em;margin-right:-0.06em;overflow:visible"><path d="M16 74.8V30.8A19 19 0 0 1 35 11.8H74" stroke="#E2694B" stroke-width="10.4" stroke-linecap="round"></path><circle cx="82.4" cy="11.8" r="4.6" fill="#0F1729" stroke="#E2694B" stroke-width="4.8"></circle><circle cx="16" cy="74.8" r="5.6" fill="#FFFFFF"></circle></svg>rıo</span>
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.22em;color:rgba(255,255,255,0.7)">Handoff Desk</span>
+        </span>
+      </span>
+      <button type="button" aria-label="Notifications" style="position:relative;display:inline-flex;align-items:center;justify-content:center;height:36px;width:36px;border:0;background:transparent;border-radius:8px;color:rgba(255,255,255,0.7);cursor:pointer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.268 21a2 2 0 0 0 3.464 0"></path><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"></path></svg>
+      </button>
+    </div>
+
+    <div style="position:relative;margin:20px 20px 0;border-left:2px solid rgba(226,105,75,0.7);padding-left:12px">
+      <p style="margin:0;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.5)">AFC · AHA network</p>
+    </div>
+
+    <div style="padding:16px 12px 0">
+      <a href="#" style="display:flex;width:100%;align-items:center;justify-content:center;gap:8px;border-radius:10px;background:#E2694B;padding:12px 16px;font-size:14px;font-weight:600;color:#fff;box-shadow:0 1px 2px rgba(15,23,42,0.05)" style-hover="background:#B9472E;text-decoration:none">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"></path><path d="m21.854 2.147-10.94 10.939"></path></svg>
+        Introduce a client to AFC
+      </a>
+    </div>
+
+    <nav style="position:relative;flex:1;overflow-y:auto;padding:20px 12px">
+      <div style="margin-bottom:20px">
+        <p style="margin:0 0 8px;padding:0 12px;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.4)">Work</p>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <a href="#" style="position:relative;display:flex;align-items:center;gap:10px;border-radius:10px;background:#fff;color:#0F1729;padding:10px 12px;font-size:14px;font-weight:500;box-shadow:0 1px 2px rgba(15,23,42,0.05)">
+            <span aria-hidden="true" style="position:absolute;left:-3px;top:50%;height:10px;width:10px;transform:translateY(-50%);border-radius:9999px;border:3px solid #0F1729;background:#E2694B"></span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:#0F1729" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="M12 11h4"></path><path d="M12 16h4"></path><path d="M8 11h.01"></path><path d="M8 16h.01"></path></svg>
+            Referrals
+          </a>
+          <a href="#" style="position:relative;display:flex;align-items:center;gap:10px;border-radius:10px;padding:10px 12px;font-size:14px;font-weight:500;color:rgba(255,255,255,0.7)" style-hover="background:rgba(255,255,255,0.1);color:#fff;text-decoration:none">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:rgba(255,255,255,0.4)" aria-hidden="true"><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"></path><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"></path><path d="M12 18V6"></path></svg>
+            Deals
+          </a>
+        </div>
+      </div>
+
+      <div style="margin-bottom:20px">
+        <p style="margin:0 0 8px;padding:0 12px;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.4)">People</p>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <a href="#" style="position:relative;display:flex;align-items:center;gap:10px;border-radius:10px;padding:10px 12px;font-size:14px;font-weight:500;color:rgba(255,255,255,0.7)" style-hover="background:rgba(255,255,255,0.1);color:#fff;text-decoration:none">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:rgba(255,255,255,0.4)" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path></svg>
+            Find Referral Agent
+          </a>
+        </div>
+      </div>
+
+      <div style="margin-bottom:20px">
+        <p style="margin:0 0 8px;padding:0 12px;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.4)">Tools</p>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <a href="#" style="position:relative;display:flex;align-items:center;gap:10px;border-radius:10px;padding:10px 12px;font-size:14px;font-weight:500;color:rgba(255,255,255,0.7)" style-hover="background:rgba(255,255,255,0.1);color:#fff;text-decoration:none">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:rgba(255,255,255,0.4)" aria-hidden="true"><path d="M3 3v16a2 2 0 0 0 2 2h16"></path><path d="m19 9-5 5-4-4-3 3"></path></svg>
+            Mortgage Market
+          </a>
+          <a href="#" style="position:relative;display:flex;align-items:center;gap:10px;border-radius:10px;padding:10px 12px;font-size:14px;font-weight:500;color:rgba(255,255,255,0.7)" style-hover="background:rgba(255,255,255,0.1);color:#fff;text-decoration:none">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:rgba(255,255,255,0.4)" aria-hidden="true"><rect width="16" height="20" x="4" y="2" rx="2"></rect><line x1="8" x2="16" y1="6" y2="6"></line><line x1="16" x2="16" y1="14" y2="18"></line><path d="M16 10h.01"></path><path d="M12 10h.01"></path><path d="M8 10h.01"></path><path d="M12 14h.01"></path><path d="M8 14h.01"></path><path d="M12 18h.01"></path><path d="M8 18h.01"></path></svg>
+            Mortgage Calculator
+          </a>
+        </div>
+      </div>
+
+      <div>
+        <p style="margin:0 0 8px;padding:0 12px;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:500;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.4)">Account</p>
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <a href="#" style="position:relative;display:flex;align-items:center;gap:10px;border-radius:10px;padding:10px 12px;font-size:14px;font-weight:500;color:rgba(255,255,255,0.7)" style-hover="background:rgba(255,255,255,0.1);color:#fff;text-decoration:none">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:rgba(255,255,255,0.4)" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="10" r="3"></circle><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"></path></svg>
+            My Profile
+          </a>
+        </div>
+      </div>
+    </nav>
+
+    <div style="position:relative;border-top:1px solid rgba(255,255,255,0.1);padding:12px">
+      <button type="button" style="display:flex;width:100%;align-items:center;gap:12px;border:0;background:transparent;border-radius:10px;padding:8px;text-align:left;cursor:pointer" style-hover="background:rgba(255,255,255,0.1)">
+        <span style="display:inline-flex;height:40px;width:40px;flex-shrink:0;align-items:center;justify-content:center;border-radius:9999px;background:#E4E8F1;font-size:13px;font-weight:600;color:#0F1729">LO</span>
+        <span style="display:block;min-width:0;flex:1">
+          <span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;font-weight:500;color:#fff">Logan OOS</span>
+          <span style="display:block;font-size:11px;color:rgba(255,255,255,0.5)">Agent</span>
+        </span>
+      </button>
+    </div>
+  </aside>
+
+  <main style="margin-left:256px;padding:32px 32px 48px">
+    <div style="margin:0 auto;max-width:1280px;display:flex;flex-direction:column;gap:20px">
+
+      <header style="position:relative;display:flex;gap:16px;align-items:flex-end;justify-content:space-between;border-bottom:1px solid #DFE3EC;padding:0 0 20px 20px">
+        <span aria-hidden="true" style="position:absolute;bottom:20px;left:0;top:0;width:3px;border-radius:9999px;background:#0F1729"></span>
+        <span aria-hidden="true" style="position:absolute;bottom:12px;left:-3px;height:10px;width:10px;border-radius:9999px;border:2px solid #F5F6FA;background:#E2694B"></span>
+        <div style="min-width:0;display:flex;flex-direction:column;gap:6px">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:16px;letter-spacing:0.18em;text-transform:uppercase;font-weight:600;color:#596078">Pipeline</div>
+          <h1 style="margin:0;font-family:Manrope,sans-serif;font-size:29.6px;font-weight:800;letter-spacing:-0.035em;color:#181B2A">My referrals</h1>
+          <p style="margin:0;max-width:672px;font-size:14px;color:#596078">Review your leads, update their status, and capture quick notes as you work each opportunity.</p>
+        </div>
+      </header>
+
+      <div style="display:flex;flex-direction:column;gap:16px;border-radius:16px;border:1px solid #DFE3EC;background:#fff;padding:16px;box-shadow:0 1px 2px rgba(20,20,60,0.04), 0 10px 30px -14px rgba(20,20,60,0.14)">
+        <label style="display:flex;flex-direction:column;gap:6px">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:16px;letter-spacing:0.18em;text-transform:uppercase;font-weight:600;color:#878FA6">Search</span>
+          <input type="text" placeholder="Name, email, phone, loan #" style="height:40px;width:100%;box-sizing:border-box;border-radius:10px;border:1px solid rgba(205,209,223,0.7);background:#fff;padding:8px 12px;font-family:Manrope,sans-serif;font-size:14px;color:#181B2A;box-shadow:inset 0 1px 1px rgba(15,23,42,0.03)" />
+        </label>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px">
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:16px;letter-spacing:0.18em;text-transform:uppercase;font-weight:600;color:#878FA6">Status</span>
+            <button type="button" style="display:flex;height:36px;width:100%;align-items:center;justify-content:space-between;border-radius:10px;border:1px solid rgba(205,209,223,0.7);background:#fff;padding:0 12px;font-family:Manrope,sans-serif;font-size:14px;color:#181B2A;text-align:left;box-shadow:inset 0 1px 1px rgba(15,23,42,0.03);cursor:pointer">All<span aria-hidden="true" style="color:#878FA6">▾</span></button>
+          </div>
+          <label style="display:flex;flex-direction:column;gap:6px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:16px;letter-spacing:0.18em;text-transform:uppercase;font-weight:600;color:#878FA6">MC</span>
+            <select style="height:36px;width:100%;border-radius:10px;border:1px solid rgba(205,209,223,0.7);background:#fff;padding:0 12px;font-family:Manrope,sans-serif;font-size:14px;color:#181B2A;box-shadow:inset 0 1px 1px rgba(15,23,42,0.03)"><option>All</option></select>
+          </label>
+          <label style="display:flex;flex-direction:column;gap:6px">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:16px;letter-spacing:0.18em;text-transform:uppercase;font-weight:600;color:#878FA6">Timeline</span>
+            <select style="height:36px;width:100%;border-radius:10px;border:1px solid rgba(205,209,223,0.7);background:#fff;padding:0 12px;font-family:Manrope,sans-serif;font-size:14px;color:#181B2A;box-shadow:inset 0 1px 1px rgba(15,23,42,0.03)"><option>All</option></select>
+          </label>
+        </div>
+      </div>
+
+      <div style="border-radius:16px;border:1px solid #DFE3EC;background:#fff;padding:16px;box-shadow:0 1px 2px rgba(20,20,60,0.04), 0 10px 30px -14px rgba(20,20,60,0.14)">
+        <dl style="margin:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px">
+          <div style="border-radius:10px;background:#F5F6FA;padding:8px 12px">
+            <dt style="font-size:12px;color:#878FA6">Total Referrals</dt>
+            <dd style="margin:2px 0 0;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:16px;font-weight:600;color:#181B2A">3</dd>
+          </div>
+          <div style="border-radius:10px;background:#F5F6FA;padding:8px 12px">
+            <dt style="font-size:12px;color:#878FA6">Active Referrals</dt>
+            <dd style="margin:2px 0 0;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:16px;font-weight:600;color:#181B2A">3</dd>
+          </div>
+          <div style="border-radius:10px;background:#F5F6FA;padding:8px 12px">
+            <dt style="font-size:12px;color:#878FA6">Closed Referrals</dt>
+            <dd style="margin:2px 0 0;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:16px;font-weight:600;color:#181B2A">0</dd>
+          </div>
+          <div style="border-radius:10px;background:#F5F6FA;padding:8px 12px">
+            <dt style="font-size:12px;color:#878FA6">Close Rate</dt>
+            <dd style="margin:2px 0 0;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:16px;font-weight:600;color:#181B2A">0.0%</dd>
+          </div>
+        </dl>
+      </div>
+
+      <div style="overflow-x:auto;border-radius:16px;border:1px solid #DFE3EC;background:#fff;box-shadow:0 1px 2px rgba(20,20,60,0.04), 0 10px 30px -14px rgba(20,20,60,0.14)">
+        <table style="min-width:100%;border-collapse:collapse">
+          <thead style="background:#F5F6FA">
+            <tr>
+              <th style="padding:12px 16px;text-align:left;font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:16px;letter-spacing:0.18em;text-transform:uppercase;font-weight:600;color:#878FA6;border-bottom:1px solid #DFE3EC">Borrower ⇅</th>
+              <th style="padding:12px 16px;text-align:left;font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:16px;letter-spacing:0.18em;text-transform:uppercase;font-weight:600;color:#878FA6;border-bottom:1px solid #DFE3EC">Loan File # ⇅</th>
+              <th style="padding:12px 16px;text-align:left;font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:16px;letter-spacing:0.18em;text-transform:uppercase;font-weight:600;color:#878FA6;border-bottom:1px solid #DFE3EC">Timeline ⇅</th>
+              <th style="padding:12px 16px;text-align:left;font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:16px;letter-spacing:0.18em;text-transform:uppercase;font-weight:600;color:#878FA6;border-bottom:1px solid #DFE3EC">Status ⇅</th>
+              <th style="padding:12px 16px;text-align:left;font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:16px;letter-spacing:0.18em;text-transform:uppercase;font-weight:600;color:#878FA6;border-bottom:1px solid #DFE3EC">Notes</th>
+              <th style="padding:12px 16px;text-align:left;font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:16px;letter-spacing:0.18em;text-transform:uppercase;font-weight:600;color:#878FA6;border-bottom:1px solid #DFE3EC">Lender/MC ⇅</th>
+              <th style="padding:12px 16px;text-align:left;font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:16px;letter-spacing:0.18em;text-transform:uppercase;font-weight:600;color:#878FA6;border-bottom:1px solid #DFE3EC">Created ⇅</th>
+              <th style="padding:12px 16px;text-align:left;font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:16px;letter-spacing:0.18em;text-transform:uppercase;font-weight:600;color:#878FA6;border-bottom:1px solid #DFE3EC">Last Updated ⇅</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="padding:12px 16px;font-size:14px;color:#596078;border-bottom:1px solid #DFE3EC">
+                <div style="display:flex;flex-direction:column">
+                  <a href="#" style="font-weight:500;color:#0F1729">OOSTestFirst2 OOSTestLast2</a>
+                  <a href="#" style="font-size:12px;color:#0F1729">Email</a>
+                  <a href="#" style="font-size:12px;color:#0F1729">239-472-8934</a>
+                </div>
+              </td>
+              <td style="padding:12px 16px;font-size:14px;color:#596078;border-bottom:1px solid #DFE3EC"></td>
+              <td style="padding:12px 16px;font-size:14px;color:#596078;border-bottom:1px solid #DFE3EC">—</td>
+              <td style="padding:12px 16px;font-size:14px;color:#596078;border-bottom:1px solid #DFE3EC">
+                <select style="width:100%;border-radius:10px;border:1px solid #DFE3EC;background:#fff;padding:4px 8px;font-family:Manrope,sans-serif;font-size:14px;color:#596078;box-shadow:0 1px 2px rgba(15,23,42,0.05)"><option>Matched with MC</option></select>
+              </td>
+              <td style="padding:12px 16px;font-size:14px;color:#596078;border-bottom:1px solid #DFE3EC"><button type="button" style="border:0;background:transparent;padding:0;font-family:Manrope,sans-serif;font-size:14px;font-weight:500;color:#0F1729;cursor:pointer">Add note</button></td>
+              <td style="padding:12px 16px;font-size:14px;color:#596078;border-bottom:1px solid #DFE3EC">
+                <div style="display:flex;flex-direction:column;font-size:14px">
+                  <span style="font-weight:500;color:#596078">Logan MC</span>
+                  <a href="#" style="font-size:12px;color:#0F1729">Email</a>
+                  <a href="#" style="font-size:12px;color:#0F1729">230-234-9342</a>
+                </div>
+              </td>
+              <td style="padding:12px 16px;font-size:14px;color:#596078;border-bottom:1px solid #DFE3EC"><span style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">8/8/2026</span></td>
+              <td style="padding:12px 16px;font-size:14px;color:#596078;border-bottom:1px solid #DFE3EC"><span style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">8/8/2026</span></td>
+            </tr>
+            <tr>
+              <td style="padding:12px 16px;font-size:14px;color:#596078;border-bottom:1px solid #DFE3EC">
+                <div style="display:flex;flex-direction:column">
+                  <a href="#" style="font-weight:500;color:#0F1729">OOSTestBuyer OOSTest</a>
+                  <a href="#" style="font-size:12px;color:#0F1729">Email</a>
+                  <a href="#" style="font-size:12px;color:#0F1729">239-048-2093</a>
+                </div>
+              </td>
+              <td style="padding:12px 16px;font-size:14px;color:#596078;border-bottom:1px solid #DFE3EC"></td>
+              <td style="padding:12px 16px;font-size:14px;color:#596078;border-bottom:1px solid #DFE3EC">—</td>
+              <td style="padding:12px 16px;font-size:14px;color:#596078;border-bottom:1px solid #DFE3EC">
+                <select style="width:100%;border-radius:10px;border:1px solid #DFE3EC;background:#fff;padding:4px 8px;font-family:Manrope,sans-serif;font-size:14px;color:#596078;box-shadow:0 1px 2px rgba(15,23,42,0.05)"><option>Matched with MC</option></select>
+              </td>
+              <td style="padding:12px 16px;font-size:14px;color:#596078;border-bottom:1px solid #DFE3EC"><button type="button" style="border:0;background:transparent;padding:0;font-family:Manrope,sans-serif;font-size:14px;font-weight:500;color:#0F1729;cursor:pointer">Add note</button></td>
+              <td style="padding:12px 16px;font-size:14px;color:#596078;border-bottom:1px solid #DFE3EC">
+                <div style="display:flex;flex-direction:column;font-size:14px">
+                  <span style="font-weight:500;color:#596078">Logan MC</span>
+                  <a href="#" style="font-size:12px;color:#0F1729">Email</a>
+                  <a href="#" style="font-size:12px;color:#0F1729">230-234-9342</a>
+                </div>
+              </td>
+              <td style="padding:12px 16px;font-size:14px;color:#596078;border-bottom:1px solid #DFE3EC"><span style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">8/8/2026</span></td>
+              <td style="padding:12px 16px;font-size:14px;color:#596078;border-bottom:1px solid #DFE3EC"><span style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">8/8/2026</span></td>
+            </tr>
+            <tr>
+              <td style="padding:12px 16px;font-size:14px;color:#596078">
+                <div style="display:flex;flex-direction:column">
+                  <a href="#" style="font-weight:500;color:#0F1729">Logan Test</a>
+                  <a href="#" style="font-size:12px;color:#0F1729">Email</a>
+                  <a href="#" style="font-size:12px;color:#0F1729">859-533-1346</a>
+                </div>
+              </td>
+              <td style="padding:12px 16px;font-size:14px;color:#596078"><span style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">2390948203948</span></td>
+              <td style="padding:12px 16px;font-size:14px;color:#596078">—</td>
+              <td style="padding:12px 16px;font-size:14px;color:#596078">
+                <select style="width:100%;border-radius:10px;border:1px solid #DFE3EC;background:#fff;padding:4px 8px;font-family:Manrope,sans-serif;font-size:14px;color:#596078;box-shadow:0 1px 2px rgba(15,23,42,0.05)"><option>Under Contract</option></select>
+              </td>
+              <td style="padding:12px 16px;font-size:14px;color:#596078"><button type="button" style="border:0;background:transparent;padding:0;font-family:Manrope,sans-serif;font-size:14px;font-weight:500;color:#0F1729;cursor:pointer">Add note</button></td>
+              <td style="padding:12px 16px;font-size:14px;color:#596078">
+                <div style="display:flex;flex-direction:column;font-size:14px">
+                  <span style="font-weight:500;color:#596078">Logan MC</span>
+                  <a href="#" style="font-size:12px;color:#0F1729">Email</a>
+                  <a href="#" style="font-size:12px;color:#0F1729">230-234-9342</a>
+                </div>
+              </td>
+              <td style="padding:12px 16px;font-size:14px;color:#596078"><span style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">5/20/2026</span></td>
+              <td style="padding:12px 16px;font-size:14px;color:#596078"><span style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums">8/21/2026</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+        <p style="margin:0;font-size:14px;color:#596078">Showing <span style="font-family:'IBM Plex Mono',monospace;font-weight:500;color:#181B2A">1</span> to <span style="font-family:'IBM Plex Mono',monospace;font-weight:500;color:#181B2A">3</span> of <span style="font-family:'IBM Plex Mono',monospace;font-weight:500;color:#181B2A">3</span> referrals</p>
+        <div style="display:flex;align-items:center;gap:12px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:14px;color:#596078">
+            <span>Per page:</span>
+            <select style="height:32px;border-radius:10px;border:1px solid rgba(205,209,223,0.7);background:#fff;padding:0 8px 0 12px;font-family:'IBM Plex Mono',monospace;font-size:14px;color:#181B2A;box-shadow:inset 0 1px 1px rgba(15,23,42,0.03)"><option>25</option></select>
+          </label>
+          <div style="display:flex;align-items:center;gap:4px">
+            <button type="button" aria-label="Previous page" style="display:inline-flex;height:32px;width:32px;align-items:center;justify-content:center;border-radius:10px;border:0;box-shadow:inset 0 0 0 1px #DFE3EC, 0 1px 2px rgba(15,23,42,0.05);background:#fff;color:#181B2A;opacity:0.6;cursor:not-allowed">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg>
+            </button>
+            <span style="padding:0 12px;font-size:14px;font-weight:500;color:#596078">Page <span style="font-family:'IBM Plex Mono',monospace">1</span> of <span style="font-family:'IBM Plex Mono',monospace">1</span></span>
+            <button type="button" aria-label="Next page" style="display:inline-flex;height:32px;width:32px;align-items:center;justify-content:center;border-radius:10px;border:0;box-shadow:inset 0 0 0 1px #DFE3EC, 0 1px 2px rgba(15,23,42,0.05);background:#fff;color:#181B2A;opacity:0.6;cursor:not-allowed">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+</x-dc>
+</body>
+</html>

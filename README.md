@@ -198,6 +198,45 @@ EMAIL_SERVER=
 EMAIL_FROM=
 ```
 
+### Referral Coordinator Recipients
+
+Who gets copied on referral notifications, fee breakdowns, and intro emails. Comma or
+semicolon separated.
+
+```env
+REFERRAL_NOTIFICATION_RECIPIENTS=
+```
+
+There is no built-in default. When this is unset the app logs a warning and skips the
+coordinator copy entirely rather than falling back to a hardcoded address, because an address
+baked into the code that later stops accepting mail is exactly how coordinator notifications
+started bouncing unnoticed. Every other recipient on those messages is unaffected.
+
+Prefer a shared alias over an individual mailbox. A personal address that fills up or gets
+suspended will bounce every message it is copied on, which marks the whole message bounced
+even when the primary recipient received it fine.
+
+### Delivery Event Webhook
+
+Delivery route: `POST /api/email-events`
+
+Records bounces, spam complaints, delays, and deliveries against sent messages, and keeps
+bouncing addresses off both To and CC lines until they recover. A message whose every To
+recipient is bouncing is not sent at all; it is stored with status `suppressed` so the skip
+stays visible. Each bounce lengthens the backoff window; when the window lapses the address
+gets one probe send and is restored automatically if that delivers.
+
+Configure a Resend webhook pointing at this route subscribed to `email.bounced`,
+`email.complained`, `email.delivery_delayed`, and `email.delivered`, then set its signing
+secret:
+
+```env
+RESEND_EVENTS_WEBHOOK_SECRET=
+```
+
+Falls back to `RESEND_WEBHOOK_SECRET` when unset. Deploy the route before creating the Resend
+webhook, since the signing secret does not exist until the endpoint is created.
+
 ### Inbound Email Webhook
 
 Inbound route: `POST /api/inbound-email`
@@ -292,15 +331,15 @@ Uses `jest.api.config.ts` with `NODE_ENV=test`.
 
 ### E2E Tests
 
-Uses Playwright (`playwright.config.ts`). On startup, the config loads **`.env.test.local`** if it exists—use it for `PLAYWRIGHT_BASE_URL` or other test-only values without changing `.env.local`.
+Uses Playwright (`playwright.config.ts`). On startup, the config loads **`.env.test.local`** if it exists. Copy `.env.test.example` to `.env.test.local` and fill in logins for admin, AHA agent, OOS agent, and MC.
 
-Playwright does **not** start the Next.js server. In one terminal run `pnpm dev`, then in another:
+If nothing is already listening on the base URL, Playwright starts Next.js (`next dev`). If `pnpm dev` / `npm run dev` is already running, it reuses that server.
 
 ```bash
 pnpm test:e2e
 ```
 
-Base URL defaults to `http://localhost:3000`, or `PLAYWRIGHT_BASE_URL` when set (including from `.env.test.local`).
+Base URL defaults to `http://localhost:3000`, or `PLAYWRIGHT_BASE_URL` when set. Tests for a role are skipped until that role’s identifier and password are set. CI runs only when `PLAYWRIGHT_BASE_URL` plus admin login secrets are configured.
 
 ## API Overview
 
@@ -381,8 +420,9 @@ Authorization: Bearer <CRON_SECRET>
 
 ### E2E tests fail to connect
 
-- Ensure `pnpm dev` is running.
-- Verify the base URL: `PLAYWRIGHT_BASE_URL` (or `.env.test.local`) or default `http://localhost:3000`.
+- Confirm `.env.test.local` exists (copy from `.env.test.example`) and `PLAYWRIGHT_BASE_URL` matches the running app, default `http://localhost:3000`.
+- Fill in `E2E_*_IDENTIFIER` / `E2E_*_PASSWORD` for each role you want to cover. Missing roles are skipped.
+- Playwright will start Next.js if nothing is already listening on that URL.
 
 ## Contributing
 
@@ -397,7 +437,7 @@ pnpm test:api
 pnpm exec tsc --noEmit
 ```
 
-4. If UI or flow changes are significant, run E2E tests as well.
+4. If UI or flow changes are significant, run E2E tests as well (`pnpm test:e2e` after filling `.env.test.local`).
 5. Open a PR with:
    - clear summary of behavior changes
    - test plan and results
@@ -405,7 +445,9 @@ pnpm exec tsc --noEmit
 
 ## Additional Docs
 
-- `DASHBOARD_VERIFICATION_REPORT.md`
-- `IMPLEMENTATION_SUMMARY.md`
+- `docs/DASHBOARD_VERIFICATION_REPORT.md`
+- `docs/IMPLEMENTATION_SUMMARY.md`
+- `docs/DESIGN.md`
+- `docs/theme.md`
 
 Use these as supplemental references; this README is the primary onboarding and operational guide.
