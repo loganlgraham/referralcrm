@@ -12,7 +12,7 @@ import { DASHBOARD_REPORT_METRICS } from '@/lib/server/dashboard-report';
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const VALID_METRICS = new Set(DASHBOARD_REPORT_METRICS.map((m) => m.id));
 const VALID_CADENCES: ScheduledReportCadence[] = ['daily', 'weekly', 'monthly'];
-const VALID_NETWORKS = new Set(['ALL', 'AHA', 'AHA_OOS']);
+const VALID_NETWORKS = new Set(['ALL', 'AHA', 'AHA_OOS', 'AGIT']);
 
 type CreatePayload = {
   name?: string;
@@ -21,7 +21,7 @@ type CreatePayload = {
   customStartDate?: string;
   customEndDate?: string;
   metrics?: string[];
-  network?: 'ALL' | 'AHA' | 'AHA_OOS';
+  network?: 'ALL' | 'AHA' | 'AHA_OOS' | 'AGIT';
   recipients?: string[] | string;
   cadence?: ScheduledReportCadence;
   attachCsv?: boolean;
@@ -100,7 +100,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return new NextResponse(`Invalid recipient email(s): ${invalid.join(', ')}`, { status: 400 });
   }
 
-  const network: 'ALL' | 'AHA' | 'AHA_OOS' = VALID_NETWORKS.has(payload.network ?? 'ALL')
+  const network: 'ALL' | 'AHA' | 'AHA_OOS' | 'AGIT' = VALID_NETWORKS.has(payload.network ?? 'ALL')
     ? (payload.network ?? 'ALL')
     : 'ALL';
 

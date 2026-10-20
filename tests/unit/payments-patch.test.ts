@@ -111,7 +111,9 @@ const mockedGetCurrentSession = getCurrentSession as jest.MockedFunction<typeof 
 const mockedConnectMongo = connectMongo as jest.MockedFunction<typeof connectMongo>;
 const mockedPaymentFindById = Payment.findById as jest.Mock;
 const mockedPaymentFindByIdAndUpdate = Payment.findByIdAndUpdate as jest.Mock;
+const mockedPaymentUpdateMany = Payment.updateMany as jest.Mock;
 const mockedReferralFindById = Referral.findById as jest.Mock;
+const mockedAgentFindOne = Agent.findOne as jest.Mock;
 const mockedAgentFindById = Agent.findById as jest.Mock;
 const mockedCreateNPSToken = createNPSToken as jest.MockedFunction<typeof createNPSToken>;
 const mockedIsTransactionalEmailConfigured = isTransactionalEmailConfigured as jest.MockedFunction<
@@ -222,6 +224,7 @@ describe('Payments PATCH outside-agent normalization', () => {
       }),
       { new: true }
     );
+    expect(mockedPaymentUpdateMany).not.toHaveBeenCalled();
   });
 
   it('does not notify admins for admin-driven deal status changes', async () => {
@@ -311,7 +314,37 @@ describe('Payments PATCH outside-agent normalization', () => {
     expect(mockedCreateAdminNotifications).toHaveBeenCalled();
   });
 
+  it('rejects an agent updating a deal on someone else’s referral', async () => {
+    mockedGetCurrentSession.mockResolvedValueOnce({
+      user: { id: 'user-2', role: 'agent', name: 'Other Agent' },
+    } as any);
+    referralDoc.assignedAgent = {
+      _id: { toString: () => 'agent-9' },
+      name: 'Assigned Agent',
+      email: 'agent@example.com',
+    };
+    referralDoc.buySideAgent = null;
+    referralDoc.sellSideAgent = null;
+    mockedAgentFindOne.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue({ _id: 'agent-2' }),
+      }),
+    });
+
+    const response = await patchHandler(
+      makeRequest({
+        id: 'pay-1',
+        status: 'closed',
+      })
+    );
+
+    expect(response.status).toBe(403);
+    expect(mockedPaymentFindByIdAndUpdate).not.toHaveBeenCalled();
+    expect(mockedPaymentUpdateMany).not.toHaveBeenCalled();
+  });
+
   it('notifies admins for MC-driven deal status changes', async () => {
+    referralDoc.lender = { _id: { toString: () => 'lender-1' }, userId: 'mc-1' };
     mockedGetCurrentSession.mockResolvedValueOnce({
       user: { id: 'mc-1', role: 'mc', name: 'MC User' },
     } as any);

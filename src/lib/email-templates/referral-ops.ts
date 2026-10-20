@@ -168,13 +168,11 @@ Thanks again for the referral!`);
 export function renderNoteEmail(data: {
   authorName: string;
   borrowerName: string;
-  htmlContent?: string;
   plainContent: string;
   recipientName?: string;
   referralLink?: string;
 }): { html: string; text: string } {
-  const quotedHtml =
-    data.htmlContent ?? escapeHtml(data.plainContent).replace(/\n/g, '<br />');
+  const quotedHtml = escapeHtml(data.plainContent).replace(/\n/g, '<br />');
   const html = renderEmailHtml({
     preheader: `New note on ${data.borrowerName}`,
     heading: 'New note',

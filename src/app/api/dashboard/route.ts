@@ -815,7 +815,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     if (!agent) {
       missingProfile = true;
     } else {
-      referralMatch.assignedAgent = agent._id as Types.ObjectId;
+      const agentId = agent._id as Types.ObjectId;
+      referralMatch.$or = [
+        { assignedAgent: agentId },
+        { buySideAgent: agentId },
+        { sellSideAgent: agentId },
+      ];
     }
   }
 
@@ -976,6 +981,24 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     acc[`referral.${key}`] = value;
     return acc;
   }, {});
+
+  // An agent match is `$or` across the three agent slots. Prefixing the key
+  // would look for a field named `$or` on the referral instead of filtering.
+  const nestedAgentOr = paymentMatch['referral.$or'];
+  if (Array.isArray(nestedAgentOr)) {
+    delete paymentMatch['referral.$or'];
+    paymentMatch.$or = nestedAgentOr.flatMap((clause) => {
+      if (!clause || typeof clause !== 'object') return [];
+      return [
+        Object.fromEntries(
+          Object.entries(clause as Record<string, unknown>).map(([field, value]) => [
+            `referral.${field}`,
+            value,
+          ])
+        ),
+      ];
+    });
+  }
 
   context.paymentMatch = paymentMatch;
 

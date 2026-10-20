@@ -87,6 +87,9 @@ export const LOST_REASON_LABELS: Record<LostReason, string> = {
   other: 'Other'
 };
 
+export const LOST_BEFORE_CONTACT_HINT =
+  'Losses that happened before anyone could reach the borrower are left out of the connected-loss count.';
+
 /**
  * Whether a loss for this reason counts against the assigned agent. The policy
  * lives here rather than on the referral document so it can be retuned without a

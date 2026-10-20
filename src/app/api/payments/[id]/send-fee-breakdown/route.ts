@@ -13,7 +13,7 @@ import { getCurrentSession } from '@/lib/auth';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
 import { generateFeeBreakdownEmailHTML, generateFeeBreakdownSubject } from '@/lib/email-templates/fee-breakdown';
 import { buildReferralLink, getReferralAppBaseUrl } from '@/lib/referral-links';
-import { FEE_VERIFICATION_TTL_DAYS } from '@/lib/fee-verification';
+import { FEE_VERIFICATION_TTL_DAYS, hasFeeBreakdownFinancialData } from '@/lib/fee-verification';
 import { FeeBreakdownVerification } from '@/models/fee-breakdown-verification';
 import { buildCcList, getReferralNotificationRecipients } from '@/lib/server/cc-recipients';
 import { logReferralActivity } from '@/lib/server/activities';
@@ -136,10 +136,7 @@ export async function POST(
       return NextResponse.json({ error: 'Payment has no agent assigned' }, { status: 400 });
     }
 
-    const hasCommission =
-      (payment.commissionBasisPoints != null && payment.commissionBasisPoints > 0) ||
-      (payment.commissionFlatFeeCents != null && payment.commissionFlatFeeCents > 0);
-    if (!payment.contractPriceCents || !hasCommission || !payment.referralFeeBasisPoints) {
+    if (!hasFeeBreakdownFinancialData(payment)) {
       return NextResponse.json({ error: 'Payment missing required financial data' }, { status: 400 });
     }
 

@@ -51,7 +51,7 @@ export type DashboardReportTimeframe =
   | 'All'
   | 'Custom export window';
 
-export type NetworkFilter = 'ALL' | 'AHA' | 'AHA_OOS';
+export type NetworkFilter = 'ALL' | 'AHA' | 'AHA_OOS' | 'AGIT';
 
 export type BuildDashboardReportInput = {
   reportName: string;

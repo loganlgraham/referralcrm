@@ -168,7 +168,13 @@ describe('Payments GET role visibility', () => {
     const response = await getHandler(makeRequest('usedAgent=false'));
 
     expect(response.status).toBe(200);
-    expect(mockedReferralFind).toHaveBeenCalledWith({ assignedAgent: 'agent-1' });
+    expect(mockedReferralFind).toHaveBeenCalledWith({
+      $or: [
+        { assignedAgent: 'agent-1' },
+        { buySideAgent: 'agent-1' },
+        { sellSideAgent: 'agent-1' },
+      ],
+    });
     expect(mockedPaymentFind).toHaveBeenCalledWith(
       expect.objectContaining({
         usedAssignedAgent: true,

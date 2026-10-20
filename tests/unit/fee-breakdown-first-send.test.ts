@@ -3,6 +3,7 @@ import {
   generateFeeBreakdownSubject,
   type FeeBreakdownEmailData,
 } from '@/lib/email-templates/fee-breakdown';
+import { hasFeeBreakdownFinancialData } from '@/lib/fee-verification';
 
 const baseData: FeeBreakdownEmailData = {
   agent: { name: 'Sam Agent', email: 'sam@example.com' },
@@ -76,5 +77,27 @@ describe('generateFeeBreakdownEmailHTML first send + verification', () => {
   it('omits the verification card without URLs', () => {
     const { html } = generateFeeBreakdownEmailHTML(baseData);
     expect(html).not.toContain('Do these numbers look right?');
+  });
+});
+
+describe('hasFeeBreakdownFinancialData', () => {
+  it('treats an explicit 0% referral fee as present', () => {
+    expect(
+      hasFeeBreakdownFinancialData({
+        contractPriceCents: 45000000,
+        commissionBasisPoints: 250,
+        referralFeeBasisPoints: 0,
+      })
+    ).toBe(true);
+  });
+
+  it('rejects a missing referral fee', () => {
+    expect(
+      hasFeeBreakdownFinancialData({
+        contractPriceCents: 45000000,
+        commissionBasisPoints: 250,
+        referralFeeBasisPoints: null,
+      })
+    ).toBe(false);
   });
 });

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { getLostReasonOptions, type LostReason } from '@/constants/referrals';
+import { getLostReasonOptions, LOST_BEFORE_CONTACT_HINT, type LostReason } from '@/constants/referrals';
 import { selectFieldClasses } from '@/components/ui/field-group';
 import {
   openPromptToast,
@@ -60,8 +60,7 @@ function LostReasonForm({ borrowerName, isAgentOrigin, onCancel, onConfirm }: Lo
       </PromptToastField>
       {!isAgentOrigin ? (
         <p className={promptToastHintClasses}>
-          Losses that happened before the agent could reach the borrower are not counted against the
-          agent.
+          {LOST_BEFORE_CONTACT_HINT}
         </p>
       ) : null}
     </PromptToastCard>

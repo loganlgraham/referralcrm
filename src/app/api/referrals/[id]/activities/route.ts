@@ -251,12 +251,10 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       const borrowerName = referral.borrower?.name ?? 'this referral';
       const authorName = session.user.name || session.user.email || 'A team member';
       const plainContent = parsed.data.content;
-      const htmlContent = parsed.data.content.replace(/\n/g, '<br />');
 
       const rendered = renderNoteEmail({
         authorName,
         borrowerName,
-        htmlContent,
         plainContent,
         recipientName: lenderName,
         referralLink,

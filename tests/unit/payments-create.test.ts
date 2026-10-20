@@ -186,10 +186,7 @@ describe('Payments POST outside-agent handling', () => {
         agentAttribution: 'OUTSIDE_AGENT',
       })
     );
-    expect(mockedPaymentUpdateMany).toHaveBeenCalledWith(
-      { referralId: referralDoc._id },
-      { $set: { expectedAmountCents: 0, receivedAmountCents: 0 } }
-    );
+    expect(mockedPaymentUpdateMany).not.toHaveBeenCalled();
     expect(referralDoc.status).toBe('Lost');
     expect(referralDoc.save).toHaveBeenCalled();
     expect(mockedLogReferralActivity).toHaveBeenCalledWith(
@@ -310,5 +307,36 @@ describe('Payments POST outside-agent handling', () => {
 
     expect(response.status).toBe(403);
     expect(mockedPaymentCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects an agent creating a deal on a referral they are not assigned to', async () => {
+    mockedGetCurrentSession.mockResolvedValueOnce({
+      user: { id: 'agent-user-2', role: 'agent', name: 'Other Agent' },
+    } as any);
+    mockedAgentFindOne.mockReturnValue({
+      select: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue({ _id: 'other-agent' }),
+      }),
+    });
+    const referralDoc = makeReferralDoc({
+      assignedAgent: 'buy-agent-id',
+      buySideAgent: 'buy-agent-id',
+      sellSideAgent: 'sell-agent-id',
+    });
+    mockedReferralFindById.mockResolvedValue(referralDoc);
+
+    const response = await postHandler(
+      makeRequest({
+        referralId: '507f1f77bcf86cd799439011',
+        status: 'under_contract',
+        expectedAmountCents: 190000,
+        usedAssignedAgent: true,
+        usedAfc: true,
+      })
+    );
+
+    expect(response.status).toBe(403);
+    expect(mockedPaymentCreate).not.toHaveBeenCalled();
+    expect(mockedPaymentUpdateMany).not.toHaveBeenCalled();
   });
 });

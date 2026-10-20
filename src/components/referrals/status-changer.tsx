@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   getLostReasonOptions,
   getReferralStatusLabel,
+  LOST_BEFORE_CONTACT_HINT,
   normalizeReferralStatus,
   type LostReason
 } from '@/constants/referrals';
@@ -313,8 +314,7 @@ export function StatusChanger({
                 </label>
                 {!isAgentOrigin && (
                   <p className="text-xs text-foreground-subtle">
-                    Losses that happened before the agent could reach the borrower are not counted
-                    against the agent.
+                    {LOST_BEFORE_CONTACT_HINT}
                   </p>
                 )}
                 <div className="flex gap-2">

@@ -121,7 +121,7 @@ describe('POST /api/fee-verification/submit', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockedConnectMongo.mockResolvedValue(undefined as any);
-    mockedVerificationUpdate.mockResolvedValue({});
+    mockedVerificationUpdate.mockResolvedValue({ matchedCount: 1 });
     mockedPaymentUpdate.mockResolvedValue({});
     mockedLogActivity.mockResolvedValue(undefined as any);
     mockedEmailConfigured.mockReturnValue(true);
@@ -175,7 +175,7 @@ describe('POST /api/fee-verification/submit', () => {
 
     expect(response.status).toBe(200);
     expect(mockedVerificationUpdate).toHaveBeenCalledWith(
-      { _id: 'ver-1' },
+      { _id: 'ver-1', status: 'pending' },
       {
         $set: expect.objectContaining({
           status: 'disputed',
@@ -233,6 +233,16 @@ describe('POST /api/fee-verification/submit', () => {
     const response = await postHandler(makeRequest({ token: 't1', action: 'confirm' }));
 
     expect(response.status).toBe(409);
+    expect(mockedPaymentUpdate).not.toHaveBeenCalled();
+  });
+
+  it('rejects a second response after the link was already used', async () => {
+    mockFindOne(makeVerification({ status: 'confirmed' }));
+
+    const response = await postHandler(makeRequest({ token: 't1', action: 'confirm' }));
+
+    expect(response.status).toBe(409);
+    expect(mockedVerificationUpdate).not.toHaveBeenCalled();
     expect(mockedPaymentUpdate).not.toHaveBeenCalled();
   });
 

@@ -8,6 +8,18 @@ export type FeeVerificationField = (typeof FEE_VERIFICATION_FIELDS)[number];
 
 export const FEE_VERIFICATION_TTL_DAYS = 60;
 
+export function hasFeeBreakdownFinancialData(payment: {
+  contractPriceCents?: number | null;
+  commissionBasisPoints?: number | null;
+  commissionFlatFeeCents?: number | null;
+  referralFeeBasisPoints?: number | null;
+}): boolean {
+  const hasCommission =
+    (payment.commissionBasisPoints != null && payment.commissionBasisPoints > 0) ||
+    (payment.commissionFlatFeeCents != null && payment.commissionFlatFeeCents > 0);
+  return Boolean(payment.contractPriceCents) && hasCommission && payment.referralFeeBasisPoints != null;
+}
+
 export function feeVerificationFieldLabel(field: FeeVerificationField): string {
   switch (field) {
     case 'contractPrice':

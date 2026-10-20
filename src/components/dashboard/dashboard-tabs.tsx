@@ -3357,17 +3357,17 @@ function LostAttributionCard({ data }: { data: LostAttributionSummary }) {
   return (
     <div className={dashCardClasses}>
       <p className="text-eyebrow text-foreground-subtle">
-        Lost referrals: who they count against
+        Lost referrals
       </p>
       <dl className="mt-3 grid grid-cols-2 gap-2">
         <div className="rounded-lg bg-surface-muted px-3 py-2">
-          <dt className="text-xs text-foreground-subtle">Counted against the agent</dt>
+          <dt className="text-xs text-foreground-subtle">Counted as a connected loss</dt>
           <dd className="text-numeric mt-1 text-xl font-semibold tracking-[-0.02em] text-foreground">
             {formatNumber(data.attributableCount)}
           </dd>
         </div>
         <div className="rounded-lg bg-surface-muted px-3 py-2">
-          <dt className="text-xs text-foreground-subtle">Lost before the agent connected</dt>
+          <dt className="text-xs text-foreground-subtle">Lost before anyone connected</dt>
           <dd className="text-numeric mt-1 text-xl font-semibold tracking-[-0.02em] text-foreground">
             {formatNumber(data.unattributableCount)}
           </dd>
@@ -3376,7 +3376,7 @@ function LostAttributionCard({ data }: { data: LostAttributionSummary }) {
       <p className="mt-2 text-xs text-foreground-subtle">
         {formatNumber(data.classifiedCount)} of {formatNumber(data.totalCount)} lost referrals have a
         reason on file ({data.classifiedRatePercent.toFixed(0)}%). Referrals without a reason are
-        counted against the agent.
+        counted as a connected loss.
       </p>
       <div className="mt-4 flex flex-wrap items-center gap-2">
         {(Object.keys(breakdowns) as Array<keyof typeof breakdowns>).map((key) => {
@@ -3477,11 +3477,11 @@ function AgentDashboard({ data }: { data: DashboardResponse['agent'] }) {
           {
             id: 'lost-referrals',
             label: 'Lost referrals by agent',
-            valueLabel: 'Counted against agent',
+            valueLabel: 'Connected losses',
             secondaryValueLabel: 'Lost before contact',
             entries: data.lostDeals,
             footnote:
-              'Only losses after the agent connected with the borrower count against them, so this total is lower than the overall lost referral count.'
+              'Only losses after someone connected with the borrower are included, so this total is lower than the overall lost referral count.'
           },
           ...(data.agentCreatedMcAssignments.length > 0
             ? [

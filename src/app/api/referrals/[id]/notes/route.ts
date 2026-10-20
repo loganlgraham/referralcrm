@@ -79,18 +79,18 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     recipients.push({ ...recipient, email: recipient.email.trim() });
   };
 
-  if (
-    requestedTargets.has('agent') &&
-    referral.assignedAgent &&
-    'email' in referral.assignedAgent &&
-    referral.assignedAgent.email &&
-    !note.hiddenFromAgent
-  ) {
-    addRecipient({
-      email: referral.assignedAgent.email as string,
-      name: (referral.assignedAgent as any).name || 'Agent',
-      target: 'agent'
-    });
+  if (requestedTargets.has('agent') && !note.hiddenFromAgent) {
+    const agentSlots = [referral.assignedAgent, referral.buySideAgent, referral.sellSideAgent];
+    for (const slot of agentSlots) {
+      if (!slot || typeof slot !== 'object' || !('email' in slot) || !slot.email) {
+        continue;
+      }
+      addRecipient({
+        email: slot.email as string,
+        name: (slot as { name?: string }).name || 'Agent',
+        target: 'agent',
+      });
+    }
   }
 
   if (
@@ -141,12 +141,10 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       const borrowerName = referral.borrower?.name ?? 'this referral';
       const authorName = note.authorName ?? 'A team member';
       const plainContent = note.content;
-      const htmlContent = note.content.replace(/\n/g, '<br />');
 
       const rendered = renderNoteEmail({
         authorName,
         borrowerName,
-        htmlContent,
         plainContent,
         referralLink,
       });

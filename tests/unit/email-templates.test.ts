@@ -10,6 +10,7 @@ import { renderEmailHtml } from '@/lib/email-templates/layout';
 import { emailButton } from '@/lib/email-templates/primitives';
 import { EMAIL_COLORS, EMAIL_FOOTER_DEFAULT, EMAIL_RADIUS } from '@/lib/email-templates/tokens';
 import { renderManualUpdateRequestEmail } from '@/lib/email-templates/update-request';
+import { renderNoteEmail } from '@/lib/email-templates/referral-ops';
 
 describe('email shell', () => {
   const html = renderEmailHtml({
@@ -221,5 +222,19 @@ describe('email preview fixture', () => {
     const previewPath = join(process.cwd(), 'tests/fixtures/email-preview.html');
     writeFileSync(previewPath, samples);
     expect(samples).toContain('Sent by Referrio');
+  });
+});
+
+describe('note email', () => {
+  it('escapes note text before turning line breaks into html', () => {
+    const { html, text } = renderNoteEmail({
+      authorName: 'Sam',
+      borrowerName: 'Jamie',
+      plainContent: 'See <https://evil.example>\nSecond line',
+    });
+
+    expect(html).toContain('See &lt;https://evil.example&gt;<br />Second line');
+    expect(html).not.toContain('<https://evil.example>');
+    expect(text).toContain('See <https://evil.example>');
   });
 });

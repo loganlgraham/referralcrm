@@ -21,7 +21,9 @@ import { Types, PipelineStage } from 'mongoose';
 import { Payment } from '@/models/payment';
 import { paymentSchema } from '@/utils/validators';
 import { getCurrentSession } from '@/lib/auth';
+import { canManageReferral } from '@/lib/rbac';
 import { Agent } from '@/models/agent';
+import type { Session } from 'next-auth';
 import { Referral } from '@/models/referral';
 import { LenderMC } from '@/models/lender';
 import { User } from '@/models/user';
@@ -146,6 +148,81 @@ const isAgentAttributedDeal = (
   usedAssignedAgent: boolean | null | undefined,
   agentAttribution: string | null | undefined
 ): boolean => usedAssignedAgent === true && agentAttribution !== 'OUTSIDE_AGENT';
+
+function refId(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'bigint') return String(value);
+  if (typeof value !== 'object') return null;
+  const record = value as { _id?: unknown; toHexString?: () => string; toString?: () => string };
+  if (record._id != null && record._id !== value) {
+    return refId(record._id);
+  }
+  if (typeof record.toHexString === 'function') {
+    return record.toHexString();
+  }
+  if (typeof record.toString === 'function') {
+    const text = record.toString();
+    if (text && text !== '[object Object]') return text;
+  }
+  return null;
+}
+
+type ReferralAccessSource = {
+  assignedAgent?: unknown;
+  buySideAgent?: unknown;
+  sellSideAgent?: unknown;
+  lender?: unknown;
+  org?: string | null;
+};
+
+async function callerMayManageReferral(
+  session: Session,
+  referral: ReferralAccessSource | null,
+  knownAgentId?: string | null
+): Promise<boolean> {
+  const role = session.user?.role;
+  if (role === 'admin' || role === 'manager') return true;
+  if (!referral || !session.user?.id) return false;
+
+  if (
+    canManageReferral(session, {
+      assignedAgent: referral.assignedAgent,
+      buySideAgent: referral.buySideAgent,
+      sellSideAgent: referral.sellSideAgent,
+      lender: referral.lender,
+      org: referral.org ?? '',
+    })
+  ) {
+    return true;
+  }
+
+  const slotIds = [referral.assignedAgent, referral.buySideAgent, referral.sellSideAgent]
+    .map(refId)
+    .filter((id): id is string => Boolean(id));
+
+  if (role === 'agent') {
+    let agentId = knownAgentId ?? null;
+    if (!agentId) {
+      const agent = await Agent.findOne({ userId: session.user.id })
+        .select('_id')
+        .lean<{ _id: unknown } | null>();
+      agentId = agent?._id ? String(agent._id) : null;
+    }
+    return Boolean(agentId && slotIds.includes(agentId));
+  }
+
+  if (role === 'mc') {
+    const lenderId = refId(referral.lender);
+    const lender = await LenderMC.findOne({ userId: session.user.id })
+      .select('_id')
+      .lean<{ _id: unknown } | null>();
+    const mcLenderId = lender?._id ? String(lender._id) : null;
+    return Boolean(mcLenderId && lenderId === mcLenderId);
+  }
+
+  return false;
+}
 
 const EXPECTED_REVENUE_STATUSES: DealStatus[] = [
   'under_contract',
@@ -347,7 +424,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       });
     }
 
-    const referralDocs = await Referral.find({ assignedAgent: agentRecord._id })
+    const referralDocs = await Referral.find({
+      $or: [
+        { assignedAgent: agentRecord._id },
+        { buySideAgent: agentRecord._id },
+        { sellSideAgent: agentRecord._id },
+      ],
+    })
       .select('_id')
       .lean<{ _id: Types.ObjectId }[]>();
 
@@ -816,6 +899,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     sessionAgentId = agentRecord?._id ?? null;
   }
 
+  const mayManageReferral = await callerMayManageReferral(
+    session,
+    referralForCreate,
+    sessionAgentId ? String(sessionAgentId) : null
+  );
+  if (!mayManageReferral) {
+    return new NextResponse('Forbidden', { status: 403 });
+  }
+
   const creatorSide = resolveAgentSideForReferral(
     {
       buySideAgent: referralForCreate.buySideAgent as Types.ObjectId | null,
@@ -970,12 +1062,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
       referralForCreate.audit.push(auditEntry as any);
       referralUpdated = true;
-
-      await Payment.updateMany(
-        { referralId: referralForCreate._id },
-        { $set: { expectedAmountCents: 0, receivedAmountCents: 0 } }
-      );
-
     }
 
     if (referralUpdated) {
@@ -1054,8 +1140,13 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   }
 
   const referral = await Referral.findById(existingPayment.referralId)
-    .populate('assignedAgent', 'name email _id ahaDesignation')
-    .populate('lender', 'name email _id');
+    .populate('assignedAgent', 'name email _id userId ahaDesignation')
+    .populate('buySideAgent', 'userId')
+    .populate('sellSideAgent', 'userId')
+    .populate('lender', 'name email _id userId');
+  if (!(await callerMayManageReferral(session, referral))) {
+    return new NextResponse('Forbidden', { status: 403 });
+  }
   const isAgentOrigin = referral?.origin === 'agent';
 
   // Check if assigned agent has AGIT designation - skip automated emails if so
@@ -1368,11 +1459,6 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         referral.markModified('audit');
         referralStatusChanged = true;
       }
-
-      await Payment.updateMany(
-        { referralId: referral._id },
-        { $set: { expectedAmountCents: 0, receivedAmountCents: 0 } }
-      );
     }
 
     if (
@@ -1637,7 +1723,6 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
           
           if (agentId) {
             // Get full agent name from database if needed
-            const { Agent } = await import('@/models/agent');
             const agentDoc = await Agent.findById(agentId)
               .select('name')
               .lean<{ name?: string } | null>();
@@ -1820,6 +1905,17 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
   const payment = await Payment.findById(id);
   if (!payment) {
     return new NextResponse('Not found', { status: 404 });
+  }
+
+  const referral = await Referral.findById(payment.referralId)
+    .select('assignedAgent buySideAgent sellSideAgent lender org')
+    .populate('assignedAgent', 'userId')
+    .populate('buySideAgent', 'userId')
+    .populate('sellSideAgent', 'userId')
+    .populate('lender', 'userId')
+    .lean<ReferralAccessSource | null>();
+  if (!(await callerMayManageReferral(session, referral))) {
+    return new NextResponse('Forbidden', { status: 403 });
   }
 
   await payment.deleteOne();

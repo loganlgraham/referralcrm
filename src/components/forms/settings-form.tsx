@@ -16,14 +16,14 @@ const DASHBOARD_METRICS = [
   { id: 'attachRate', label: 'AFC and agent attach rates' },
   { id: 'preApprovals', label: 'Mortgage consultant transfers' },
   { id: 'geography', label: 'Revenue by state' },
-  { id: 'network', label: 'Network breakdown (AHA / AHA OOS / AFC / Unpaired)' },
+  { id: 'network', label: 'Network breakdown (AHA / AHA OOS / AGIT / Unpaired)' },
   { id: 'termination', label: 'Terminated deals & lost referral fees' }
 ] as const;
 
 type DashboardMetricId = (typeof DASHBOARD_METRICS)[number]['id'];
 
 type Cadence = 'one-time' | 'daily' | 'weekly' | 'monthly';
-type NetworkFilter = 'ALL' | 'AHA' | 'AHA_OOS';
+type NetworkFilter = 'ALL' | 'AHA' | 'AHA_OOS' | 'AGIT';
 
 type ScheduledReportSummary = {
   id: string;
@@ -559,6 +559,7 @@ export function SettingsForm() {
               <option value="ALL">All</option>
               <option value="AHA">AHA</option>
               <option value="AHA_OOS">AHA OOS</option>
+              <option value="AGIT">AGIT</option>
             </select>
           </label>
           {reportTimeframe === 'Custom export window' && (

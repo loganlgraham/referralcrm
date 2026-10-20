@@ -64,6 +64,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       { status: 409 }
     );
   }
+  if (verification.status !== 'pending') {
+    return NextResponse.json(
+      { error: 'This fee breakdown has already been reviewed.' },
+      { status: 409 }
+    );
+  }
   if (new Date() > new Date(verification.expiresAt)) {
     return NextResponse.json({ error: 'This link has expired.' }, { status: 410 });
   }
@@ -79,8 +85,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const note = input.action === 'report' ? input.note || null : null;
   const nextStatus = input.action === 'confirm' ? 'confirmed' : 'disputed';
 
-  await FeeBreakdownVerification.updateOne(
-    { _id: verification._id },
+  const verificationUpdate = await FeeBreakdownVerification.updateOne(
+    { _id: verification._id, status: 'pending' },
     {
       $set: {
         status: nextStatus,
@@ -90,6 +96,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       },
     }
   );
+  if (!verificationUpdate.matchedCount) {
+    return NextResponse.json(
+      { error: 'This fee breakdown has already been reviewed.' },
+      { status: 409 }
+    );
+  }
 
   await Payment.updateOne(
     { _id: verification.paymentId },
