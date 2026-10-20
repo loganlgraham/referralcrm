@@ -32,6 +32,17 @@ export function normalizeReferralStatus(status?: string | null): ReferralStatus 
   return REFERRAL_STATUSES.includes(status as ReferralStatus) ? (status as ReferralStatus) : null;
 }
 
+const TERMINAL_REFERRAL_STATUS_KEYS = new Set(['closed', 'lost', 'terminated']);
+
+/** Closed, lost, and terminated referrals no longer need a follow-up task. */
+export function isTerminalReferralStatus(value: unknown): boolean {
+  const key = String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '_');
+  return TERMINAL_REFERRAL_STATUS_KEYS.has(key);
+}
+
 /**
  * Display label for a referral status. Agent-created referrals share the same
  * pipeline names; origin is shown separately (Via agent). The unused options

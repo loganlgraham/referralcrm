@@ -3,6 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectMongo } from '@/lib/mongoose';
 import { requireAdmin } from '@/lib/auth';
 import { classifyDueDayBucket, getMountainDayKey } from '@/lib/admin-task-day';
+import { deriveSimilarTaskGroup } from '@/lib/admin-task-groups';
+import { loadReferralDesignationMap } from '@/lib/server/referral-networks';
+import { parseTaskNetwork, referralMatchesTaskNetwork } from '@/lib/task-network';
 import { AdminTask, getEffectiveDueDate, type AdminTaskLean } from '@/models/admin-task';
 import { Referral } from '@/models/referral';
 import { normalizeReferralStatus, REFERRAL_STATUSES } from '@/constants/referrals';
@@ -40,47 +43,6 @@ interface GroupSection {
   groupKey: string;
   groupLabel: string;
   referralCards: ReferralTaskCard[];
-}
-
-const TITLE_STOP_WORDS = new Set([
-  'a',
-  'an',
-  'and',
-  'at',
-  'for',
-  'from',
-  'in',
-  'of',
-  'on',
-  'or',
-  'the',
-  'to',
-  'with',
-]);
-
-function toTitleCase(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
-function deriveSimilarTaskGroup(title?: string | null): { key: string; label: string } {
-  const normalized = (title ?? '')
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  if (!normalized) return { key: 'other', label: 'Other' };
-
-  const tokens = normalized.split(' ').filter(Boolean);
-  const significant = tokens.filter((token) => !TITLE_STOP_WORDS.has(token));
-  const baseTokens = (significant.length > 0 ? significant : tokens).slice(0, 3);
-
-  if (baseTokens.length === 0) return { key: 'other', label: 'Other' };
-
-  return {
-    key: baseTokens.join('-'),
-    label: baseTokens.map(toTitleCase).join(' '),
-  };
 }
 
 function getTaskBucket(effectiveDue: Date | null, status: string): TaskBucket {
@@ -160,6 +122,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const viewParam = searchParams.get('view');
   const view: BoardView = viewParam === 'upcoming' || viewParam === 'urgent' ? viewParam : 'urgent';
   const selectedDay = parseDueDateParam(searchParams.get('dueDate'));
+  const network = parseTaskNetwork(searchParams.get('network'));
 
   const tasks = await AdminTask.find({ status: { $in: ['open', 'completed'] } })
     .sort({ dueAt: 1, createdAt: 1 })
@@ -196,7 +159,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   const referrals = await Referral.find({ _id: { $in: referralIds } })
     .populate('assignedAgent', 'name email phone')
-    .select('borrower status assignedAgent')
+    .select('borrower status assignedAgent buySideAgent sellSideAgent ahaBucket org')
     .lean();
 
   const referralMap = new Map<
@@ -314,7 +277,17 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ];
     return tasks.some((task) => isTaskDueOnSelectedDay(task, selectedDay!));
   };
+  const designationByReferral = network === 'all'
+    ? null
+    : await loadReferralDesignationMap(referrals);
+
+  const matchesNetwork = (referralId: string) => {
+    if (!designationByReferral) return true;
+    return referralMatchesTaskNetwork(designationByReferral.get(referralId) ?? null, network);
+  };
+
   const visibleCards = referralCards
+    .filter((card) => matchesNetwork(card.referralId))
     .filter(selectedDay ? selectedDayFilter : cardFilter)
     .sort(cardSorter);
 

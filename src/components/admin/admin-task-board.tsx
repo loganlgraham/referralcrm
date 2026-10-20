@@ -6,6 +6,7 @@ import useSWR from 'swr';
 import { AlarmClockOff, CalendarClock, CalendarDays, ClipboardList, Inbox, X } from 'lucide-react';
 
 import { cn } from '@/lib/cn';
+import { parseTaskNetwork, taskNetworkLabel, type TaskNetworkParam } from '@/lib/task-network';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -26,6 +27,20 @@ interface AgentGroup {
 
 type GroupByMode = 'due' | 'agent' | 'similar' | 'stage';
 type ViewMode = 'urgent' | 'upcoming' | 'no-tasks';
+type NoOpenTaskGroupBy = 'agent' | 'similar' | 'stage';
+
+interface TaskSummaryCounts {
+  overdueCount: number;
+  dueTodayCount: number;
+  noOpenTaskCount: number;
+}
+
+const NETWORK_FILTERS: { id: TaskNetworkParam; label: string; ariaLabel?: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'aha', label: 'AHA' },
+  { id: 'oos', label: 'OOS', ariaLabel: 'AHA OOS' },
+  { id: 'agit', label: 'AGIT' },
+];
 
 const DEFAULT_VIEW: ViewMode = 'urgent';
 const DEFAULT_GROUP_BY: GroupByMode = 'due';
@@ -51,6 +66,7 @@ export function AdminTaskBoard({ overdueCount, dueTodayCount, noOpenTaskCount }:
 
   const view = parseView(searchParams.get('view'));
   const groupBy = parseGroupBy(searchParams.get('groupBy'));
+  const network = parseTaskNetwork(searchParams.get('network'));
   const selectedDate = searchParams.get('dueDate') ?? '';
 
   const updateParams = useCallback(
@@ -75,8 +91,15 @@ export function AdminTaskBoard({ overdueCount, dueTodayCount, noOpenTaskCount }:
       // Task-board-only filters don't apply to the no-open-tasks list.
       ...(next === 'no-tasks' ? { dueDate: null } : {}),
     });
-  const setGroupBy = (next: GroupByMode) =>
+  const setGroupBy = (next: GroupByMode) => {
+    if (view === 'no-tasks' && next !== 'due' && groupBy === next) {
+      updateParams({ groupBy: null });
+      return;
+    }
     updateParams({ groupBy: next === DEFAULT_GROUP_BY ? null : next });
+  };
+  const setNetwork = (next: TaskNetworkParam) =>
+    updateParams({ network: next === 'all' ? null : next });
   const setSelectedDate = (next: string) => updateParams({ dueDate: next || null });
 
   const isBoardView = view === 'urgent' || view === 'upcoming';
@@ -85,8 +108,21 @@ export function AdminTaskBoard({ overdueCount, dueTodayCount, noOpenTaskCount }:
   if (selectedDate) {
     params.set('dueDate', selectedDate);
   }
+  if (network !== 'all') {
+    params.set('network', network);
+  }
   const boardUrl = isBoardView ? `/api/admin/tasks/board?${params.toString()}` : null;
   const { data, mutate } = useSWR<ReferralTaskCardData[] | AgentGroup[]>(boardUrl, fetcher);
+
+  const summaryUrl = network === 'all' ? '/api/admin/tasks/summary' : `/api/admin/tasks/summary?network=${network}`;
+  const initialCounts: TaskSummaryCounts = { overdueCount, dueTodayCount, noOpenTaskCount };
+  const { data: summary, mutate: mutateSummary } = useSWR<TaskSummaryCounts>(summaryUrl, fetcher, {
+    fallbackData: network === 'all' ? initialCounts : undefined,
+    keepPreviousData: true,
+  });
+  const liveOverdueCount = summary?.overdueCount ?? null;
+  const liveDueTodayCount = summary?.dueTodayCount ?? null;
+  const liveNoOpenTaskCount = summary?.noOpenTaskCount ?? null;
 
   const isGroupedMode = groupBy === 'agent' || groupBy === 'similar' || groupBy === 'stage';
   const referralCards: ReferralTaskCardData[] =
@@ -103,38 +139,52 @@ export function AdminTaskBoard({ overdueCount, dueTodayCount, noOpenTaskCount }:
       year: 'numeric',
     }).format(new Date(`${selectedDate}T00:00:00`))
     : null;
+  const networkName = network === 'all' ? null : taskNetworkLabel(network);
+  const emptyDescription = networkName
+    ? 'Switch network to All, or clear the date filter, to see more tasks.'
+    : 'Adjust the view or clear the date filter to see more tasks.';
   const emptyLabel = selectedDate
-    ? `No tasks due on ${formattedSelectedDate}`
+    ? networkName
+      ? `No tasks due on ${formattedSelectedDate} for ${networkName}`
+      : `No tasks due on ${formattedSelectedDate}`
     : view === 'upcoming'
-      ? 'No referrals with upcoming tasks'
-      : 'No referrals with urgent tasks';
+      ? networkName
+        ? `No upcoming tasks for ${networkName}`
+        : 'No referrals with upcoming tasks'
+      : networkName
+        ? `No urgent tasks for ${networkName}`
+        : 'No referrals with urgent tasks';
 
-  const urgentTotal = overdueCount + dueTodayCount;
+  const urgentTotal = liveOverdueCount === null || liveDueTodayCount === null
+    ? null
+    : liveOverdueCount + liveDueTodayCount;
+  const noOpenGroupBy: NoOpenTaskGroupBy | null =
+    groupBy === 'agent' || groupBy === 'similar' || groupBy === 'stage' ? groupBy : null;
 
   return (
     <div className="space-y-5">
       <div className="grid gap-3 sm:grid-cols-3">
         <StatButton
           label="Overdue"
-          value={overdueCount}
+          value={liveOverdueCount}
           hint="Open tasks past their due date"
           icon={<AlarmClockOff className="h-4 w-4" />}
-          tone={overdueCount > 0 ? 'danger' : 'default'}
+          tone={liveOverdueCount !== null && liveOverdueCount > 0 ? 'danger' : 'default'}
           active={view === 'urgent'}
           onClick={() => setView('urgent')}
         />
         <StatButton
           label="Due today"
-          value={dueTodayCount}
+          value={liveDueTodayCount}
           hint="Open tasks due before end of day"
           icon={<CalendarClock className="h-4 w-4" />}
-          tone={dueTodayCount > 0 ? 'warning' : 'default'}
+          tone={liveDueTodayCount !== null && liveDueTodayCount > 0 ? 'warning' : 'default'}
           active={view === 'urgent'}
           onClick={() => setView('urgent')}
         />
         <StatButton
           label="No open tasks"
-          value={noOpenTaskCount}
+          value={liveNoOpenTaskCount}
           hint="Active referrals without a follow-up"
           icon={<ClipboardList className="h-4 w-4" />}
           tone="default"
@@ -151,8 +201,8 @@ export function AdminTaskBoard({ overdueCount, dueTodayCount, noOpenTaskCount }:
         >
           <SegmentedButton active={view === 'urgent'} onClick={() => setView('urgent')}>
             Urgent
-            {urgentTotal > 0 && (
-              <Badge size="sm" variant={overdueCount > 0 ? 'danger' : 'warning'}>
+            {urgentTotal !== null && urgentTotal > 0 && (
+              <Badge size="sm" variant={liveOverdueCount !== null && liveOverdueCount > 0 ? 'danger' : 'warning'}>
                 {urgentTotal}
               </Badge>
             )}
@@ -162,36 +212,56 @@ export function AdminTaskBoard({ overdueCount, dueTodayCount, noOpenTaskCount }:
           </SegmentedButton>
           <SegmentedButton active={view === 'no-tasks'} onClick={() => setView('no-tasks')}>
             No open tasks
-            {noOpenTaskCount > 0 && (
+            {liveNoOpenTaskCount !== null && liveNoOpenTaskCount > 0 && (
               <Badge size="sm" variant="neutral">
-                {noOpenTaskCount}
+                {liveNoOpenTaskCount}
               </Badge>
             )}
           </SegmentedButton>
         </ToolbarGroup>
 
+        <Separator orientation="vertical" className="h-6" />
+
+        <ToolbarGroup role="group" aria-label="Network">
+          <span className="text-eyebrow text-foreground-subtle">Network</span>
+          <div className="flex items-center gap-0.5 rounded-lg bg-surface-muted p-0.5">
+            {NETWORK_FILTERS.map((option) => (
+              <SegmentedButton
+                key={option.id}
+                active={network === option.id}
+                ariaLabel={option.ariaLabel}
+                onClick={() => setNetwork(option.id)}
+              >
+                {option.label}
+              </SegmentedButton>
+            ))}
+          </div>
+        </ToolbarGroup>
+
+        <Separator orientation="vertical" className="h-6" />
+
+        <ToolbarGroup role="group" aria-label="Group by">
+          <span className="text-eyebrow text-foreground-subtle">Group by</span>
+          <div className="flex items-center gap-0.5 rounded-lg bg-surface-muted p-0.5">
+            {isBoardView && (
+              <SegmentedButton active={groupBy === 'due'} onClick={() => setGroupBy('due')}>
+                Due date
+              </SegmentedButton>
+            )}
+            <SegmentedButton active={groupBy === 'agent'} onClick={() => setGroupBy('agent')}>
+              Agent
+            </SegmentedButton>
+            <SegmentedButton active={groupBy === 'similar'} onClick={() => setGroupBy('similar')}>
+              Similar task
+            </SegmentedButton>
+            <SegmentedButton active={groupBy === 'stage'} onClick={() => setGroupBy('stage')}>
+              Stage
+            </SegmentedButton>
+          </div>
+        </ToolbarGroup>
+
         {isBoardView && (
           <>
-            <Separator orientation="vertical" className="h-6" />
-
-            <ToolbarGroup role="group" aria-label="Group by">
-              <span className="text-eyebrow text-foreground-subtle">Group by</span>
-              <div className="flex items-center gap-0.5 rounded-lg bg-surface-muted p-0.5">
-                <SegmentedButton active={groupBy === 'due'} onClick={() => setGroupBy('due')}>
-                  Due date
-                </SegmentedButton>
-                <SegmentedButton active={groupBy === 'agent'} onClick={() => setGroupBy('agent')}>
-                  Agent
-                </SegmentedButton>
-                <SegmentedButton active={groupBy === 'similar'} onClick={() => setGroupBy('similar')}>
-                  Similar task
-                </SegmentedButton>
-                <SegmentedButton active={groupBy === 'stage'} onClick={() => setGroupBy('stage')}>
-                  Stage
-                </SegmentedButton>
-              </div>
-            </ToolbarGroup>
-
             <ToolbarSpacer />
 
             <ToolbarGroup aria-label="Due date filter">
@@ -226,7 +296,14 @@ export function AdminTaskBoard({ overdueCount, dueTodayCount, noOpenTaskCount }:
       </Toolbar>
 
       {view === 'no-tasks' ? (
-        <NoOpenTaskReferrals onTaskCreated={() => router.refresh()} />
+        <NoOpenTaskReferrals
+          groupBy={noOpenGroupBy}
+          network={network}
+          onTaskCreated={() => {
+            router.refresh();
+            void mutateSummary();
+          }}
+        />
       ) : data === undefined ? (
         <BoardSkeleton />
       ) : groupBy === 'due' ? (
@@ -234,7 +311,7 @@ export function AdminTaskBoard({ overdueCount, dueTodayCount, noOpenTaskCount }:
           <EmptyState
             icon={<Inbox className="h-5 w-5" />}
             title={emptyLabel}
-            description="Adjust the view or clear the date filter to see more tasks."
+            description={emptyDescription}
           />
         ) : (
           <div className="space-y-4">
@@ -253,7 +330,7 @@ export function AdminTaskBoard({ overdueCount, dueTodayCount, noOpenTaskCount }:
         <EmptyState
           icon={<Inbox className="h-5 w-5" />}
           title={emptyLabel}
-          description="Adjust the view or clear the date filter to see more tasks."
+          description={emptyDescription}
         />
       ) : (
         <div className="space-y-6">
@@ -288,15 +365,18 @@ function SegmentedButton({
   active,
   onClick,
   children,
+  ariaLabel,
 }: {
   active: boolean;
   onClick: () => void;
   children: ReactNode;
+  ariaLabel?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-label={ariaLabel}
       aria-pressed={active}
       className={cn(
         'inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
@@ -320,7 +400,7 @@ function StatButton({
   onClick,
 }: {
   label: string;
-  value: number;
+  value: number | null;
   hint: string;
   icon: ReactNode;
   tone: 'default' | 'warning' | 'danger';
@@ -333,9 +413,9 @@ function StatButton({
       onClick={onClick}
       className={cn(
         'flex min-w-0 flex-col gap-2 rounded-card border px-4 py-3.5 text-left shadow-card transition hover:shadow-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        tone === 'danger' && value > 0
+        tone === 'danger' && value !== null && value > 0
           ? 'border-[hsl(var(--signal)/0.3)] bg-signal-soft'
-          : tone === 'warning' && value > 0
+          : tone === 'warning' && value !== null && value > 0
             ? 'border-[hsl(var(--warning)/0.25)] bg-warning-soft/60'
             : 'border-border bg-surface-raised',
         active && 'ring-2 ring-primary/60 ring-offset-1 ring-offset-surface'
@@ -343,7 +423,7 @@ function StatButton({
     >
       <div className="flex items-center justify-between gap-2">
         <span className="text-eyebrow flex items-center gap-1.5 text-foreground-subtle">
-          {tone === 'danger' && value > 0 ? (
+          {tone === 'danger' && value !== null && value > 0 ? (
             <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-signal" />
           ) : null}
           {label}
@@ -351,7 +431,7 @@ function StatButton({
         <span className="shrink-0 text-foreground-subtle">{icon}</span>
       </div>
       <span className="text-numeric text-2xl font-semibold leading-none tracking-[-0.02em] text-foreground">
-        {value}
+        {value === null ? <Skeleton className="h-7 w-10" /> : value}
       </span>
       <span className="text-xs text-foreground-muted">{hint}</span>
     </button>

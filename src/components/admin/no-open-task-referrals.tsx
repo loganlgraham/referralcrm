@@ -7,6 +7,8 @@ import { ClipboardCheck, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { getTodayEightAmMountainDateTimeLocal } from '@/lib/admin-task-day';
+import { groupNoOpenTaskReferrals, type NoOpenTaskGroupBy } from '@/lib/admin-task-groups';
+import { taskNetworkLabel, type TaskNetworkParam } from '@/lib/task-network';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
@@ -37,13 +39,15 @@ const dateFormatter = new Intl.DateTimeFormat('en-US', {
 interface NoOpenTaskReferralsProps {
   /** Called after a task is created so the parent can refresh board data. */
   onTaskCreated?: () => void;
+  groupBy: NoOpenTaskGroupBy | null;
+  network: TaskNetworkParam;
 }
 
-export function NoOpenTaskReferrals({ onTaskCreated }: NoOpenTaskReferralsProps) {
-  const { data, isLoading, mutate } = useSWR<NoOpenTaskReferralEntry[]>(
-    '/api/admin/tasks/no-open-task-referrals',
-    fetcher
-  );
+export function NoOpenTaskReferrals({ onTaskCreated, groupBy, network }: NoOpenTaskReferralsProps) {
+  const listUrl = network === 'all'
+    ? '/api/admin/tasks/no-open-task-referrals'
+    : `/api/admin/tasks/no-open-task-referrals?network=${network}`;
+  const { data, isLoading, mutate } = useSWR<NoOpenTaskReferralEntry[]>(listUrl, fetcher);
 
   const [taskTarget, setTaskTarget] = useState<NoOpenTaskReferralEntry | null>(null);
   const [taskTitle, setTaskTitle] = useState('');
@@ -103,13 +107,23 @@ export function NoOpenTaskReferrals({ onTaskCreated }: NoOpenTaskReferralsProps)
   }
 
   const referrals = data ?? [];
+  const networkName = network === 'all' ? null : taskNetworkLabel(network);
+  const grouped = groupBy ? groupNoOpenTaskReferrals(referrals, groupBy) : null;
 
   if (referrals.length === 0) {
     return (
       <EmptyState
         icon={<ClipboardCheck className="h-5 w-5" />}
-        title="Every active referral has an open task"
-        description="Nothing is slipping through the cracks — all pipeline referrals have a follow-up scheduled."
+        title={
+          networkName
+            ? `Every active ${networkName} referral has an open task`
+            : 'Every active referral has an open task'
+        }
+        description={
+          networkName
+            ? `Nothing in ${networkName} is missing a follow-up. Switch network to All to see every pipeline referral.`
+            : 'Nothing is slipping through the cracks — all pipeline referrals have a follow-up scheduled.'
+        }
       />
     );
   }
@@ -121,7 +135,9 @@ export function NoOpenTaskReferrals({ onTaskCreated }: NoOpenTaskReferralsProps)
           <div>
             <h2 className="text-sm font-semibold text-foreground">Referrals with no open tasks</h2>
             <p className="text-xs text-foreground-muted">
-              Active pipeline referrals missing an open follow-up task
+              {networkName
+                ? `Active ${networkName} referrals missing an open follow-up task`
+                : 'Active pipeline referrals missing an open follow-up task'}
             </p>
           </div>
           <span className="text-xs font-medium text-foreground-muted">
@@ -143,39 +159,26 @@ export function NoOpenTaskReferrals({ onTaskCreated }: NoOpenTaskReferralsProps)
               </tr>
             </THead>
             <TBody>
-              {referrals.map((row) => (
-                <Tr key={row.id}>
-                  <Td>
-                    <Link
-                      prefetch={false}
-                      href={`/referrals/${row.id}`}
-                      className="font-medium text-primary transition hover:text-primary-hover hover:underline"
-                    >
-                      {row.borrowerName}
-                    </Link>
-                  </Td>
-                  <Td>
-                    <StatusPill kind="auto" status={row.status} />
-                  </Td>
-                  <Td className="text-foreground-muted">{row.agentName ?? '—'}</Td>
-                  <Td className="text-foreground-muted">{row.mcName ?? '—'}</Td>
-                  <Td className="text-foreground-muted">
-                    {row.lastActivityAt
-                      ? dateFormatter.format(new Date(row.lastActivityAt))
-                      : '—'}
-                  </Td>
-                  <Td className="text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      leadingIcon={<Plus className="h-3.5 w-3.5" />}
-                      onClick={() => openTaskModal(row)}
-                    >
-                      Create task
-                    </Button>
-                  </Td>
-                </Tr>
-              ))}
+              {grouped
+                ? grouped.flatMap((group) => [
+                    <tr key={`group-${group.groupKey}`} className="bg-surface-muted/70">
+                      <Td
+                        colSpan={6}
+                        className="py-2 text-xs font-semibold uppercase tracking-wide text-foreground-muted"
+                      >
+                        {group.groupLabel}
+                        <span className="ml-2 font-medium normal-case tracking-normal text-foreground-subtle">
+                          {group.referrals.length}
+                        </span>
+                      </Td>
+                    </tr>,
+                    ...group.referrals.map((row) => (
+                      <NoOpenTaskRow key={row.id} row={row} onCreate={openTaskModal} />
+                    )),
+                  ])
+                : referrals.map((row) => (
+                    <NoOpenTaskRow key={row.id} row={row} onCreate={openTaskModal} />
+                  ))}
             </TBody>
           </Table>
         </TableScroll>
@@ -222,5 +225,45 @@ export function NoOpenTaskReferrals({ onTaskCreated }: NoOpenTaskReferralsProps)
         </form>
       </Modal>
     </>
+  );
+}
+
+function NoOpenTaskRow({
+  row,
+  onCreate,
+}: {
+  row: NoOpenTaskReferralEntry;
+  onCreate: (referral: NoOpenTaskReferralEntry) => void;
+}) {
+  return (
+    <Tr>
+      <Td>
+        <Link
+          prefetch={false}
+          href={`/referrals/${row.id}`}
+          className="font-medium text-primary transition hover:text-primary-hover hover:underline"
+        >
+          {row.borrowerName}
+        </Link>
+      </Td>
+      <Td>
+        <StatusPill kind="auto" status={row.status} />
+      </Td>
+      <Td className="text-foreground-muted">{row.agentName ?? '—'}</Td>
+      <Td className="text-foreground-muted">{row.mcName ?? '—'}</Td>
+      <Td className="text-foreground-muted">
+        {row.lastActivityAt ? dateFormatter.format(new Date(row.lastActivityAt)) : '—'}
+      </Td>
+      <Td className="text-right">
+        <Button
+          variant="outline"
+          size="sm"
+          leadingIcon={<Plus className="h-3.5 w-3.5" />}
+          onClick={() => onCreate(row)}
+        >
+          Create task
+        </Button>
+      </Td>
+    </Tr>
   );
 }
