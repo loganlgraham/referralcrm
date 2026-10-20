@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSWRConfig } from 'swr';
 import { toast } from 'sonner';
 import { Trash2, Pencil, Pin, PinOff } from 'lucide-react';
@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { railCardClasses, railTitleClasses } from '@/components/referrals/referral-rail';
 import { Textarea } from '@/components/ui/input';
 import { EmptyState } from '@/components/ui/empty-state';
+import { formatEmailList, openNoteCcToast } from '@/components/referrals/note-cc-toast';
 
 interface StoredReferralNote {
   id: string;
@@ -32,6 +33,15 @@ type DeliveryFailureReason = 'missing_configuration' | 'no_recipients' | 'unknow
 interface ReferralNoteResponse extends StoredReferralNote {
   deliveryFailed?: boolean;
   deliveryFailureReason?: DeliveryFailureReason;
+  copiedTo?: string[];
+  promotedTo?: string[];
+}
+
+function describeNoteEmailAudience(parts: string[]): string {
+  if (parts.length === 0) {
+    return 'This note will be emailed.';
+  }
+  return `This note will email ${formatEmailList(parts)}.`;
 }
 
 type ViewerRole = 'admin' | 'manager' | 'agent' | 'mc' | 'viewer' | string;
@@ -136,12 +146,20 @@ export function ReferralNotes({
     hasAnyUsedAfcTrue,
   });
   const [emailMc, setEmailMc] = useState(() => shouldDefaultEmailMc);
+  const [ccEmails, setCcEmails] = useState<string[]>([]);
+  const ccToastOpenRef = useRef(false);
+  const sendingEmailRef = useRef(false);
   const hasAdminEmails = Array.isArray(adminContacts)
     ? adminContacts.some((contact) => contact?.email)
     : false;
   const agentEmailDisabled = saving || hiddenFromAgent || !hasAgentEmail;
   const mcEmailDisabled = saving || hiddenFromMc || !hasMcEmail;
   const adminEmailDisabled = saving || !hasAdminEmails;
+  const agentEmailOn = emailAgent && hasAgentEmail && !hiddenFromAgent;
+  const mcEmailOn = emailMc && hasMcEmail && !hiddenFromMc;
+  const adminEmailOn = emailAdmin && hasAdminEmails;
+  const sendingEmail = agentEmailOn || mcEmailOn || adminEmailOn;
+  sendingEmailRef.current = sendingEmail;
 
   useEffect(() => {
     setNotes([...initialNotes]);
@@ -169,6 +187,47 @@ export function ReferralNotes({
     }
   }, [hasAdminEmails, emailAdmin]);
 
+  useEffect(() => {
+    if (!sendingEmail) {
+      setCcEmails([]);
+    }
+  }, [sendingEmail]);
+
+  const openCcToast = (overrides?: { agent?: boolean; mc?: boolean; admin?: boolean }) => {
+    if (ccToastOpenRef.current || saving) {
+      return;
+    }
+
+    const flags = {
+      agent: overrides?.agent ?? agentEmailOn,
+      mc: overrides?.mc ?? mcEmailOn,
+      admin: overrides?.admin ?? adminEmailOn,
+    };
+    const audience: string[] = [];
+    if (flags.agent) {
+      audience.push(viewerRole === 'agent' ? 'you' : agentContact?.name?.trim() || 'the agent');
+    }
+    if (flags.mc) {
+      audience.push(mcContact?.name?.trim() || 'the mortgage consultant');
+    }
+    if (flags.admin) {
+      audience.push('admins');
+    }
+
+    ccToastOpenRef.current = true;
+    void openNoteCcToast({
+      description: describeNoteEmailAudience(audience),
+      admins: adminContacts ?? [],
+      initialEmails: ccEmails,
+    }).then((result) => {
+      ccToastOpenRef.current = false;
+      if (result === null || !sendingEmailRef.current) {
+        return;
+      }
+      setCcEmails(result);
+    });
+  };
+
   const resetForm = () => {
     setContent('');
     setHiddenFromAgent(false);
@@ -176,6 +235,7 @@ export function ReferralNotes({
     setEmailAgent(false);
     setEmailMc(shouldDefaultEmailMc);
     setEmailAdmin(false);
+    setCcEmails([]);
   };
 
   const handleDropdownToggle = () => {
@@ -334,14 +394,21 @@ export function ReferralNotes({
           content: content.trim(),
           hiddenFromAgent: canControlVisibility ? hiddenFromAgent : undefined,
           hiddenFromMc: canControlVisibility ? hiddenFromMc : undefined,
-          emailTargets: emailTargets.length > 0 ? emailTargets : undefined
+          emailTargets: emailTargets.length > 0 ? emailTargets : undefined,
+          ccEmails: emailTargets.length > 0 && ccEmails.length > 0 ? ccEmails : undefined
         })
       });
       if (!response.ok) {
         throw new Error('Unable to save note');
       }
       const created = (await response.json()) as ReferralNoteResponse;
-      const { deliveryFailed, deliveryFailureReason, ...notePayload } = created;
+      const {
+        deliveryFailed,
+        deliveryFailureReason,
+        copiedTo: copiedRaw,
+        promotedTo: promotedRaw,
+        ...notePayload
+      } = created;
       setNotes((previous) => [
         {
           ...notePayload,
@@ -355,20 +422,29 @@ export function ReferralNotes({
       resetForm();
       void mutate(activityFeedKey);
 
-      const emailSummary =
+      const copiedTo = Array.isArray(copiedRaw) ? copiedRaw : [];
+      const promotedTo = Array.isArray(promotedRaw) ? promotedRaw : [];
+      const emailedNames =
         Array.isArray(notePayload.emailedTargets) && notePayload.emailedTargets.length > 0
-          ? ` Email sent to ${notePayload.emailedTargets
-              .map((target) => {
-                if (target === 'agent') {
-                  return agentContact?.name || 'agent';
-                }
-                if (target === 'mc') {
-                  return mcContact?.name || 'MC';
-                }
-                return 'admins';
-              })
-              .join(' & ')}.`
-          : '';
+          ? notePayload.emailedTargets.map((target) => {
+              if (target === 'agent') {
+                return agentContact?.name || 'agent';
+              }
+              if (target === 'mc') {
+                return mcContact?.name || 'MC';
+              }
+              return 'admins';
+            })
+          : [];
+      let emailSummary = '';
+      if (!deliveryFailed && promotedTo.length > 0) {
+        emailSummary = ` Email sent to ${formatEmailList(promotedTo)}.`;
+      } else if (!deliveryFailed && emailedNames.length > 0) {
+        emailSummary = ` Email sent to ${emailedNames.join(' & ')}.`;
+        if (copiedTo.length > 0) {
+          emailSummary += ` Copied to ${formatEmailList(copiedTo)}.`;
+        }
+      }
       toast.success(`Note added.${emailSummary}`.trim());
 
       if (deliveryFailed && emailTargets.length > 0) {
@@ -578,19 +654,34 @@ export function ReferralNotes({
             <ToggleControl
               label={viewerRole === 'agent' ? 'Email myself this note' : 'Email agent'}
               checked={emailAgent}
-              onChange={(value) => setEmailAgent(value)}
+              onChange={(value) => {
+                setEmailAgent(value);
+                if (value) {
+                  openCcToast({ agent: true });
+                }
+              }}
               disabled={agentEmailDisabled}
             />
             <ToggleControl
               label="Email MC"
               checked={emailMc}
-              onChange={(value) => setEmailMc(value)}
+              onChange={(value) => {
+                setEmailMc(value);
+                if (value) {
+                  openCcToast({ mc: true });
+                }
+              }}
               disabled={mcEmailDisabled}
             />
             <ToggleControl
               label="Email admin"
               checked={emailAdmin}
-              onChange={(value) => setEmailAdmin(value)}
+              onChange={(value) => {
+                setEmailAdmin(value);
+                if (value) {
+                  openCcToast({ admin: true });
+                }
+              }}
               disabled={adminEmailDisabled}
             />
           </div>
@@ -605,6 +696,27 @@ export function ReferralNotes({
             </Button>
           </div>
         </div>
+        {ccEmails.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs font-medium text-foreground-muted">Also copying</span>
+            {ccEmails.map((email) => (
+              <span
+                key={email}
+                className="rounded-full bg-surface-subtle px-2 py-0.5 text-xs text-foreground-muted"
+              >
+                {email}
+              </span>
+            ))}
+            <button
+              type="button"
+              onClick={() => openCcToast()}
+              disabled={saving}
+              className="text-xs font-semibold text-primary hover:text-primary-hover disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Edit
+            </button>
+          </div>
+        ) : null}
         {(() => {
           const missingMessages: string[] = [];
           if (!hasAgentEmail) {

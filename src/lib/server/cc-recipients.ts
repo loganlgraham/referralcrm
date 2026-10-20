@@ -67,6 +67,29 @@ export const getReferralNotificationRecipients = (): string[] => {
 };
 
 /**
+ * Splits extra note-email addresses into CC vs To.
+ * Addresses already on the To line are dropped. When the note has no To
+ * recipients and the caller asks to promote, the extras become To instead.
+ */
+export const partitionNoteCopy = (input: {
+  toEmails: string[];
+  ccInput: unknown;
+  promoteWhenNoRecipients: boolean;
+}): { cc: string[]; promotedTo: string[] } => {
+  const parsed = parseCcRecipients(input.ccInput);
+  const excluded = new Set(
+    input.toEmails.map((email) => email.trim().toLowerCase()).filter((email) => email.length > 0)
+  );
+  const extras = parsed.emails.filter((email) => !excluded.has(email));
+
+  if (input.promoteWhenNoRecipients && excluded.size === 0 && extras.length > 0) {
+    return { cc: [], promotedTo: extras };
+  }
+
+  return { cc: extras, promotedTo: [] };
+};
+
+/**
  * Merges default CC addresses with admin-supplied extras, dropping duplicates and
  * the message's own recipient so nobody receives the same email twice.
  */

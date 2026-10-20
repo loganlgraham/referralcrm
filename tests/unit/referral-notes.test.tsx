@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 
 import { ReferralNotes } from '@/components/referrals/referral-notes';
 import { ReferralTimeline } from '@/components/referrals/referral-timeline';
@@ -7,6 +7,8 @@ const mockMutate = jest.fn();
 const mockUseSWR = jest.fn();
 const mockToastSuccess = jest.fn();
 const mockToastError = jest.fn();
+const mockToastCustom = jest.fn();
+const mockToastDismiss = jest.fn();
 
 type SwrResponse = {
   data?: unknown;
@@ -32,6 +34,8 @@ jest.mock('sonner', () => ({
   toast: {
     success: (...args: unknown[]) => mockToastSuccess(...args),
     error: (...args: unknown[]) => mockToastError(...args),
+    custom: (...args: unknown[]) => mockToastCustom(...args),
+    dismiss: (...args: unknown[]) => mockToastDismiss(...args),
   },
 }));
 
@@ -53,6 +57,8 @@ describe('ReferralNotes', () => {
     mockUseSWR.mockReset();
     mockToastSuccess.mockReset();
     mockToastError.mockReset();
+    mockToastCustom.mockReset();
+    mockToastDismiss.mockReset();
   });
 
   it('renders only stored notes and ignores stale activity-only note content', () => {
@@ -146,6 +152,27 @@ describe('ReferralNotes', () => {
       'aria-checked',
       'true'
     );
+    expect(mockToastCustom).not.toHaveBeenCalled();
+  });
+
+  it('opens one copy toast when an email switch is turned on', () => {
+    render(
+      <ReferralNotes
+        referralId="ref-cc-toast"
+        viewerRole="admin"
+        initialNotes={[]}
+        agentContact={{ name: 'Avery Agent', email: 'agent@example.com' }}
+        adminContacts={[
+          { name: 'Ada Admin', email: 'ada@example.com' },
+          { name: 'Bea Admin', email: 'bea@example.com' },
+        ]}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Email agent' }));
+    fireEvent.click(screen.getByRole('switch', { name: 'Email admin' }));
+
+    expect(mockToastCustom).toHaveBeenCalledTimes(1);
   });
 
   it('shows no stored notes while the timeline still shows note audit entries', () => {

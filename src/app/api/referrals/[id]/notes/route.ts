@@ -11,6 +11,7 @@ import { logReferralActivity } from '@/lib/server/activities';
 import { buildReferralLink, getReferralAppBaseUrl } from '@/lib/referral-links';
 import { createAdminNotifications } from '@/lib/server/notifications';
 import { maybeNotifyAdminsOnUpdateRequestResponse } from '@/lib/server/update-request-response';
+import { partitionNoteCopy } from '@/lib/server/cc-recipients';
 
 type DeliveryFailureReason = 'missing_configuration' | 'no_recipients' | 'unknown';
 
@@ -123,9 +124,28 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     }
   }
 
+  const onlyAdminTarget = requestedTargets.size === 1 && requestedTargets.has('admin');
+  const noteCopy = partitionNoteCopy({
+    toEmails: recipients.map((recipient) => recipient.email),
+    ccInput: parsed.data.ccEmails ?? [],
+    promoteWhenNoRecipients: onlyAdminTarget && recipients.length === 0,
+  });
+
+  if (noteCopy.promotedTo.length > 0) {
+    for (const email of noteCopy.promotedTo) {
+      addRecipient({
+        email,
+        name: 'Admin',
+        target: 'admin',
+      });
+    }
+  }
+
   let emailedTargets: ('agent' | 'mc' | 'admin')[] = [];
   let deliveryFailed = false;
   let deliveryFailureReason: DeliveryFailureReason | undefined;
+  let copiedTo: string[] = [];
+  let promotedTo: string[] = [];
 
   if (requestedTargets.size > 0) {
     if (!isTransactionalEmailConfigured()) {
@@ -151,14 +171,17 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
       const delivered = await sendTransactionalEmail({
         to: recipients.map((recipient) => recipient.email),
+        cc: noteCopy.cc.length > 0 ? noteCopy.cc : undefined,
         subject: `New note on ${borrowerName}`,
         html: rendered.html,
         text: rendered.text,
       });
 
       if (delivered) {
-        emailedTargets = recipients.map((recipient) => recipient.target);
+        emailedTargets = [...new Set(recipients.map((recipient) => recipient.target))];
         note.emailedTargets = emailedTargets;
+        copiedTo = noteCopy.cc;
+        promotedTo = noteCopy.promotedTo;
       } else {
         deliveryFailed = true;
         deliveryFailureReason = 'unknown';
@@ -220,6 +243,8 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       hiddenFromAgent: saved.hiddenFromAgent,
       hiddenFromMc: saved.hiddenFromMc,
       emailedTargets,
+      copiedTo,
+      promotedTo,
       pinned: false,
       pinnedAt: null,
       deliveryFailed,

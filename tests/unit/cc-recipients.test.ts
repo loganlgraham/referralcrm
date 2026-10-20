@@ -3,6 +3,7 @@ import {
   buildCcList,
   getReferralNotificationRecipients,
   parseCcRecipients,
+  partitionNoteCopy,
 } from '@/lib/server/cc-recipients';
 
 describe('parseCcRecipients', () => {
@@ -52,6 +53,47 @@ describe('parseCcRecipients', () => {
     expect(parseCcRecipients(['good@example.com', 'nope', 'missing@domain'])).toEqual({
       emails: ['good@example.com'],
       invalid: ['nope', 'missing@domain'],
+    });
+  });
+});
+
+describe('partitionNoteCopy', () => {
+  it('keeps extras on CC and drops anyone already in To', () => {
+    expect(
+      partitionNoteCopy({
+        toEmails: ['Agent@Example.com'],
+        ccInput: ['agent@example.com', 'one@example.com', 'two@example.com', 'nope'],
+        promoteWhenNoRecipients: false,
+      })
+    ).toEqual({
+      cc: ['one@example.com', 'two@example.com'],
+      promotedTo: [],
+    });
+  });
+
+  it('promotes extras to To when there is nobody to email yet', () => {
+    expect(
+      partitionNoteCopy({
+        toEmails: [],
+        ccInput: ['Admin@Example.com', 'other@example.com'],
+        promoteWhenNoRecipients: true,
+      })
+    ).toEqual({
+      cc: [],
+      promotedTo: ['admin@example.com', 'other@example.com'],
+    });
+  });
+
+  it('leaves extras on CC when someone is already in To', () => {
+    expect(
+      partitionNoteCopy({
+        toEmails: ['mc@example.com'],
+        ccInput: ['admin@example.com'],
+        promoteWhenNoRecipients: true,
+      })
+    ).toEqual({
+      cc: ['admin@example.com'],
+      promotedTo: [],
     });
   });
 });
