@@ -1,5 +1,6 @@
 import { type ReactNode } from 'react';
 import { BrandMark } from '@/components/ui/brand-mark';
+import { cn } from '@/lib/cn';
 
 interface AuthShellProps {
   hero?: {
@@ -104,14 +105,16 @@ export function AuthShell({ hero, brand, children, wide = false }: AuthShellProp
 export function AuthHeading({
   eyebrow,
   title,
-  description
+  description,
+  className,
 }: {
   eyebrow?: ReactNode;
   title: ReactNode;
   description?: ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="space-y-2 text-left">
+    <div className={cn('space-y-2 text-left', className)}>
       {eyebrow && <p className="text-eyebrow text-signal-dark">{eyebrow}</p>}
       <h1 className="font-display text-2xl font-semibold tracking-[-0.035em] text-foreground sm:text-3xl">{title}</h1>
       {description && <p className="text-sm text-foreground-muted">{description}</p>}
