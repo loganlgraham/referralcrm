@@ -8,16 +8,25 @@ export type FeeVerificationField = (typeof FEE_VERIFICATION_FIELDS)[number];
 
 export const FEE_VERIFICATION_TTL_DAYS = 60;
 
-export function hasFeeBreakdownFinancialData(payment: {
-  contractPriceCents?: number | null;
-  commissionBasisPoints?: number | null;
-  commissionFlatFeeCents?: number | null;
-  referralFeeBasisPoints?: number | null;
-}): boolean {
+export function hasFeeBreakdownFinancialData<
+  T extends {
+    contractPriceCents?: number | null;
+    commissionBasisPoints?: number | null;
+    commissionFlatFeeCents?: number | null;
+    referralFeeBasisPoints?: number | null;
+  },
+>(
+  payment: T
+): payment is T & { contractPriceCents: number; referralFeeBasisPoints: number } {
   const hasCommission =
     (payment.commissionBasisPoints != null && payment.commissionBasisPoints > 0) ||
     (payment.commissionFlatFeeCents != null && payment.commissionFlatFeeCents > 0);
-  return Boolean(payment.contractPriceCents) && hasCommission && payment.referralFeeBasisPoints != null;
+  return (
+    typeof payment.contractPriceCents === 'number' &&
+    payment.contractPriceCents > 0 &&
+    hasCommission &&
+    typeof payment.referralFeeBasisPoints === 'number'
+  );
 }
 
 export function feeVerificationFieldLabel(field: FeeVerificationField): string {
