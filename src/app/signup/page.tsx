@@ -3,10 +3,10 @@
 export const dynamic = 'force-dynamic';
 
 import Link from 'next/link';
-import { buildGmailComposeUrl } from '@/utils/gmail';
 import { FormEvent, Suspense, useEffect, useMemo, useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
+import { AuthBrandLockup } from '@/components/brand/AuthBrandLockup';
 import { AuthShell, AuthHeading } from '@/components/layout/auth-shell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -46,19 +46,8 @@ export default function SignupPage() {
   return (
     <Suspense
       fallback={
-        <AuthShell
-          hero={{
-            eyebrow: 'AFC · AHA',
-            title: 'Create clarity for every referral partner.',
-            description: "We'll have your onboarding workspace ready in just a moment.",
-          }}
-          wide
-        >
-          <AuthHeading
-            eyebrow="AFC · AHA"
-            title="Create your account"
-            description="Preparing your signup experience…"
-          />
+        <AuthShell brand={<AuthBrandLockup />}>
+          <AuthHeading title="Create your account" />
           <div className="mx-auto h-2 w-32 animate-pulse rounded-full bg-surface-muted" />
         </AuthShell>
       }
@@ -180,20 +169,8 @@ function SignupPageContent() {
   const firstError = (key: keyof FieldErrors) => fieldErrors[key]?.[0];
 
   return (
-    <AuthShell
-      hero={{
-        eyebrow: 'AFC · AHA',
-        title: 'Create your Referrio workspace.',
-        description:
-          'Invite your teams, track referrals, and strengthen every borrower journey from a single platform.',
-      }}
-      wide
-    >
-      <AuthHeading
-        eyebrow="AFC · AHA"
-        title="Create your account"
-        description="Tell us a few details to personalize your Referrio experience."
-      />
+    <AuthShell brand={<AuthBrandLockup />}>
+      <AuthHeading title="Create your account" />
 
       {error && (
         <div className="rounded-md border border-danger/30 bg-danger-soft px-3 py-2 text-sm text-[hsl(var(--danger))]" role="alert">
@@ -262,7 +239,7 @@ function SignupPageContent() {
 
         <div className="space-y-2">
           <span className="block text-sm font-medium text-foreground">Role</span>
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid gap-2">
             {roleOptions.map((option) => {
               const isSelected = role === option.value;
               return (
@@ -321,18 +298,6 @@ function SignupPageContent() {
         <Link href="/login" className="font-medium text-primary no-underline hover:underline">
           Log in
         </Link>
-      </p>
-
-      <p className="text-center text-xs text-foreground-subtle">
-        Need assistance?{' '}
-        <a
-          href={buildGmailComposeUrl('support@referralcrm.example.com')}
-          target="_blank"
-          rel="noreferrer"
-          className="font-medium text-primary no-underline hover:underline"
-        >
-          Contact support
-        </a>
       </p>
     </AuthShell>
   );
