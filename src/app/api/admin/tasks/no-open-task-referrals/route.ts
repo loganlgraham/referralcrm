@@ -4,6 +4,7 @@ import { Types } from 'mongoose';
 import { isTerminalReferralStatus } from '@/constants/referrals';
 import { connectMongo } from '@/lib/mongoose';
 import { requireAdmin } from '@/lib/auth';
+import { pickLatestClosedTaskTitles } from '@/lib/latest-closed-task';
 import { loadReferralDesignationMap } from '@/lib/server/referral-networks';
 import { parseTaskNetwork, referralMatchesTaskNetwork } from '@/lib/task-network';
 import { AdminTask } from '@/models/admin-task';
@@ -30,9 +31,13 @@ interface PopulatedNameRef {
   name?: string;
 }
 
-interface LatestCompletedTask {
-  _id: { toString(): string };
+interface ClosedTaskRow {
+  referralId?: { toString(): string };
   title?: string;
+  status: string;
+  completedAt?: Date;
+  dismissedAt?: Date;
+  updatedAt?: Date;
 }
 
 interface ReferralLeanRow {
@@ -97,16 +102,28 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     : candidates;
 
   const matchedIds = matched.map((referral) => new Types.ObjectId(referral._id.toString()));
-  const latestTasks: LatestCompletedTask[] = matchedIds.length === 0
+  const closedTasks: ClosedTaskRow[] = matchedIds.length === 0
     ? []
-    : await AdminTask.aggregate<LatestCompletedTask>([
-        { $match: { status: 'completed', referralId: { $in: matchedIds } } },
-        { $sort: { completedAt: -1, updatedAt: -1 } },
-        { $group: { _id: '$referralId', title: { $first: '$title' } } },
-      ]);
+    : await AdminTask.find({
+        status: { $in: ['completed', 'dismissed'] },
+        referralId: { $in: matchedIds },
+      })
+        .select('referralId title status completedAt dismissedAt updatedAt')
+        .lean<ClosedTaskRow[]>();
 
-  const titleByReferral = new Map(
-    latestTasks.map((row) => [row._id.toString(), row.title?.trim() ? row.title : null])
+  const titleByReferral = pickLatestClosedTaskTitles(
+    closedTasks.flatMap((task) => {
+      const referralId = task.referralId?.toString();
+      if (!referralId) return [];
+      return [{
+        referralId,
+        title: task.title,
+        status: task.status,
+        completedAt: task.completedAt,
+        dismissedAt: task.dismissedAt,
+        updatedAt: task.updatedAt,
+      }];
+    })
   );
 
   const entries: NoOpenTaskReferralEntry[] = matched

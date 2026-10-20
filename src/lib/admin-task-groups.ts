@@ -17,6 +17,11 @@ const TITLE_STOP_WORDS = new Set([
 ]);
 
 const UNASSIGNED_AGENT = 'Unassigned Agent';
+
+export function agentGroupLabel(name?: string | null): string {
+  const trimmed = name?.trim();
+  return trimmed ? trimmed : UNASSIGNED_AGENT;
+}
 const NO_PREVIOUS_TASK_KEY = 'no-previous-task';
 const NO_PREVIOUS_TASK_LABEL = 'No previous task';
 
@@ -73,7 +78,7 @@ function sortByLastActivity<T extends NoOpenTaskGroupInput>(rows: T[]): T[] {
 function groupByAgent<T extends NoOpenTaskGroupInput>(referrals: readonly T[]): NoOpenTaskGroup<T>[] {
   const byAgent = new Map<string, T[]>();
   for (const referral of referrals) {
-    const agentName = referral.agentName?.trim() || UNASSIGNED_AGENT;
+    const agentName = agentGroupLabel(referral.agentName);
     const rows = byAgent.get(agentName);
     if (rows) {
       rows.push(referral);

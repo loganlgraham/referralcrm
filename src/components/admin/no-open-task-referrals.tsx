@@ -3,12 +3,12 @@
 import { FormEvent, useState } from 'react';
 import Link from 'next/link';
 import useSWR from 'swr';
-import { ClipboardCheck, Plus } from 'lucide-react';
+import { AlertCircle, ClipboardCheck, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { getTodayEightAmMountainDateTimeLocal } from '@/lib/admin-task-day';
 import { groupNoOpenTaskReferrals, type NoOpenTaskGroupBy } from '@/lib/admin-task-groups';
-import { taskNetworkLabel, type TaskNetworkParam } from '@/lib/task-network';
+import { taskNetworkSentenceLabel, type TaskNetworkParam } from '@/lib/task-network';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import { Input } from '@/components/ui/input';
@@ -28,7 +28,13 @@ import {
 } from '@/components/ui/table-shell';
 import type { NoOpenTaskReferralEntry } from '@/app/api/admin/tasks/no-open-task-referrals/route';
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+const fetcher = async (url: string) => {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error('Could not load referrals');
+  }
+  return response.json();
+};
 
 const dateFormatter = new Intl.DateTimeFormat('en-US', {
   month: 'short',
@@ -47,7 +53,7 @@ export function NoOpenTaskReferrals({ onTaskCreated, groupBy, network }: NoOpenT
   const listUrl = network === 'all'
     ? '/api/admin/tasks/no-open-task-referrals'
     : `/api/admin/tasks/no-open-task-referrals?network=${network}`;
-  const { data, isLoading, mutate } = useSWR<NoOpenTaskReferralEntry[]>(listUrl, fetcher);
+  const { data, error, isLoading, mutate } = useSWR<NoOpenTaskReferralEntry[]>(listUrl, fetcher);
 
   const [taskTarget, setTaskTarget] = useState<NoOpenTaskReferralEntry | null>(null);
   const [taskTitle, setTaskTitle] = useState('');
@@ -106,8 +112,18 @@ export function NoOpenTaskReferrals({ onTaskCreated, groupBy, network }: NoOpenT
     return <TableSkeleton rows={8} columns={6} />;
   }
 
+  if (error && !data) {
+    return (
+      <EmptyState
+        icon={<AlertCircle className="h-5 w-5" />}
+        title="Couldn't load referrals"
+        description="Refresh the page and try again."
+      />
+    );
+  }
+
   const referrals = data ?? [];
-  const networkName = network === 'all' ? null : taskNetworkLabel(network);
+  const networkName = network === 'all' ? null : taskNetworkSentenceLabel(network);
   const grouped = groupBy ? groupNoOpenTaskReferrals(referrals, groupBy) : null;
 
   if (referrals.length === 0) {

@@ -6,6 +6,7 @@ import {
   referralMatchesTaskNetwork,
   taskNetworkDesignation,
   taskNetworkLabel,
+  taskNetworkSentenceLabel,
 } from '@/lib/task-network';
 
 describe('parseTaskNetwork', () => {
@@ -37,6 +38,10 @@ describe('referralMatchesTaskNetwork', () => {
     expect(taskNetworkDesignation('oos')).toBe('AHA_OOS');
     expect(taskNetworkDesignation('agit')).toBe('AGIT');
     expect(taskNetworkLabel('oos')).toBe('OOS');
+    expect(taskNetworkSentenceLabel('oos')).toBe('AHA OOS');
+    expect(taskNetworkSentenceLabel('aha')).toBe('AHA');
+    expect(taskNetworkSentenceLabel('agit')).toBe('AGIT');
+    expect(taskNetworkSentenceLabel('all')).toBe('All');
 
     expect(referralMatchesTaskNetwork('AHA', 'aha')).toBe(true);
     expect(referralMatchesTaskNetwork('AHA_OOS', 'aha')).toBe(false);

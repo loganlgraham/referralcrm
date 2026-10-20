@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectMongo } from '@/lib/mongoose';
 import { requireAdmin } from '@/lib/auth';
 import { classifyDueDayBucket, getMountainDayKey } from '@/lib/admin-task-day';
-import { deriveSimilarTaskGroup } from '@/lib/admin-task-groups';
+import { agentGroupLabel, deriveSimilarTaskGroup } from '@/lib/admin-task-groups';
 import { loadReferralDesignationMap } from '@/lib/server/referral-networks';
 import { parseTaskNetwork, referralMatchesTaskNetwork } from '@/lib/task-network';
 import { AdminTask, getEffectiveDueDate, type AdminTaskLean } from '@/models/admin-task';
@@ -295,7 +295,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     const byAgent = new Map<string, ReferralTaskCard[]>();
 
     for (const card of visibleCards) {
-      const agentName = card.agent?.name ?? 'Unassigned Agent';
+      const agentName = agentGroupLabel(card.agent?.name);
       if (!byAgent.has(agentName)) byAgent.set(agentName, []);
       byAgent.get(agentName)!.push(card);
     }

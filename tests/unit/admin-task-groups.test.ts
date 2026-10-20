@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { deriveSimilarTaskGroup, groupNoOpenTaskReferrals } from '@/lib/admin-task-groups';
+import { agentGroupLabel, deriveSimilarTaskGroup, groupNoOpenTaskReferrals } from '@/lib/admin-task-groups';
 
 interface Row {
   id: string;
@@ -19,6 +19,14 @@ function row(partial: Partial<Row> & Pick<Row, 'id'>): Row {
     ...partial,
   };
 }
+
+describe('agentGroupLabel', () => {
+  it('treats a blank agent name as unassigned', () => {
+    expect(agentGroupLabel('   ')).toBe('Unassigned Agent');
+    expect(agentGroupLabel(null)).toBe('Unassigned Agent');
+    expect(agentGroupLabel(' Ada Agent ')).toBe('Ada Agent');
+  });
+});
 
 describe('deriveSimilarTaskGroup', () => {
   it('clusters titles that share the same leading words', () => {

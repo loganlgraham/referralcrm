@@ -6,7 +6,7 @@ import useSWR from 'swr';
 import { AlarmClockOff, CalendarClock, CalendarDays, ClipboardList, Inbox, X } from 'lucide-react';
 
 import { cn } from '@/lib/cn';
-import { parseTaskNetwork, taskNetworkLabel, type TaskNetworkParam } from '@/lib/task-network';
+import { parseTaskNetwork, taskNetworkSentenceLabel, type TaskNetworkParam } from '@/lib/task-network';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -17,7 +17,13 @@ import { ReferralTaskCard } from './referral-task-card';
 import { NoOpenTaskReferrals } from './no-open-task-referrals';
 import type { ReferralTaskCard as ReferralTaskCardData } from '@/app/api/admin/tasks/board/route';
 
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+const fetcher = async (url: string) => {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error('Could not load tasks');
+  }
+  return response.json();
+};
 
 interface AgentGroup {
   groupKey: string;
@@ -118,7 +124,6 @@ export function AdminTaskBoard({ overdueCount, dueTodayCount, noOpenTaskCount }:
   const initialCounts: TaskSummaryCounts = { overdueCount, dueTodayCount, noOpenTaskCount };
   const { data: summary, mutate: mutateSummary } = useSWR<TaskSummaryCounts>(summaryUrl, fetcher, {
     fallbackData: network === 'all' ? initialCounts : undefined,
-    keepPreviousData: true,
   });
   const liveOverdueCount = summary?.overdueCount ?? null;
   const liveDueTodayCount = summary?.dueTodayCount ?? null;
@@ -139,7 +144,7 @@ export function AdminTaskBoard({ overdueCount, dueTodayCount, noOpenTaskCount }:
       year: 'numeric',
     }).format(new Date(`${selectedDate}T00:00:00`))
     : null;
-  const networkName = network === 'all' ? null : taskNetworkLabel(network);
+  const networkName = network === 'all' ? null : taskNetworkSentenceLabel(network);
   const emptyDescription = networkName
     ? 'Switch network to All, or clear the date filter, to see more tasks.'
     : 'Adjust the view or clear the date filter to see more tasks.';

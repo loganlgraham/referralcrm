@@ -41,6 +41,24 @@ export function taskNetworkLabel(network: TaskNetworkParam): string {
   }
 }
 
+/** Full network name for sentences. Chips keep the short label. */
+export function taskNetworkSentenceLabel(network: TaskNetworkParam): string {
+  switch (network) {
+    case 'all':
+      return 'All';
+    case 'aha':
+      return 'AHA';
+    case 'oos':
+      return 'AHA OOS';
+    case 'agit':
+      return 'AGIT';
+    default: {
+      const exhaustive: never = network;
+      return exhaustive;
+    }
+  }
+}
+
 /** All includes undesignated referrals. A specific network matches that designation only. */
 export function referralMatchesTaskNetwork(
   designation: TaskNetworkDesignation | null,
