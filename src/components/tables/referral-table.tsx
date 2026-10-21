@@ -1511,7 +1511,10 @@ export function ReferralTable({
                   className={clsx(
                     'text-eyebrow px-4 text-foreground-subtle',
                     mode === 'admin' ? 'py-2' : 'py-3',
-                    header.column.id === 'actions' ? 'text-right' : 'text-left'
+                    header.column.id === 'actions' ? 'text-right' : 'text-left',
+                    // Wide tracking on the eyebrow plus an 11-digit file number
+                    // otherwise wraps "#" and lets the number run into Timeline.
+                    header.column.id === 'loanFileNumber' && 'whitespace-nowrap'
                   )}
                 >
                   {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
@@ -1529,7 +1532,8 @@ export function ReferralTable({
                   className={clsx(
                     'px-4 text-sm text-foreground-muted',
                     mode === 'admin' ? 'py-1.5' : 'py-3',
-                    cell.column.id === 'actions' && 'text-right'
+                    cell.column.id === 'actions' && 'text-right',
+                    cell.column.id === 'loanFileNumber' && 'whitespace-nowrap'
                   )}
                 >
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
