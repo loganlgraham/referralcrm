@@ -21,7 +21,6 @@ import type { ReferralPayment } from '@/types/referral-payment';
 import {
   confirmCloseStatusDate,
   confirmFeeBreakdownSend,
-  confirmPaidStatusDate,
 } from '@/components/referrals/status-date-confirmation-toast';
 import {
   confirmReferralTermination,
@@ -891,7 +890,13 @@ function DealCard({
         outcomeLabel={terminatedReasonLabel ? `Terminated · ${terminatedReasonLabel}` : null}
         disabled={!canManage || Boolean(statusUpdating)}
         ariaLabel="Deal stage"
-        onSelect={(next) => void onStatusChange(deal, next)}
+        onSelect={(next) => {
+          if (next === 'paid') {
+            if (canMarkPaid) handleMarkPaidClick();
+            return;
+          }
+          void onStatusChange(deal, next);
+        }}
       />
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border pt-3 text-xs text-foreground-subtle">
@@ -1559,7 +1564,6 @@ export function ReferralDeals({
     }
     
     let closingDate: string | undefined;
-    let paidDate: string | undefined;
     let sendClosedEmails = false;
     let sendAgentNpsEmail = false;
 
@@ -1603,37 +1607,21 @@ export function ReferralDeals({
       }
     }
 
-    if (nextStatus === 'paid' && viewerRole === 'admin') {
-      if (paidDateFromAction) {
-        paidDate = paidDateFromAction;
-      } else {
-        const confirmation = await confirmPaidStatusDate({
-          initialDateIso: deal.paidDate ?? null,
-        });
-        if (!confirmation.confirmed) {
-          return false;
-        }
-        paidDate = confirmation.paidDateIso;
-      }
+    if (nextStatus === 'paid' && (viewerRole !== 'admin' || !paidDateFromAction || paidAmountCents == null)) {
+      return false;
     }
-    
+
+    const paidDate = nextStatus === 'paid' ? paidDateFromAction : undefined;
     setStatusUpdating((previous) => ({ ...previous, [deal._id]: true }));
     try {
-      const fallbackPaidCents =
-        nextStatus === 'paid'
-          ? paidAmountCents ??
-            deal.netReferralFeePaidCents ??
-            deal.receivedAmountCents ??
-            deal.expectedAmountCents ??
-            0
-          : undefined;
+      const receivedAmountCents = nextStatus === 'paid' ? paidAmountCents : undefined;
       const patchPayload: Record<string, unknown> = {
         id: deal._id,
         status: nextStatus,
         closingDate,
         paidDate,
-        receivedAmountCents: fallbackPaidCents,
-        netReferralFeePaidCents: fallbackPaidCents,
+        receivedAmountCents,
+        netReferralFeePaidCents: receivedAmountCents,
         sendClosedEmails,
         sendAgentNpsEmail,
       };
@@ -1665,7 +1653,7 @@ export function ReferralDeals({
       const resolvedPaidAmountCents =
         patchResult.netReferralFeePaidCents ??
         patchResult.receivedAmountCents ??
-        fallbackPaidCents;
+        receivedAmountCents;
 
       onDealUpdated?.({
         ...deal,
