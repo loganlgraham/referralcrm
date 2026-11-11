@@ -34,6 +34,9 @@ const paymentSchema = new Schema(
       enum: ['inspection', 'appraisal', 'financing', 'changed_mind'],
       default: null,
     },
+    terminatedAt: { type: Date, default: null },
+    // Referral fee owed immediately before termination; expectedAmountCents is zeroed when terminated.
+    terminatedExpectedAmountCents: { type: Number, default: null },
     closingDate: { type: Date, default: null },
     propertyCity: { type: String, default: null },
     propertyState: { type: String, default: null },

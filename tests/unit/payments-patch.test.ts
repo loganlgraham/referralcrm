@@ -738,4 +738,170 @@ describe('Payments PATCH outside-agent normalization', () => {
       ])
     );
   });
+
+  describe('lost referral fee snapshot on termination', () => {
+    const terminatedPaymentResult = {
+      _id: { toString: () => 'pay-1' },
+      status: 'terminated',
+      usedAssignedAgent: true,
+      createdAt: new Date('2026-03-05T10:00:00.000Z'),
+      updatedAt: new Date('2026-03-05T10:02:00.000Z'),
+      closingDate: null,
+    };
+
+    const makeExistingPayment = (overrides: Record<string, unknown> = {}) => ({
+      _id: { toString: () => 'pay-1' },
+      referralId: 'ref-1',
+      status: 'under_contract',
+      expectedAmountCents: 50000,
+      receivedAmountCents: 0,
+      commissionBasisPoints: 300,
+      referralFeeBasisPoints: 25,
+      usedAssignedAgent: true,
+      agentAttribution: 'AHA',
+      side: 'buy',
+      usedAfc: true,
+      createdAt: new Date('2026-03-05T10:00:00.000Z'),
+      updatedAt: new Date('2026-03-05T10:00:00.000Z'),
+      closingDate: null,
+      ...overrides,
+    });
+
+    const lastUpdatePayload = () =>
+      mockedPaymentFindByIdAndUpdate.mock.calls[mockedPaymentFindByIdAndUpdate.mock.calls.length - 1][1] as Record<
+        string,
+        unknown
+      >;
+
+    beforeEach(() => {
+      referralDoc.clientType = 'Buyer';
+      mockedPaymentFindByIdAndUpdate.mockResolvedValue(terminatedPaymentResult);
+    });
+
+    it('admin termination saves the fee due even though the deal card sends expectedAmountCents: 0', async () => {
+      const response = await patchHandler(
+        makeRequest({
+          id: 'pay-1',
+          status: 'terminated',
+          terminatedReason: 'financing',
+          nextReferralStatus: 'Active Lead',
+          expectedAmountCents: 0,
+          receivedAmountCents: 0,
+        })
+      );
+
+      expect(response.status).toBe(200);
+      const payload = lastUpdatePayload();
+      expect(payload.expectedAmountCents).toBe(0);
+      expect(payload.terminatedExpectedAmountCents).toBe(50000);
+      expect(payload.terminatedAt).toBeInstanceOf(Date);
+      expect(referralDoc.referralFeeDueCents).toBe(0);
+    });
+
+    it('agent termination saves the fee due', async () => {
+      mockedGetCurrentSession.mockResolvedValueOnce({
+        user: { id: 'agent-1', role: 'agent', name: 'Agent User' },
+      } as any);
+      mockedPaymentFindById.mockResolvedValueOnce(makeExistingPayment({ expectedAmountCents: 412500 }));
+
+      const response = await patchHandler(
+        makeRequest({
+          id: 'pay-1',
+          status: 'terminated',
+          terminatedReason: 'inspection',
+          nextReferralStatus: 'In Communication',
+        })
+      );
+
+      expect(response.status).toBe(200);
+      const payload = lastUpdatePayload();
+      expect(payload.expectedAmountCents).toBe(0);
+      expect(payload.terminatedExpectedAmountCents).toBe(412500);
+    });
+
+    it('saves a legitimate $0 fee for an outside-agent deal', async () => {
+      mockedPaymentFindById.mockResolvedValueOnce(
+        makeExistingPayment({ usedAssignedAgent: false, agentAttribution: 'OUTSIDE_AGENT', expectedAmountCents: 0 })
+      );
+
+      const response = await patchHandler(
+        makeRequest({
+          id: 'pay-1',
+          status: 'terminated',
+          terminatedReason: 'appraisal',
+          nextReferralStatus: 'Active Lead',
+        })
+      );
+
+      expect(response.status).toBe(200);
+      expect(lastUpdatePayload().terminatedExpectedAmountCents).toBe(0);
+    });
+
+    it('preserves the saved fee when a termination is retried or its reason is edited', async () => {
+      mockedPaymentFindById.mockResolvedValueOnce(
+        makeExistingPayment({
+          status: 'terminated',
+          expectedAmountCents: 0,
+          terminatedReason: 'inspection',
+          terminatedAt: new Date('2026-10-01T15:00:00.000Z'),
+          terminatedExpectedAmountCents: 50000,
+        })
+      );
+
+      const response = await patchHandler(
+        makeRequest({
+          id: 'pay-1',
+          status: 'terminated',
+          terminatedReason: 'financing',
+          expectedAmountCents: 0,
+        })
+      );
+
+      expect(response.status).toBe(200);
+      const payload = lastUpdatePayload();
+      expect(payload.terminatedReason).toBe('financing');
+      expect(payload).not.toHaveProperty('terminatedAt');
+      expect(payload).not.toHaveProperty('terminatedExpectedAmountCents');
+    });
+
+    it('clears the snapshot on reactivation and captures the new fee when terminated again', async () => {
+      mockedPaymentFindById.mockResolvedValueOnce(
+        makeExistingPayment({
+          status: 'terminated',
+          expectedAmountCents: 0,
+          terminatedAt: new Date('2026-10-01T15:00:00.000Z'),
+          terminatedExpectedAmountCents: 50000,
+        })
+      );
+      mockedPaymentFindByIdAndUpdate.mockResolvedValueOnce({ ...terminatedPaymentResult, status: 'under_contract' });
+
+      const reactivated = await patchHandler(
+        makeRequest({ id: 'pay-1', status: 'under_contract', expectedAmountCents: 61000 })
+      );
+
+      expect(reactivated.status).toBe(200);
+      expect(lastUpdatePayload()).toMatchObject({
+        expectedAmountCents: 61000,
+        terminatedAt: null,
+        terminatedExpectedAmountCents: null,
+      });
+
+      mockedPaymentFindById.mockResolvedValueOnce(
+        makeExistingPayment({ expectedAmountCents: 61000, terminatedAt: null, terminatedExpectedAmountCents: null })
+      );
+
+      const terminatedAgain = await patchHandler(
+        makeRequest({
+          id: 'pay-1',
+          status: 'terminated',
+          terminatedReason: 'changed_mind',
+          nextReferralStatus: 'Active Lead',
+          expectedAmountCents: 0,
+        })
+      );
+
+      expect(terminatedAgain.status).toBe(200);
+      expect(lastUpdatePayload().terminatedExpectedAmountCents).toBe(61000);
+    });
+  });
 });

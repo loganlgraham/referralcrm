@@ -20,6 +20,7 @@ import { maybeNotifyAdminsOnUpdateRequestResponse } from '@/lib/server/update-re
 import { hasAhaOosAgentAttached } from '@/lib/server/auto-update-reminders';
 import { generateAndReconcileAdminTasks } from '@/lib/server/admin-task-reconciler';
 import { mapReferralStatusToDealStatus } from '@/lib/server/referral-deal-status-mapper';
+import { resolveTerminationSnapshotUpdate } from '@/lib/server/terminated-deal-fee';
 import { type ReferralStatus } from '@/constants/referrals';
 import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/email';
 import { renderAgentCloseEmail, renderBorrowerCloseEmail } from '@/lib/email-templates/close-nps';
@@ -224,6 +225,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   let createdDeal: any = null;
   let syncedDeal: any = null;
+  const expectedAmountBeforeTerminationById = new Map<string, number>();
   type StatusSyncError = {
     code: 'agent_record_missing' | 'deal_unassigned' | 'deal_missing';
     message: string;
@@ -457,6 +459,17 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   } else if (shouldPersistReferralStatus && (parsed.data.status === 'Terminated' || parsed.data.status === 'Lost')) {
     referral.estPurchasePriceCents = 0;
     referral.referralFeeDueCents = 0;
+    if (parsed.data.status === 'Terminated' || parsed.data.terminateDeal) {
+      const dealsBeforeTermination = await Payment.find({
+        referralId: referral._id,
+        status: { $ne: 'terminated' },
+      })
+        .select('_id expectedAmountCents')
+        .lean<Array<{ _id: { toString(): string }; expectedAmountCents?: number | null }>>();
+      dealsBeforeTermination.forEach((deal) => {
+        expectedAmountBeforeTerminationById.set(String(deal._id), deal.expectedAmountCents ?? 0);
+      });
+    }
     await Payment.updateMany(
       { referralId: referral._id },
       { $set: { expectedAmountCents: 0 } }
@@ -526,6 +539,22 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   const mappedDealStatus = mapReferralStatusToDealStatus(nextStatus as ReferralStatus);
   const shouldTerminateAttributedDeal = Boolean(parsed.data.terminateDeal);
+
+  const applyTerminationSnapshot = (
+    deal: { _id: unknown; status: string; expectedAmountCents?: number | null },
+    previousStatus: string | null | undefined
+  ) => {
+    Object.assign(
+      deal,
+      resolveTerminationSnapshotUpdate({
+        previousStatus,
+        nextStatus: deal.status,
+        expectedAmountBeforeTerminationCents:
+          expectedAmountBeforeTerminationById.get(String(deal._id)) ?? deal.expectedAmountCents,
+        now,
+      })
+    );
+  };
 
   const buildAttributedDealQuery = (): {
     dealQuery: Record<string, unknown>;
@@ -621,7 +650,9 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       : null;
 
     if (latestAttributedDeal) {
+      const previousDealStatus = latestAttributedDeal.status;
       latestAttributedDeal.status = 'terminated';
+      applyTerminationSnapshot(latestAttributedDeal, previousDealStatus);
       latestAttributedDeal.terminatedReason =
         parsed.data.terminatedReason ?? latestAttributedDeal.terminatedReason;
       latestAttributedDeal.expectedAmountCents = 0;
@@ -643,7 +674,9 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     const latestAttributedDeal = canSyncDealStatus ? await Payment.findOne(dealQuery).sort({ createdAt: -1 }) : null;
 
     if (latestAttributedDeal) {
+      const previousDealStatus = latestAttributedDeal.status;
       latestAttributedDeal.status = mappedDealStatus;
+      applyTerminationSnapshot(latestAttributedDeal, previousDealStatus);
       if (mappedDealStatus === 'closed') {
         latestAttributedDeal.closingDate = parsed.data.closingDate
           ? new Date(parsed.data.closingDate)
