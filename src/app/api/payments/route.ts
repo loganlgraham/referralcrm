@@ -37,6 +37,7 @@ import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { buildReferralLink, getReferralAppBaseUrl } from '@/lib/referral-links';
 import { createNPSToken } from '@/lib/server/nps';
+import { resolveTerminationSnapshotUpdate } from '@/lib/server/terminated-deal-fee';
 import { dealStatusToDisplay } from '@/lib/format-notification-content';
 import { createAdminNotifications } from '@/lib/server/notifications';
 import { mapDealStatusToReferralStatus } from '@/lib/server/referral-deal-status-mapper';
@@ -962,10 +963,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
   }
 
+  const createExpectedAmountCents = isAgentOrigin || isOutsideAgent ? 0 : parsed.data.expectedAmountCents;
   const payment = await Payment.create({
     referralId: parsed.data.referralId,
     status: parsed.data.status,
-    expectedAmountCents: isAgentOrigin || isOutsideAgent ? 0 : parsed.data.expectedAmountCents,
+    ...resolveTerminationSnapshotUpdate({
+      previousStatus: null,
+      nextStatus: parsed.data.status,
+      expectedAmountBeforeTerminationCents: createExpectedAmountCents,
+      now: new Date(),
+    }),
+    expectedAmountCents: createExpectedAmountCents,
     receivedAmountCents: isAgentOrigin || isOutsideAgent ? 0 : parsed.data.receivedAmountCents,
     terminatedReason: parsed.data.terminatedReason ?? null,
     agentAttribution: isAgentOrigin ? null : normalizedAgentAttribution,
@@ -1220,8 +1228,11 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   const nextAgentAttribution = hasAgentAttributionUpdate
     ? (parsed.data.agentAttribution as string | null | undefined) ?? null
     : (existingPayment.agentAttribution as string | null | undefined) ?? null;
+  // Termination requests from the deal card send expectedAmountCents: 0; that is the post-termination
+  // value, not the fee owed, so it must not overwrite the amount captured for lost-fee reporting.
+  const requestedExpectedAmountCents = isTerminating ? undefined : parsed.data.expectedAmountCents;
   const shouldRecalculateReferralFee =
-    parsed.data.expectedAmountCents === undefined &&
+    requestedExpectedAmountCents === undefined &&
     (parsed.data.contractPriceCents !== undefined ||
       parsed.data.commissionBasisPoints !== undefined ||
       parsed.data.commissionFlatFeeCents !== undefined ||
@@ -1251,8 +1262,8 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
         nextExpectedAmountCents = computed;
       }
     }
-  } else if (parsed.data.expectedAmountCents !== undefined) {
-    nextExpectedAmountCents = parsed.data.expectedAmountCents ?? nextExpectedAmountCents;
+  } else if (requestedExpectedAmountCents !== undefined) {
+    nextExpectedAmountCents = requestedExpectedAmountCents ?? nextExpectedAmountCents;
   }
 
   if (parsed.data.receivedAmountCents !== undefined) {
@@ -1291,12 +1302,19 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     nextReceivedAmountCents = 0;
   }
 
+  const terminationSnapshot = resolveTerminationSnapshotUpdate({
+    previousStatus,
+    nextStatus: parsed.data.status,
+    expectedAmountBeforeTerminationCents: isAgentOrigin ? 0 : nextExpectedAmountCents,
+    now: new Date(),
+  });
+
   if (parsed.data.status === 'terminated') {
     nextExpectedAmountCents = 0;
     nextReceivedAmountCents = 0;
   }
 
-  const updatePayload: Record<string, unknown> = { ...parsed.data };
+  const updatePayload: Record<string, unknown> = { ...parsed.data, ...terminationSnapshot };
   delete updatePayload.referralId;
   delete updatePayload.nextReferralStatus;
   delete updatePayload.lostReason;

@@ -50,6 +50,10 @@ import {
   normalizeAhaKpiMap
 } from '@/lib/server/aha-leaderboard-scoring';
 import { resolvePushbackMetricsInTimeframe } from '@/lib/server/pushback-metrics';
+import {
+  resolveTerminatedDealLostFeeCents,
+  resolveTerminationReportDate
+} from '@/lib/server/terminated-deal-fee';
 import { isAttributableLoss } from '@/lib/server/lost-attribution';
 import { isDashboardInternalAdminRequest } from '@/lib/server/dashboard-internal-request';
 import { buildConversionFunnel, type FunnelReferralInput } from '@/lib/server/conversion-funnel';
@@ -120,6 +124,9 @@ interface AggregatedPayment {
     timestamp?: Date | null;
   }> | null;
   terminatedReason?: 'inspection' | 'appraisal' | 'financing' | 'changed_mind' | null;
+  terminatedAt?: Date | null;
+  terminatedExpectedAmountCents?: number | null;
+  referralFeeBasisPoints?: number | null;
   underContractDate?: Date | null;
   paidDate?: Date | null;
   invoiceDate?: Date | null;
@@ -1142,10 +1149,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }));
 
   const terminatedWithinTimeframe = terminatedWithMetric.filter((payment) => {
-    if (timeframeStart && payment.metricDate < timeframeStart) {
+    const terminationReportDate = resolveTerminationReportDate(payment, payment.metricDate);
+    if (timeframeStart && terminationReportDate < timeframeStart) {
       return false;
     }
-    if (timeframeEnd && payment.metricDate > timeframeEnd) {
+    if (timeframeEnd && terminationReportDate > timeframeEnd) {
       return false;
     }
     return true;
@@ -4324,8 +4332,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     id: payment._id.toString(),
     reasonKey: payment.terminatedReason ?? 'unknown',
     reasonLabel: TERMINATED_REASON_LABELS[payment.terminatedReason ?? 'unknown'] ?? 'Unknown',
-    lostReferralFeeCents:
-      payment.expectedAmountCents ?? payment.referral?.referralFeeDueCents ?? 0,
+    lostReferralFeeCents: resolveTerminatedDealLostFeeCents(payment),
     mcName: payment.referral?.lender
       ? lenderNameMap.get(payment.referral.lender.toString()) ?? 'Unassigned MC'
       : 'Unassigned MC',

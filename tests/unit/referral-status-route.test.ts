@@ -45,6 +45,7 @@ jest.mock('@/models/referral', () => ({
 
 jest.mock('@/models/payment', () => ({
   Payment: {
+    find: jest.fn(),
     findOne: jest.fn(),
     updateMany: jest.fn(),
     exists: jest.fn(),
@@ -97,6 +98,7 @@ jest.mock('@/lib/server/auto-update-reminders', () => ({
 const mockedGetCurrentSession = getCurrentSession as jest.MockedFunction<typeof getCurrentSession>;
 const mockedConnectMongo = connectMongo as jest.MockedFunction<typeof connectMongo>;
 const mockedReferralFindById = Referral.findById as jest.Mock;
+const mockedPaymentFind = Payment.find as jest.Mock;
 const mockedPaymentFindOne = Payment.findOne as jest.Mock;
 const mockedPaymentExists = Payment.exists as jest.Mock;
 const mockedPaymentUpdateMany = Payment.updateMany as jest.Mock;
@@ -170,6 +172,15 @@ function mockPaymentFindOneChain(latestDealForAwaitOnSort: unknown) {
   });
 }
 
+/** Matches Payment.find().select().lean() used to snapshot fees before referral-wide zeroing. */
+function mockDealsBeforeTermination(deals: Array<{ _id: string; expectedAmountCents: number }>) {
+  mockedPaymentFind.mockReturnValue({
+    select: jest.fn(() => ({
+      lean: jest.fn(() => Promise.resolve(deals)),
+    })),
+  });
+}
+
 const mockCurrentAgent = (agentId: string | null) => {
   mockedAgentFindOne.mockReturnValue({
     select: jest.fn().mockReturnValue({
@@ -191,6 +202,7 @@ describe('Referral status route table-driven deal status sync', () => {
     } as any);
     mockCurrentAgent('agent-db-1');
     mockedPaymentExists.mockResolvedValue(true);
+    mockDealsBeforeTermination([]);
   });
 
   it('persists referral status and updates latest deal to closed for agent table source', async () => {
@@ -797,5 +809,138 @@ describe('Referral status route table-driven deal status sync', () => {
         agentId: 'sell-agent-db',
       })
     );
+  });
+
+  describe('lost referral fee snapshot on termination', () => {
+    const asAdmin = () =>
+      mockedGetCurrentSession.mockResolvedValueOnce({
+        user: { id: 'admin-1', role: 'admin', name: 'Admin User', email: 'admin@example.com' },
+      } as any);
+
+    it('admin Terminated saves the fee read before the referral-wide fee reset', async () => {
+      asAdmin();
+      const referralDoc = makeReferralDoc();
+      referralDoc.clientType = 'Buyer';
+      mockedReferralFindById.mockReturnValue(referralDoc);
+      // The deal is re-read after updateMany has already zeroed its fee in the database.
+      const latestDeal: any = makeLatestDealDoc();
+      latestDeal.expectedAmountCents = 0;
+      mockPaymentFindOneChain(latestDeal);
+      mockDealsBeforeTermination([{ _id: 'pay-1', expectedAmountCents: 412_500 }]);
+
+      const response: any = await postHandler(
+        makeRequest({ status: 'Terminated', source: 'referral_detail', terminatedReason: 'inspection' }),
+        { params: { id: 'ref-1' } }
+      );
+
+      expect(response.status).toBe(200);
+      expect(mockedPaymentFind).toHaveBeenCalledWith({
+        referralId: referralDoc._id,
+        status: { $ne: 'terminated' },
+      });
+      expect(mockedPaymentFind.mock.invocationCallOrder[0]).toBeLessThan(
+        mockedPaymentUpdateMany.mock.invocationCallOrder[0]
+      );
+      expect(latestDeal.status).toBe('terminated');
+      expect(latestDeal.terminatedExpectedAmountCents).toBe(412_500);
+      expect(latestDeal.terminatedAt).toBeInstanceOf(Date);
+      expect(latestDeal.save).toHaveBeenCalled();
+    });
+
+    it('agent terminateDeal to Lost saves the fee before clearing the fee due', async () => {
+      const referralDoc = makeReferralDoc();
+      referralDoc.clientType = 'Buyer';
+      referralDoc.referralFeeDueCents = 375_000;
+      mockedReferralFindById.mockReturnValue(referralDoc);
+      const latestDeal: any = makeLatestDealDoc();
+      latestDeal.expectedAmountCents = 0;
+      mockPaymentFindOneChain(latestDeal);
+      mockDealsBeforeTermination([{ _id: 'pay-1', expectedAmountCents: 375_000 }]);
+
+      const response: any = await postHandler(
+        makeRequest({
+          status: 'Lost',
+          source: 'referral_table',
+          terminateDeal: true,
+          terminatedReason: 'financing',
+          lostReason: 'no_longer_buying',
+        }),
+        { params: { id: 'ref-1' } }
+      );
+
+      expect(response.status).toBe(200);
+      expect(latestDeal.status).toBe('terminated');
+      expect(latestDeal.expectedAmountCents).toBe(0);
+      expect(latestDeal.terminatedExpectedAmountCents).toBe(375_000);
+      expect(latestDeal.terminatedAt).toBeInstanceOf(Date);
+    });
+
+    it('agent terminateDeal while still shopping saves the live deal fee', async () => {
+      const referralDoc = makeReferralDoc();
+      referralDoc.clientType = 'Buyer';
+      mockedReferralFindById.mockReturnValue(referralDoc);
+      const latestDeal: any = makeLatestDealDoc();
+      latestDeal.expectedAmountCents = 287_500;
+      mockPaymentFindOneChain(latestDeal);
+
+      const response: any = await postHandler(
+        makeRequest({
+          status: 'Active Lead',
+          source: 'referral_table',
+          terminateDeal: true,
+          terminatedReason: 'appraisal',
+        }),
+        { params: { id: 'ref-1' } }
+      );
+
+      expect(response.status).toBe(200);
+      expect(latestDeal.expectedAmountCents).toBe(0);
+      expect(latestDeal.terminatedExpectedAmountCents).toBe(287_500);
+    });
+
+    it('keeps the original snapshot when an already-terminated deal is terminated again', async () => {
+      asAdmin();
+      const referralDoc = makeReferralDoc();
+      referralDoc.clientType = 'Buyer';
+      mockedReferralFindById.mockReturnValue(referralDoc);
+      const originalTerminatedAt = new Date('2026-10-01T15:00:00.000Z');
+      const latestDeal: any = makeLatestDealDoc();
+      latestDeal.status = 'terminated';
+      latestDeal.terminatedReason = 'inspection';
+      latestDeal.terminatedAt = originalTerminatedAt;
+      latestDeal.terminatedExpectedAmountCents = 375_000;
+      mockPaymentFindOneChain(latestDeal);
+
+      const response: any = await postHandler(
+        makeRequest({ status: 'Terminated', source: 'referral_detail', terminatedReason: 'financing' }),
+        { params: { id: 'ref-1' } }
+      );
+
+      expect(response.status).toBe(200);
+      expect(latestDeal.terminatedReason).toBe('financing');
+      expect(latestDeal.terminatedAt).toBe(originalTerminatedAt);
+      expect(latestDeal.terminatedExpectedAmountCents).toBe(375_000);
+    });
+
+    it('clears the snapshot when a terminated deal is reactivated', async () => {
+      asAdmin();
+      const referralDoc = makeReferralDoc();
+      referralDoc.clientType = 'Buyer';
+      mockedReferralFindById.mockReturnValue(referralDoc);
+      const latestDeal: any = makeLatestDealDoc();
+      latestDeal.status = 'terminated';
+      latestDeal.terminatedAt = new Date('2026-10-01T15:00:00.000Z');
+      latestDeal.terminatedExpectedAmountCents = 375_000;
+      mockPaymentFindOneChain(latestDeal);
+
+      const response: any = await postHandler(makeRequest({ status: 'Closed', source: 'referral_detail' }), {
+        params: { id: 'ref-1' },
+      });
+
+      expect(response.status).toBe(200);
+      expect(latestDeal.status).toBe('closed');
+      expect(latestDeal.terminatedAt).toBeNull();
+      expect(latestDeal.terminatedExpectedAmountCents).toBeNull();
+    });
   });
 });
