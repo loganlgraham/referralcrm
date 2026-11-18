@@ -173,6 +173,8 @@ Notes:
 
 - If `MONGODB_URI` is omitted in development, the app falls back to `mongodb://localhost:27017/referralcrm`.
 - `NEXTAUTH_SECRET` is required for auth/JWT stability.
+- Production data is the Atlas host `referralcrm.4vy9f98.mongodb.net`, database name `test`. That name is the live database. Do not rename or replace it because it is called `test`.
+- The local sandbox is a different Atlas host, `referriosandbox.34q13cy.mongodb.net`, and it also uses the database name `test`. A `.env.local` file points at that sandbox. It is not production. Read production from a clean environment so a shell that already loaded `.env.local` cannot substitute the sandbox.
 
 ### Auth and User Management
 

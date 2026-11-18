@@ -125,15 +125,20 @@ export async function readAccessGrant(input: {
   organization: IntelligenceOrg;
   fubAccountId: string;
   userId: string;
-}): Promise<{ organization: IntelligenceOrg; fubAccountId: string; userId: string } | null> {
+}): Promise<{ organization: IntelligenceOrg; fubAccountId: string; userId: string; revokedAt: string | null } | null> {
   if (!Types.ObjectId.isValid(input.userId)) return null;
   const doc = await IntelligenceAccess.findOne({
     organization: input.organization,
     fubAccountId: input.fubAccountId,
     userId: new Types.ObjectId(input.userId),
-  }).lean<{ userId: Types.ObjectId } | null>();
+  }).lean<{ userId: Types.ObjectId; revokedAt?: Date | null } | null>();
   if (!doc) return null;
-  return { organization: input.organization, fubAccountId: input.fubAccountId, userId: input.userId };
+  return {
+    organization: input.organization,
+    fubAccountId: input.fubAccountId,
+    userId: input.userId,
+    revokedAt: doc.revokedAt ? new Date(doc.revokedAt).toISOString() : null,
+  };
 }
 
 function memoryFrom(existing: CustomerLink | null): LinkRepository {

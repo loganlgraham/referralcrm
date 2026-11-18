@@ -100,9 +100,9 @@ function PanelBody({ payload }: { payload: PanelPayload | null }) {
   }
   if (payload.state === 'unavailable') {
     if (payload.reason === 'unmapped') return <p className="mt-4 text-sm">Intelligence access is not mapped for this login.</p>;
-    if (payload.reason === 'wrong_organization' || payload.reason === 'wrong_account') {
-      return <p className="mt-4 text-sm">This referral is outside the mapped organization.</p>;
-    }
+    if (payload.reason === 'revoked') return <p className="mt-4 text-sm">Intelligence access for this login was revoked.</p>;
+    if (payload.reason === 'wrong_organization') return <p className="mt-4 text-sm">This referral is outside the mapped organization.</p>;
+    if (payload.reason === 'wrong_account') return <p className="mt-4 text-sm">This referral is outside the mapped Follow Up Boss account.</p>;
     return <p className="mt-4 text-sm">Stored activity is unavailable. This is not no activity.</p>;
   }
   if (payload.state === 'no_records') {

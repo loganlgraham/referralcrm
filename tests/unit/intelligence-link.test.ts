@@ -52,6 +52,14 @@ describe('explicit intelligence links', () => {
       userId: 'manager-1', role: 'admin', canViewReferral: true, referralOrg: 'AHA', grant: null, configuredAccountId: 'fub-aha',
     }).reason).toBe('unmapped');
     expect(authorizeIntelligencePanel({
+      userId: 'manager-1', role: 'admin', canViewReferral: true, referralOrg: 'AHA',
+      grant: { ...grant, revokedAt: '2026-11-18T17:00:00.000Z' }, configuredAccountId: 'fub-aha',
+    }).reason).toBe('revoked');
+    expect(authorizeIntelligencePanel({
+      userId: 'manager-1', role: 'manager', canViewReferral: true, referralOrg: 'AHA',
+      grant, configuredAccountId: 'other-account',
+    }).reason).toBe('wrong_account');
+    expect(authorizeIntelligencePanel({
       userId: 'manager-1', role: 'admin', canViewReferral: true, referralOrg: 'AFC', grant, configuredAccountId: 'fub-aha',
     }).reason).toBe('wrong_organization');
     expect(authorizeIntelligencePanel({
@@ -144,6 +152,8 @@ describe('intelligence reads', () => {
     const blocked = await fetchCustomerIntelligence({ ...input, url: 'http://intelligence.example/api/integration/referrio/customer', fetchImpl: read });
     expect(blocked).toEqual({ state: 'unavailable', reason: 'not_configured' });
     expect(trustedIntelligenceUrl('https://intelligence.example/api/integration/referrio/customer?next=https://evil.example')).toBeNull();
+    expect(trustedIntelligenceUrl('http://intelligence.example/api/integration/referrio/customer')).toBeNull();
+    expect(trustedIntelligenceUrl('http://127.0.0.1:4010/api/integration/referrio/customer')).toBe('http://127.0.0.1:4010/api/integration/referrio/customer');
     expect(callsForCache).toHaveLength(2);
   });
 

@@ -50,6 +50,7 @@ const intelligenceAccessSchema = new Schema(
     fubAccountId: { type: String, required: true },
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    revokedAt: { type: Date, default: null },
   },
   { timestamps: true },
 );

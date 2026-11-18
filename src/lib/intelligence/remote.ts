@@ -39,7 +39,7 @@ export function trustedIntelligenceUrl(value: string): string | null {
   } catch {
     return null;
   }
-  if (url.protocol !== 'https:') return null;
+  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && (url.hostname === '127.0.0.1' || url.hostname === 'localhost'))) return null;
   if (url.username || url.password || url.search || url.hash) return null;
   if (url.pathname !== '/api/integration/referrio/customer') return null;
   return url.toString();

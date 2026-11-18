@@ -6,11 +6,12 @@ export type AccessGrant = {
   organization: IntelligenceOrg;
   fubAccountId: string;
   userId: string;
+  revokedAt?: string | null;
 };
 
 export type PanelAccess =
   | { ok: true }
-  | { ok: false; status: 401 | 403; reason: 'anonymous' | 'role' | 'referral' | 'unmapped' | 'wrong_organization' | 'wrong_account' };
+  | { ok: false; status: 401 | 403; reason: 'anonymous' | 'role' | 'referral' | 'unmapped' | 'revoked' | 'wrong_organization' | 'wrong_account' };
 
 const PARTICIPANT_KEY = /^(borrower|participant:[a-z0-9_-]{1,40})$/;
 
@@ -26,6 +27,7 @@ export function authorizeIntelligencePanel(input: {
   if (input.role !== 'admin' && input.role !== 'manager') return { ok: false, status: 403, reason: 'role' };
   if (!input.canViewReferral) return { ok: false, status: 403, reason: 'referral' };
   if (!input.grant || input.grant.userId !== input.userId) return { ok: false, status: 403, reason: 'unmapped' };
+  if (input.grant.revokedAt) return { ok: false, status: 403, reason: 'revoked' };
   if (input.grant.organization !== input.referralOrg) return { ok: false, status: 403, reason: 'wrong_organization' };
   if (input.grant.fubAccountId !== input.configuredAccountId) return { ok: false, status: 403, reason: 'wrong_account' };
   return { ok: true };
