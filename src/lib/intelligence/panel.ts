@@ -35,6 +35,18 @@ export function parseParticipantKey(value: unknown): string | null {
   return typeof value === 'string' && PARTICIPANT_KEY.test(value) ? value : null;
 }
 
+/** The referral model has one structured customer, the borrower. */
+export function participantBelongsToReferral(participantKey: string | null, allowed: readonly string[]): boolean {
+  return participantKey !== null && allowed.includes(participantKey);
+}
+
+export function sameOriginRequest(input: { requestOrigin: string | null; pageOrigin: string; fetchSite: string | null }): boolean {
+  if (input.fetchSite === 'cross-site' || input.fetchSite === 'same-site') return false;
+  if (input.fetchSite === 'same-origin') return true;
+  if (!input.requestOrigin) return false;
+  return input.requestOrigin === input.pageOrigin;
+}
+
 export function parseFubPersonId(value: unknown): number | null | 'invalid' {
   if (value === null || value === '') return null;
   if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) return value;

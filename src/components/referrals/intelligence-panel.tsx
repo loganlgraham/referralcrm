@@ -14,7 +14,6 @@ type PanelPayload = {
   followUp?: { status: string; nextAction: string; detail: string } | null;
   projectedClosings?: { display: string; dateOnly: boolean; stage: string | null; projection: true }[];
   freshness?: { readAt: string; note: string };
-  detailHref?: string | null;
   officialScoring?: false;
 };
 
@@ -128,7 +127,6 @@ function PanelBody({ payload }: { payload: PanelPayload | null }) {
         ) : <p>No projected closing is stored.</p>}
       </div>
       <p className="text-foreground-muted">{payload.freshness?.note ?? 'Freshness is unknown.'}</p>
-      {payload.detailHref ? <a className="font-semibold text-primary" href={payload.detailHref}>Supporting details</a> : null}
       <details>
         <summary>Technical details</summary>
         <p className="mt-2 text-foreground-muted">{payload.followUp?.detail ?? payload.freshness?.note}</p>

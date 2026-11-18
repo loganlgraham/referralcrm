@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Types } from 'mongoose';
 import { getCurrentSession } from '@/lib/auth';
-import { fetchCustomerIntelligence } from '@/lib/intelligence/remote';
-import { agentsDiffer, authorizeIntelligencePanel, type IntelligenceOrg } from '@/lib/intelligence/panel';
+import { dropIntelligenceCacheForParticipant, fetchCustomerIntelligence, trustedIntelligenceUrl } from '@/lib/intelligence/remote';
+import { agentsDiffer, authorizeIntelligencePanel, participantBelongsToReferral, sameOriginRequest, type IntelligenceOrg } from '@/lib/intelligence/panel';
 import { connectMongo } from '@/lib/mongoose';
 import { Referral } from '@/models/referral';
 import { canViewReferral } from '@/lib/rbac';
@@ -14,7 +14,10 @@ interface RouteContext {
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(_request: NextRequest, context: RouteContext): Promise<NextResponse> {
+const REFERRAL_PARTICIPANTS = ['borrower'] as const;
+
+export async function GET(request: NextRequest, context: RouteContext): Promise<NextResponse> {
+  if (!allowedMutation(request)) return NextResponse.json({ state: 'unavailable', reason: 'csrf' }, { status: 403 });
   const loaded = await loadAuthorized(context.params.id);
   if (!loaded.ok) return NextResponse.json({ state: 'unavailable', reason: loaded.reason }, { status: loaded.status });
   const link = await readCustomerLink({
@@ -50,16 +53,21 @@ export async function GET(_request: NextRequest, context: RouteContext): Promise
     return NextResponse.json({ ...remote, referrioAgent: loaded.referrioAgent, officialScoring: false });
   }
   const differ = agentsDiffer(loaded.referrioAgent, remote.fubAssignedUser?.name ?? null, agentLink?.fubUserId ?? null, remote.fubAssignedUser?.id ?? null);
+  const { detailPath: _detailPath, ...customer } = remote;
   return NextResponse.json({
-    ...remote,
+    ...customer,
     referrioAgent: loaded.referrioAgent,
     agentsDiffer: differ,
-    detailHref: remote.detailPath && loaded.origin ? `${loaded.origin}${remote.detailPath}` : null,
     officialScoring: false,
   });
 }
 
 export async function PUT(request: NextRequest, context: RouteContext): Promise<NextResponse> {
+  if (!allowedMutation(request)) return NextResponse.json({ state: 'unavailable', reason: 'csrf' }, { status: 403 });
+  const contentType = request.headers.get('content-type') ?? '';
+  if (!contentType.toLowerCase().startsWith('application/json')) {
+    return NextResponse.json({ state: 'unavailable', reason: 'malformed' }, { status: 400 });
+  }
   const loaded = await loadAuthorized(context.params.id);
   if (!loaded.ok) return NextResponse.json({ state: 'unavailable', reason: loaded.reason }, { status: loaded.status });
   const body = await request.json().catch(() => null) as { participantKey?: unknown; personId?: unknown; agentFubUserId?: unknown } | null;
@@ -78,16 +86,21 @@ export async function PUT(request: NextRequest, context: RouteContext): Promise<
     if (!agent.ok) return NextResponse.json({ state: 'unavailable', reason: agent.reason }, { status: 400 });
     return NextResponse.json({ state: 'linked', kind: 'agent', fubUserId: agent.link.fubUserId, officialScoring: false });
   }
+  const participantKey = typeof body.participantKey === 'string' ? body.participantKey : 'borrower';
+  if (!participantBelongsToReferral(participantKey, REFERRAL_PARTICIPANTS)) {
+    return NextResponse.json({ state: 'unavailable', reason: 'participant' }, { status: 400 });
+  }
   const saved = await writeCustomerLink({
     organization: loaded.organization,
     fubAccountId: loaded.accountId,
     referralId: loaded.referralId,
-    participantKey: body.participantKey ?? 'borrower',
+    participantKey,
     personId: body.personId ?? null,
     actorId: loaded.userId,
     at,
   });
   if (!saved.ok) return NextResponse.json({ state: 'unavailable', reason: saved.reason }, { status: 400 });
+  dropIntelligenceCacheForParticipant(loaded.organization, loaded.accountId, loaded.referralId, saved.link.participantKey);
   return NextResponse.json({
     state: saved.link.fubPersonId ? 'linked' : 'unlinked',
     participantKey: saved.link.participantKey,
@@ -108,7 +121,6 @@ async function loadAuthorized(referralId: string): Promise<
       referrioAgent: string | null;
       secret: string;
       url: string;
-      origin: string;
     }
 > {
   const session = await getCurrentSession();
@@ -149,7 +161,14 @@ async function loadAuthorized(referralId: string): Promise<
     agentId: agent?._id ? String(agent._id) : null,
     referrioAgent: agent?.name ?? null,
     secret: process.env.REFERRIO_INTEGRATION_SECRET ?? '',
-    url: process.env.REFERRIO_INTELLIGENCE_URL ?? '',
-    origin: process.env.INTELLIGENCE_APP_ORIGIN ?? '',
+    url: trustedIntelligenceUrl(process.env.REFERRIO_INTELLIGENCE_URL ?? '') ?? '',
   };
+}
+
+function allowedMutation(request: NextRequest): boolean {
+  return sameOriginRequest({
+    requestOrigin: request.headers.get('origin'),
+    pageOrigin: request.nextUrl.origin,
+    fetchSite: request.headers.get('sec-fetch-site'),
+  });
 }

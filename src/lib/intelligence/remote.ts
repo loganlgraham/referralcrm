@@ -25,6 +25,26 @@ export function clearIntelligenceCache(): void {
   cache.clear();
 }
 
+export function dropIntelligenceCacheForParticipant(organization: string, fubAccountId: string, referralId: string, participantKey: string): void {
+  const prefix = `${organization}:${fubAccountId}:${referralId}:${participantKey}:`;
+  for (const key of cache.keys()) {
+    if (key.startsWith(prefix)) cache.delete(key);
+  }
+}
+
+export function trustedIntelligenceUrl(value: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'https:') return null;
+  if (url.username || url.password || url.search || url.hash) return null;
+  if (url.pathname !== '/api/integration/referrio/customer') return null;
+  return url.toString();
+}
+
 export async function fetchCustomerIntelligence(input: {
   organization: string;
   fubAccountId: string;
@@ -37,10 +57,12 @@ export async function fetchCustomerIntelligence(input: {
   now?: number;
   timeoutMs?: number;
 }): Promise<RemoteResult> {
+  const destination = trustedIntelligenceUrl(input.url);
+  if (!destination) return { state: 'unavailable', reason: 'not_configured' };
   const key = `${input.organization}:${input.fubAccountId}:${input.referralId}:${input.participantKey}:${input.personId}`;
   const hit = cache.get(key);
   const nowMs = input.now ?? Date.now();
-  if (hit && nowMs - hit.at < CACHE_MS) return hit.value;
+  if (hit && nowMs - hit.at < CACHE_MS && hit.value.personId === input.personId) return hit.value;
   const exp = Math.floor(nowMs / 1000) + 60;
   const body = {
     organization: input.organization,
@@ -53,13 +75,15 @@ export async function fetchCustomerIntelligence(input: {
   const signature = createHmac('sha256', input.secret).update(canonical(body)).digest('hex');
   const fetchImpl = input.fetchImpl ?? fetch;
   try {
-    const response = await fetchImpl(input.url, {
+    const response = await fetchImpl(destination, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-referrio-signature': signature },
       body: JSON.stringify(body),
       signal: abortAfter(input.timeoutMs ?? 8_000),
       cache: 'no-store',
+      redirect: 'manual',
     });
+    if (response.status >= 300 && response.status < 400) return { state: 'unavailable', reason: 'unavailable' };
     if (!response.ok) return { state: 'unavailable', reason: response.status === 403 ? 'wrong_scope' : 'unavailable' };
     const payload = await response.json() as Partial<RemoteCustomer>;
     if (payload.personId !== input.personId || payload.officialScoring !== false) {

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
-import { agentsDiffer, authorizeIntelligencePanel, reviewIdentitySuggestion } from '@/lib/intelligence/panel';
+import { agentsDiffer, authorizeIntelligencePanel, participantBelongsToReferral, reviewIdentitySuggestion, sameOriginRequest } from '@/lib/intelligence/panel';
 import { createMemoryLinks, setAgentLink, setCustomerLink } from '@/lib/intelligence/links';
-import { clearIntelligenceCache, fetchCustomerIntelligence } from '@/lib/intelligence/remote';
+import { clearIntelligenceCache, fetchCustomerIntelligence, trustedIntelligenceUrl } from '@/lib/intelligence/remote';
 
 const base = {
   organization: 'AHA' as const,
@@ -57,6 +57,14 @@ describe('explicit intelligence links', () => {
     expect(authorizeIntelligencePanel({
       userId: 'manager-1', role: 'manager', canViewReferral: false, referralOrg: 'AHA', grant, configuredAccountId: 'fub-aha',
     }).reason).toBe('referral');
+    expect(authorizeIntelligencePanel({
+      userId: 'viewer-1', role: 'viewer', canViewReferral: true, referralOrg: 'AHA', grant: { ...grant, userId: 'viewer-1' }, configuredAccountId: 'fub-aha',
+    }).reason).toBe('role');
+    expect(participantBelongsToReferral('borrower', ['borrower'])).toBe(true);
+    expect(participantBelongsToReferral('participant:coborrower', ['borrower'])).toBe(false);
+    expect(sameOriginRequest({ requestOrigin: 'https://referrio.app', pageOrigin: 'https://referrio.app', fetchSite: null })).toBe(true);
+    expect(sameOriginRequest({ requestOrigin: 'https://evil.example', pageOrigin: 'https://referrio.app', fetchSite: 'cross-site' })).toBe(false);
+    expect(sameOriginRequest({ requestOrigin: null, pageOrigin: 'https://referrio.app', fetchSite: null })).toBe(false);
   });
 });
 
@@ -98,6 +106,45 @@ describe('intelligence reads', () => {
       },
     });
     expect(timedOut).toEqual({ state: 'unavailable', reason: 'timeout' });
+    const callsForCache: string[] = [];
+    const read = async (url: string | URL | Request) => {
+      callsForCache.push(String(url));
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          state: 'ready',
+          officialScoring: false,
+          personId: 100,
+          latest: null,
+          followUp: null,
+          fubAssignedUser: null,
+          projectedClosings: [],
+          freshness: { readAt: '2026-11-18T17:00:00.000Z', note: 'Stored read.' },
+          detailPath: '/intelligence/leads/100',
+        }),
+      } as Response;
+    };
+    const input = {
+      organization: 'AHA',
+      fubAccountId: 'fub-aha',
+      referralId: 'ref-1',
+      participantKey: 'borrower',
+      personId: 100,
+      secret: 'secret',
+      url: 'https://intelligence.example/api/integration/referrio/customer',
+      now: 1_795_000_000_000,
+      fetchImpl: read,
+    };
+    await fetchCustomerIntelligence(input);
+    await fetchCustomerIntelligence(input);
+    await fetchCustomerIntelligence({ ...input, personId: 101, referralId: 'ref-2' });
+    expect(callsForCache).toHaveLength(2);
+    expect(callsForCache[1]).toBe('https://intelligence.example/api/integration/referrio/customer');
+    const blocked = await fetchCustomerIntelligence({ ...input, url: 'http://intelligence.example/api/integration/referrio/customer', fetchImpl: read });
+    expect(blocked).toEqual({ state: 'unavailable', reason: 'not_configured' });
+    expect(trustedIntelligenceUrl('https://intelligence.example/api/integration/referrio/customer?next=https://evil.example')).toBeNull();
+    expect(callsForCache).toHaveLength(2);
   });
 
   it('does not fetch email, call a model, or change referral financial records from the route', () => {
@@ -111,5 +158,11 @@ describe('intelligence reads', () => {
     expect(route.includes('.save(')).toBe(false);
     expect(route.includes('buyStatus')).toBe(false);
     expect(route.includes('expectedAmountCents')).toBe(false);
+    expect(route.includes('INTELLIGENCE_APP_ORIGIN')).toBe(false);
+    expect(route.includes('detailHref')).toBe(false);
+    const panel = readFileSync('src/components/referrals/intelligence-panel.tsx', 'utf8');
+    expect(panel.includes('REFERRIO_INTEGRATION_SECRET')).toBe(false);
+    expect(panel.includes('SUPABASE_SECRET_KEY')).toBe(false);
+    expect(panel.includes('detailHref')).toBe(false);
   });
 });
