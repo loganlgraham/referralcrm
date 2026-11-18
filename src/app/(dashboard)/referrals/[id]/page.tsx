@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { getReferralById, getAdjacentReferralIds } from '@/lib/server/referrals';
 import { getCurrentSession } from '@/lib/auth';
 import { ReferralDetailClient } from '@/components/referrals/referral-detail-client';
+import { IntelligencePanel } from '@/components/referrals/intelligence-panel';
 
 interface ReferralDetailPageProps {
   params: { id: string };
@@ -71,6 +72,8 @@ export default async function ReferralDetailPage({ params, searchParams }: Refer
   }
 
   return (
+    <>
+    {isAdminLike ? <IntelligencePanel referralId={params.id} /> : null}
     <ReferralDetailClient
       referral={referral}
       viewerRole={viewerRole}
@@ -80,5 +83,6 @@ export default async function ReferralDetailPage({ params, searchParams }: Refer
       nextReferralId={nextReferralId}
       listParams={listParams}
     />
+    </>
   );
 }
