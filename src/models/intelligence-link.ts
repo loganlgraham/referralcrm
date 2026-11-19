@@ -44,6 +44,20 @@ intelligenceAgentLinkSchema.index(
   { unique: true },
 );
 
+const accessAuditSchema = new Schema(
+  {
+    actorId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    targetUserId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    organization: { type: String, enum: ['AHA', 'AFC'], required: true },
+    fubAccountId: { type: String, required: true },
+    action: { type: String, enum: ['grant', 'revoke'], required: true },
+    at: { type: Date, required: true },
+    before: { type: String, enum: ['absent', 'granted', 'revoked'], required: true },
+    after: { type: String, enum: ['granted', 'revoked'], required: true },
+  },
+  { _id: false },
+);
+
 const intelligenceAccessSchema = new Schema(
   {
     organization: { type: String, enum: ['AHA', 'AFC'], required: true },
@@ -51,6 +65,7 @@ const intelligenceAccessSchema = new Schema(
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     revokedAt: { type: Date, default: null },
+    audit: { type: [accessAuditSchema], default: [] },
   },
   { timestamps: true },
 );

@@ -11,7 +11,11 @@ export type AccessGrant = {
 
 export type PanelAccess =
   | { ok: true }
-  | { ok: false; status: 401 | 403; reason: 'anonymous' | 'role' | 'referral' | 'unmapped' | 'revoked' | 'wrong_organization' | 'wrong_account' };
+  | {
+      ok: false;
+      status: 401 | 403;
+      reason: 'anonymous' | 'role' | 'disabled' | 'referral' | 'unmapped' | 'revoked' | 'wrong_organization' | 'wrong_account';
+    };
 
 const PARTICIPANT_KEY = /^(borrower|participant:[a-z0-9_-]{1,40})$/;
 
@@ -22,10 +26,21 @@ export function authorizeIntelligencePanel(input: {
   referralOrg: string;
   grant: AccessGrant | null;
   configuredAccountId: string;
+  verifiedAccountId?: string;
+  accountStatus?: 'active' | 'disabled' | 'missing';
+  isOwner?: boolean;
+  storedRole?: IntelligenceRole;
 }): PanelAccess {
+  const status = input.accountStatus ?? 'active';
+  const effectiveRole = input.storedRole !== undefined ? input.storedRole : input.role;
   if (!input.userId) return { ok: false, status: 401, reason: 'anonymous' };
-  if (input.role !== 'admin' && input.role !== 'manager') return { ok: false, status: 403, reason: 'role' };
+  if (status === 'disabled' || status === 'missing') return { ok: false, status: 403, reason: 'disabled' };
+  if (effectiveRole !== 'admin' && effectiveRole !== 'manager') return { ok: false, status: 403, reason: 'role' };
   if (!input.canViewReferral) return { ok: false, status: 403, reason: 'referral' };
+  if (input.verifiedAccountId !== undefined && input.configuredAccountId !== input.verifiedAccountId) {
+    return { ok: false, status: 403, reason: 'wrong_account' };
+  }
+  if (input.isOwner && (input.referralOrg === 'AFC' || input.referralOrg === 'AHA')) return { ok: true };
   if (!input.grant || input.grant.userId !== input.userId) return { ok: false, status: 403, reason: 'unmapped' };
   if (input.grant.revokedAt) return { ok: false, status: 403, reason: 'revoked' };
   if (input.grant.organization !== input.referralOrg) return { ok: false, status: 403, reason: 'wrong_organization' };
