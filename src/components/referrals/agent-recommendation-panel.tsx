@@ -74,6 +74,9 @@ export function AgentRecommendationPanel({ referralId, mcId, zips }: { referralI
             <ul className="mt-2 list-disc space-y-1 pl-5 text-foreground-muted">
               {top.reasons.map((reason) => <li key={reason} className="break-words">{reason}</li>)}
             </ul>
+            {top.unknownLossReasons > 0 ? (
+              <p className="mt-1 text-xs text-foreground-subtle">{`${unknownLossLabel(top.unknownLossReasons)} not counted.`}</p>
+            ) : null}
           </div>
 
           {alternatives.length > 0 ? (
@@ -142,7 +145,7 @@ function emptyMessage(state: Exclude<AgentRecommendationResponse['state'], 'read
     case 'needs_zip':
       return 'Add a ZIP to see out-of-state suggestions.';
     case 'no_candidates':
-      return 'No active agents in this bucket match these ZIPs.';
+      return `No active agents in this bucket cover these ZIPs or anywhere within ${AGENT_RECOMMENDATION_POLICY.nearbyZipMiles} miles.`;
     case 'denied':
     case 'not_applicable':
       return '';
@@ -155,6 +158,8 @@ function emptyMessage(state: Exclude<AgentRecommendationResponse['state'], 'read
 
 export function fubSentence(state: RecommendationFubState, adjusted: number): string {
   switch (state) {
+    case 'paused':
+      return 'Uses Referrio data only. Follow Up Boss activity is not part of the score yet.';
     case 'applied':
       return `Stored Follow Up Boss activity moved ${adjusted === 1 ? '1 agent' : `${adjusted} agents`} by up to ${AGENT_RECOMMENDATION_POLICY.fubMaxAdjustment} points.`;
     case 'insufficient':
@@ -177,9 +182,22 @@ export function fubSentence(state: RecommendationFubState, adjusted: number): st
 function percent(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
-
 function record(successes: number, trials: number): string {
   return trials === 0 ? '—' : `${successes}/${trials}`;
+}
+
+function unknownLossLabel(count: number): string {
+  return `${count} ${count === 1 ? 'loss' : 'losses'} with no reason recorded`;
+}
+
+function comparisonScope(body: AgentRecommendationResponse, windowStart: string): string {
+  const pool = body.inputs.bucket === 'AHA_OOS' ? 'out-of-state' : 'AHA';
+  const area = body.inputs.zips.length === 0
+    ? ''
+    : body.inputs.radiusMiles !== null
+      ? ` covering an area within ${body.inputs.radiusMiles} miles of ${body.inputs.zips.join(', ')}`
+      : '';
+  return `Compared ${body.totals.eligible} eligible ${pool} agents${area}, using referrals since ${windowStart}${body.inputs.mcName ? `. MC: ${body.inputs.mcName}` : ''}.`;
 }
 
 function CalculationDetails({ body, shown }: { body: AgentRecommendationResponse | null; shown: AgentRecommendation[] }) {
@@ -191,17 +209,18 @@ function CalculationDetails({ body, shown }: { body: AgentRecommendationResponse
       <summary className="cursor-pointer text-foreground-muted">How this was calculated</summary>
       <div className="mt-2 grid min-w-0 gap-3 text-foreground-muted">
         <p className="break-words">
-          {`Weights: MC success ${weights.mc * 100}%, ZIP success ${weights.zip * 100}%, overall close rate ${weights.overall * 100}%, financed with AFC ${weights.usedAfc * 100}%, active workload ${weights.workload * 100}%. Each part is scored 0–100, where the group average is 50.`}
+          {`Weights: MC success ${percent(weights.mc)}, overall close rate ${percent(weights.overall)}, contract rate ${percent(weights.contract)}, active workload ${percent(weights.workload)}, ZIP success ${percent(weights.zip)}, financed with AFC ${percent(weights.usedAfc)}. Each part is scored 0–100, where the group average is 50.`}
         </p>
-        <p className="break-words">{`Compared ${body.totals.eligible} eligible ${body.inputs.bucket === 'AHA_OOS' ? 'out-of-state' : 'AHA'} agents on referrals since ${windowStart}${body.inputs.mcName ? ` with ${body.inputs.mcName}` : ''}${body.inputs.zips.length ? ` in ${body.inputs.zips.join(', ')}` : ''}.`}</p>
+        <p className="break-words">{comparisonScope(body, windowStart)}</p>
         <div className="max-w-full overflow-x-auto">
-          <table className="w-full min-w-[320px] text-left text-xs">
+          <table className="w-full min-w-[300px] text-left text-xs">
             <thead>
               <tr className="text-foreground-subtle">
                 <th className="py-1 pr-2 font-semibold">Agent</th>
                 <th className="py-1 pr-2 font-semibold">MC</th>
+                <th className="py-1 pr-2 font-semibold">Close</th>
+                <th className="py-1 pr-2 font-semibold">Contract</th>
                 <th className="py-1 pr-2 font-semibold">ZIP</th>
-                <th className="py-1 pr-2 font-semibold">Overall</th>
                 <th className="py-1 pr-2 font-semibold">AFC</th>
                 <th className="py-1 pr-2 font-semibold">Active</th>
                 <th className="py-1 font-semibold">Score</th>
@@ -212,8 +231,9 @@ function CalculationDetails({ body, shown }: { body: AgentRecommendationResponse
                 <tr key={entry.agentId} className="border-t border-border align-top">
                   <td className="break-words py-1 pr-2">{entry.name}</td>
                   <td className="py-1 pr-2">{entry.factors.mc.applicable ? record(entry.factors.mc.successes, entry.factors.mc.trials) : 'No MC'}</td>
-                  <td className="py-1 pr-2">{entry.factors.zip.applicable ? record(entry.factors.zip.successes, entry.factors.zip.trials) : 'No ZIP'}</td>
                   <td className="py-1 pr-2">{record(entry.factors.overall.successes, entry.factors.overall.trials)}</td>
+                  <td className="py-1 pr-2">{record(entry.factors.contract.successes, entry.factors.contract.trials)}</td>
+                  <td className="py-1 pr-2">{entry.factors.zip.applicable ? record(entry.factors.zip.successes, entry.factors.zip.trials) : 'No ZIP'}</td>
                   <td className="py-1 pr-2">{record(entry.factors.usedAfc.successes, entry.factors.usedAfc.trials)}</td>
                   <td className="py-1 pr-2">{entry.factors.workload.active}</td>
                   <td className="py-1">{entry.fub.state === 'applied' && entry.fub.points !== 0 ? `${entry.score} (${entry.fub.points > 0 ? '+' : ''}${entry.fub.points} FUB)` : entry.score}</td>
@@ -222,16 +242,22 @@ function CalculationDetails({ body, shown }: { body: AgentRecommendationResponse
             </tbody>
           </table>
         </div>
-        <p className="text-xs">Closed out of finished referrals (AFC: closed purchases financed with AFC). — means no record yet.</p>
-        <p className="break-words">{`Group averages: close rate ${percent(body.baselines.overall)}, with this MC ${percent(body.baselines.mc)}, in these ZIPs ${percent(body.baselines.zip)}, financed with AFC ${percent(body.baselines.usedAfc)}. Typical workload: ${body.workloadMedian ?? 0} active.`}</p>
+        <p className="text-xs">Close: closed out of finished referrals. Contract: reached a contract out of referrals with a known result. AFC: closed purchases financed with AFC. — means no record yet.</p>
+        {shown.some((entry) => entry.unknownLossReasons > 0) ? (
+          <p className="break-words text-xs">{`Losses with no reason recorded, not counted: ${shown.filter((entry) => entry.unknownLossReasons > 0).map((entry) => `${entry.name} ${entry.unknownLossReasons}`).join(', ')}.`}</p>
+        ) : null}
+        <p className="break-words">{`Group averages: close rate ${percent(body.baselines.overall)} (also the comparison point for MC and ZIP results), contract rate ${percent(body.baselines.contract)}${body.baselines.usedAfc > 0 ? `, financed with AFC ${percent(body.baselines.usedAfc)}` : ''}. Typical workload: ${body.workloadMedian ?? 0} active.`}</p>
         <p className="break-words">{fubSentence(body.fub.state, body.fub.adjustedAgents)}</p>
         <ul className="list-disc space-y-1 pl-5">
           <li>Close rates count finished referrals only: closed versus lost or terminated. Active referrals and projected closings are left out.</li>
-          <li>{`Small records are pulled toward the group average (${AGENT_RECOMMENDATION_POLICY.priorStrength} referrals' worth), so an agent with no history scores average rather than high or low.`}</li>
-          <li>Losses marked as never reached, already had an agent, not qualified, no longer buying, out of area, already bought, or bad contact info are not counted against the agent.</li>
-          <li>AFC financing counts closed purchases only. Sales, open deals, and fallen-through deals are left out. This answer is saved as yes unless someone changes it at closing.</li>
-          <li>A closing goes to the agent on the deal record. Agents who were reassigned away do not get the result.</li>
-          {body.inputs.bucket === 'AHA' ? <li>Local AHA agents rarely list ZIP coverage, so coverage is not required for them.</li> : <li>Out-of-state agents must list one of these ZIPs. Nearby ZIPs are not checked.</li>}
+          <li>Contract rate counts each referral once from deal records, even if it went under contract more than once. A contract that fell through still counts as reaching contract, but not as a closing.</li>
+          <li>{`Small records are pulled toward the group average (${AGENT_RECOMMENDATION_POLICY.priorStrength} referrals' worth), so a 1-for-1 record does not outrank solid history and an agent with no history scores average.`}</li>
+          <li>Losses marked as never reached, already had an agent, not qualified, no longer buying, out of area, already bought, or bad contact info are not counted against the agent. Losses with no reason recorded are shown but not counted.</li>
+          <li>AFC financing counts only answers given on the closing form. Older closings and defaulted answers are unknown and left out.</li>
+          <li>A closing or contract goes to the agent on the deal record. Agents who were reassigned away do not get the result.</li>
+          {body.inputs.bucket === 'AHA'
+            ? <li>Local AHA agents rarely list ZIP coverage, so coverage is not required for them.</li>
+            : <li>{`Out-of-state agents must cover a ZIP within ${AGENT_RECOMMENDATION_POLICY.nearbyZipMiles} miles. ZIP success uses only past referrals in these exact ZIPs.`}</li>}
         </ul>
       </div>
     </details>

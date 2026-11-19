@@ -1411,6 +1411,16 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   } else if (Object.prototype.hasOwnProperty.call(parsed.data, 'usedAfc')) {
     updatePayload.usedAfc = Boolean(parsed.data.usedAfc);
   }
+  delete updatePayload.usedAfcConfirmedAtClosing;
+  if (
+    parsed.data.usedAfcConfirmedAtClosing === true &&
+    parsed.data.status === 'closed' &&
+    !isSellSide(effectiveSide) &&
+    typeof parsed.data.usedAfc === 'boolean' &&
+    updatePayload.usedAfc === parsed.data.usedAfc
+  ) {
+    updatePayload.usedAfcAtClosing = parsed.data.usedAfc;
+  }
 
   const payment = await Payment.findByIdAndUpdate(body.id, updatePayload, { new: true });
   if (!payment) {

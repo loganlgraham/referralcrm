@@ -5,18 +5,22 @@ import { LOST_REASON_COUNTS_AGAINST_AGENT, LOST_REASON_VALUES, type LostReason }
  * or feeds an official ranking.
  */
 export const AGENT_RECOMMENDATION_POLICY = {
-  version: 'draft-2026-11-19',
+  version: 'draft-2026-11-19b',
   officialScoring: false,
-  weights: { mc: 0.3, zip: 0.2, overall: 0.2, usedAfc: 0.15, workload: 0.15 },
+  weights: { mc: 0.3, overall: 0.2, contract: 0.15, workload: 0.15, zip: 0.1, usedAfc: 0.1 },
   windowMonths: 24,
   /** Pseudo-referrals pulling a small record toward the pool rate. */
-  priorStrength: 5,
+  priorStrength: 10,
+  /** Out-of-state agents qualify when a covered ZIP is this close to a referral ZIP. */
+  nearbyZipMiles: 15,
+  fubContributionEnabled: false,
   fubMaxAdjustment: 5,
   fubMinAssignedPeople: 5,
   fubMinComparableAgents: 3,
 } as const;
 
 export type FactorKey = keyof typeof AGENT_RECOMMENDATION_POLICY.weights;
+export type RateFactorKey = Exclude<FactorKey, 'workload'>;
 export type AhaBucket = 'AHA' | 'AHA_OOS';
 export type EvidenceStrength = 'Strong' | 'Moderate' | 'Limited';
 
@@ -29,7 +33,8 @@ export type HistoryPayment = {
   status: string | null;
   agentAttribution: string | null;
   usedAssignedAgent: boolean | null;
-  usedAfc: boolean | null;
+  /** Answer recorded on the closing form. null = defaulted or not verifiable. */
+  usedAfcAtClosing: boolean | null;
 };
 
 export type HistoryReferral = {
@@ -50,15 +55,19 @@ export type HistoryReferral = {
 };
 
 export type OutcomeKind = 'closed' | 'not_closed' | 'active' | 'excluded';
+export type ContractOutcome = 'contracted' | 'no_contract' | 'excluded';
+export type ExclusionReason = 'excused_loss' | 'unknown_loss_reason' | 'closed_without_record';
 
 export type AgentOutcome = {
   referralId: string;
   agentId: string;
   outcome: OutcomeKind;
-  excludedBecause: 'excused_loss' | 'closed_without_record' | null;
+  excludedBecause: ExclusionReason | null;
+  /** Counted once per referral and agent, however many contracts were written. */
+  contract: ContractOutcome;
   lenderId: string | null;
   zips: string[];
-  /** One entry per closed buy-side deal credited to this agent. null = not recorded. */
+  /** One entry per closed buy-side deal credited to this agent. null = unknown. */
   afcAnswers: (boolean | null)[];
 };
 
@@ -94,10 +103,12 @@ function statusForAgent(referral: HistoryReferral, agentId: string): string | nu
   return referral.status;
 }
 
+type DealFacts = { closed: HistoryPayment[]; contracted: boolean; terminated: boolean };
+
 /**
  * One outcome per referral and agent who worked it. Agents who were reassigned
- * away are not credited with the result. Closings come from deal records, not
- * the referral status.
+ * away are not credited with the result. Closings and contracts come from deal
+ * records, not the referral status.
  */
 export function deriveAgentOutcomes(referrals: readonly HistoryReferral[], now: Date): AgentOutcome[] {
   const start = windowStart(now).getTime();
@@ -105,50 +116,67 @@ export function deriveAgentOutcomes(referrals: readonly HistoryReferral[], now: 
   for (const referral of referrals) {
     const anchor = referralAnchorDate(referral).getTime();
     if (anchor < start || anchor > now.getTime()) continue;
-    const current = new Set([referral.assignedAgentId, referral.buySideAgentId, referral.sellSideAgentId].filter((id): id is string => Boolean(id)));
-    const credited = new Map<string, HistoryPayment[]>();
+    const current = [referral.assignedAgentId, referral.buySideAgentId, referral.sellSideAgentId].filter((id): id is string => Boolean(id));
+    const facts = new Map<string, DealFacts>();
     let closedElsewhere = false;
+    let contractedElsewhere = false;
     for (const payment of referral.payments) {
-      if (!payment.status || !CLOSED_PAYMENT_STATUSES.has(payment.status)) continue;
+      if (!payment.status) continue;
+      const closed = CLOSED_PAYMENT_STATUSES.has(payment.status);
       if (payment.agentAttribution === 'OUTSIDE_AGENT' || payment.usedAssignedAgent === false) {
-        closedElsewhere = true;
+        contractedElsewhere = true;
+        if (closed) closedElsewhere = true;
         continue;
       }
       const agentId = creditedAgent(payment, referral);
       if (!agentId) continue;
-      credited.set(agentId, [...(credited.get(agentId) ?? []), payment]);
+      const entry = facts.get(agentId) ?? { closed: [], contracted: false, terminated: false };
+      entry.contracted = true;
+      if (closed) entry.closed.push(payment);
+      if (payment.status === 'terminated') entry.terminated = true;
+      facts.set(agentId, entry);
     }
-    const agents = new Set([...current, ...credited.keys()]);
-    for (const agentId of agents) {
+    for (const agentId of new Set([...current, ...facts.keys()])) {
       const base = { referralId: referral.id, agentId, lenderId: referral.lenderId, zips: referral.zips };
-      const deals = credited.get(agentId);
-      if (deals && deals.length > 0) {
+      const deals = facts.get(agentId);
+      if (deals && deals.closed.length > 0) {
         outcomes.push({
           ...base,
           outcome: 'closed',
           excludedBecause: null,
-          afcAnswers: deals.filter((deal) => deal.side !== 'sell').map((deal) => (typeof deal.usedAfc === 'boolean' ? deal.usedAfc : null)),
+          contract: 'contracted',
+          afcAnswers: deals.closed.filter((deal) => deal.side !== 'sell').map((deal) => deal.usedAfcAtClosing),
         });
         continue;
       }
-      outcomes.push({ ...base, ...resolveUnclosed(referral, agentId, closedElsewhere), afcAnswers: [] });
+      outcomes.push({
+        ...base,
+        ...resolveUnclosed(referral, agentId, { closedElsewhere, contractedElsewhere, contracted: deals?.contracted ?? false, terminated: deals?.terminated ?? false }),
+        afcAnswers: [],
+      });
     }
   }
   return outcomes;
 }
 
-function resolveUnclosed(referral: HistoryReferral, agentId: string, closedElsewhere: boolean): Pick<AgentOutcome, 'outcome' | 'excludedBecause'> {
-  if (closedElsewhere) return { outcome: 'not_closed', excludedBecause: null };
+function resolveUnclosed(
+  referral: HistoryReferral,
+  agentId: string,
+  flags: { closedElsewhere: boolean; contractedElsewhere: boolean; contracted: boolean; terminated: boolean },
+): Pick<AgentOutcome, 'outcome' | 'excludedBecause' | 'contract'> {
+  const knownContract: ContractOutcome | null = flags.contracted ? 'contracted' : flags.contractedElsewhere ? 'no_contract' : null;
+  if (flags.closedElsewhere) return { outcome: 'not_closed', excludedBecause: null, contract: knownContract ?? 'no_contract' };
   const status = statusForAgent(referral, agentId);
+  const finished = status === 'Lost' || status === 'Terminated';
+  if (flags.terminated && finished) return { outcome: 'not_closed', excludedBecause: null, contract: 'contracted' };
   if (status === 'Lost') {
-    if (isLostReason(referral.lostReason) && !LOST_REASON_COUNTS_AGAINST_AGENT[referral.lostReason]) {
-      return { outcome: 'excluded', excludedBecause: 'excused_loss' };
-    }
-    return { outcome: 'not_closed', excludedBecause: null };
+    if (!isLostReason(referral.lostReason)) return { outcome: 'excluded', excludedBecause: 'unknown_loss_reason', contract: knownContract ?? 'excluded' };
+    if (!LOST_REASON_COUNTS_AGAINST_AGENT[referral.lostReason]) return { outcome: 'excluded', excludedBecause: 'excused_loss', contract: knownContract ?? 'excluded' };
+    return { outcome: 'not_closed', excludedBecause: null, contract: knownContract ?? 'no_contract' };
   }
-  if (status === 'Terminated') return { outcome: 'not_closed', excludedBecause: null };
-  if (status === 'Closed') return { outcome: 'excluded', excludedBecause: 'closed_without_record' };
-  return { outcome: 'active', excludedBecause: null };
+  if (status === 'Terminated') return { outcome: 'not_closed', excludedBecause: null, contract: knownContract ?? 'excluded' };
+  if (status === 'Closed') return { outcome: 'excluded', excludedBecause: 'closed_without_record', contract: knownContract ?? 'excluded' };
+  return { outcome: 'active', excludedBecause: null, contract: knownContract ?? 'excluded' };
 }
 
 export function isActiveReferralStatus(status: string | null): boolean {
@@ -166,24 +194,26 @@ export type CandidateAgent = {
 export type EligibilityResult = {
   eligible: CandidateAgent[];
   reason: 'ok' | 'not_aha' | 'no_bucket' | 'no_zip' | 'none_eligible';
-  excluded: { inactive: number; otherNetwork: number; noZipCoverage: number };
+  excluded: { inactive: number; otherNetwork: number; outsideRadius: number };
 };
 
 /**
- * AHA referrals use agents from the same bucket. Out-of-state agents must list
- * a referral ZIP; local AHA agents rarely list ZIPs, so coverage is not required.
+ * AHA referrals use active agents from the same bucket. Out-of-state agents
+ * must cover a ZIP near the referral (the Suggest Agent rule); local AHA
+ * agents rarely list ZIPs, so coverage is not required for them.
  */
 export function selectEligibleAgents(input: {
   org: string | null;
   bucket: string | null;
   zips: readonly string[];
+  nearbyZips: readonly string[];
   agents: readonly CandidateAgent[];
 }): EligibilityResult {
-  const excluded = { inactive: 0, otherNetwork: 0, noZipCoverage: 0 };
+  const excluded = { inactive: 0, otherNetwork: 0, outsideRadius: 0 };
   if (input.org !== 'AHA') return { eligible: [], reason: 'not_aha', excluded };
   if (input.bucket !== 'AHA' && input.bucket !== 'AHA_OOS') return { eligible: [], reason: 'no_bucket', excluded };
   if (input.bucket === 'AHA_OOS' && input.zips.length === 0) return { eligible: [], reason: 'no_zip', excluded };
-  const target = new Set(input.zips);
+  const nearby = new Set([...input.zips, ...input.nearbyZips]);
   const eligible: CandidateAgent[] = [];
   for (const agent of input.agents) {
     if (!agent.active) {
@@ -194,8 +224,8 @@ export function selectEligibleAgents(input: {
       excluded.otherNetwork += 1;
       continue;
     }
-    if (input.bucket === 'AHA_OOS' && !agent.coveredZips.some((zip) => target.has(zip))) {
-      excluded.noZipCoverage += 1;
+    if (input.bucket === 'AHA_OOS' && !agent.coveredZips.some((zip) => nearby.has(zip))) {
+      excluded.outsideRadius += 1;
       continue;
     }
     eligible.push(agent);
@@ -219,6 +249,7 @@ export type FubAdjustment =
   | { state: 'neutral'; reason: FubNeutralReason };
 
 export type FubNeutralReason =
+  | 'paused'
   | 'not_permitted'
   | 'not_connected'
   | 'not_linked'
@@ -227,6 +258,8 @@ export type FubNeutralReason =
   | 'small_sample'
   | 'too_few_comparable';
 
+export type CoverageMatch = 'exact' | 'nearby' | 'not_listed';
+
 export type AgentRecommendation = {
   agentId: string;
   name: string;
@@ -234,20 +267,25 @@ export type AgentRecommendation = {
   score: number;
   baseScore: number;
   evidenceStrength: EvidenceStrength;
-  coversZip: boolean;
+  coverage: CoverageMatch;
   factors: {
     mc: RateEvidence;
-    zip: RateEvidence;
     overall: RateEvidence;
+    contract: RateEvidence;
+    zip: RateEvidence;
     usedAfc: RateEvidence;
     workload: WorkloadEvidence;
   };
   excludedOutcomes: number;
+  /** Losses with no recorded reason. Shown, never counted against the agent. */
+  unknownLossReasons: number;
+  /** Closed purchases whose AFC answer was not recorded at closing. */
+  afcUnknown: number;
   fub: FubAdjustment;
   reasons: string[];
 };
 
-/** Shrink toward the pool rate, so a 1-for-1 record cannot beat a 30-for-60 record. */
+/** Shrink toward the pool rate, so a 1-for-1 record cannot beat solid history. */
 export function shrinkRate(successes: number, trials: number, baseline: number): number {
   const k = AGENT_RECOMMENDATION_POLICY.priorStrength;
   return (successes + k * baseline) / (trials + k);
@@ -298,15 +336,20 @@ type MeasuredActivity = { state: 'measured'; assignedPeople: number; contactedPe
 export type FubActivityInput = Map<string, MeasuredActivity | { state: 'not_linked' | 'unavailable' }>;
 
 /**
- * Optional, bounded nudge from stored Follow Up Boss activity. Agents without a
- * link, complete coverage, or enough contacts stay at 0, the comparison midpoint.
+ * Optional, bounded nudge from stored Follow Up Boss activity. Paused by
+ * default; agents without a link, complete coverage, or enough contacts stay
+ * at 0, the comparison midpoint.
  */
-export function fubAdjustments(agentIds: readonly string[], input: { permitted: boolean; connected: boolean; activity: FubActivityInput }): Map<string, FubAdjustment> {
+export function fubAdjustments(
+  agentIds: readonly string[],
+  input: { permitted: boolean; connected: boolean; activity: FubActivityInput; enabled?: boolean },
+): Map<string, FubAdjustment> {
   const result = new Map<string, FubAdjustment>();
   const neutralAll = (reason: FubNeutralReason) => {
     for (const id of agentIds) result.set(id, { state: 'neutral', reason });
     return result;
   };
+  if (!(input.enabled ?? AGENT_RECOMMENDATION_POLICY.fubContributionEnabled)) return neutralAll('paused');
   if (!input.permitted) return neutralAll('not_permitted');
   if (!input.connected) return neutralAll('not_connected');
   const comparable: { id: string; share: number; assigned: number }[] = [];
@@ -344,9 +387,11 @@ export function rankAgents(input: {
   activeCounts: ReadonlyMap<string, number>;
   mcId: string | null;
   zips: readonly string[];
+  nearbyZips?: readonly string[];
   fub: ReadonlyMap<string, FubAdjustment>;
-}): { ranked: AgentRecommendation[]; baselines: Record<Exclude<FactorKey, 'workload'>, number>; workloadMedian: number } {
+}): { ranked: AgentRecommendation[]; baselines: Record<RateFactorKey, number>; workloadMedian: number } {
   const target = new Set(input.zips);
+  const nearby = new Set(input.nearbyZips ?? []);
   const byAgent = new Map<string, AgentOutcome[]>();
   for (const outcome of input.outcomes) byAgent.set(outcome.agentId, [...(byAgent.get(outcome.agentId) ?? []), outcome]);
 
@@ -354,46 +399,59 @@ export function rankAgents(input: {
     const rows = byAgent.get(agent.id) ?? [];
     const resolved = rows.filter((row) => row.outcome === 'closed' || row.outcome === 'not_closed');
     const count = (list: AgentOutcome[]): Tally => ({ successes: list.filter((row) => row.outcome === 'closed').length, trials: list.length });
-    const afc = rows.flatMap((row) => row.afcAnswers).filter((answer): answer is boolean => answer !== null);
+    const contractRows = rows.filter((row) => row.contract !== 'excluded');
+    const answers = rows.flatMap((row) => row.afcAnswers);
+    const afc = answers.filter((answer): answer is boolean => answer !== null);
     return {
       agent,
       overall: count(resolved),
       mc: count(input.mcId ? resolved.filter((row) => row.lenderId === input.mcId) : []),
       zip: count(resolved.filter((row) => row.zips.some((zip) => target.has(zip)))),
+      contract: { successes: contractRows.filter((row) => row.contract === 'contracted').length, trials: contractRows.length },
       usedAfc: { successes: afc.filter(Boolean).length, trials: afc.length },
       excluded: rows.filter((row) => row.outcome === 'excluded').length,
+      unknownLossReasons: rows.filter((row) => row.excludedBecause === 'unknown_loss_reason').length,
+      afcUnknown: answers.length - afc.length,
     };
   });
 
+  // MC and ZIP results are compared with the group's overall close rate, so the
+  // only agent with history at an MC is not graded against itself.
   const overallBase = pooled(tallies.map((t) => t.overall), 0);
-  const baselines = {
+  const baselines: Record<RateFactorKey, number> = {
+    mc: overallBase,
     overall: overallBase,
-    mc: pooled(tallies.map((t) => t.mc), overallBase),
-    zip: pooled(tallies.map((t) => t.zip), overallBase),
+    contract: pooled(tallies.map((t) => t.contract), 0),
+    zip: overallBase,
     usedAfc: pooled(tallies.map((t) => t.usedAfc), 0),
   };
   const workloadMedian = median(input.candidates.map((agent) => input.activeCounts.get(agent.id) ?? 0));
   const weights = AGENT_RECOMMENDATION_POLICY.weights;
 
   const scored = tallies.map((t) => {
+    const active = input.activeCounts.get(t.agent.id) ?? 0;
     const factors = {
       mc: rate(t.mc, baselines.mc, input.mcId !== null),
-      zip: rate(t.zip, baselines.zip, target.size > 0),
       overall: rate(t.overall, baselines.overall, true),
+      contract: rate(t.contract, baselines.contract, true),
+      zip: rate(t.zip, baselines.zip, target.size > 0),
       usedAfc: rate(t.usedAfc, baselines.usedAfc, true),
-      workload: (() => {
-        const active = input.activeCounts.get(t.agent.id) ?? 0;
-        return { active, poolMedian: workloadMedian, points: workloadPoints(active, workloadMedian) };
-      })(),
+      workload: { active, poolMedian: workloadMedian, points: workloadPoints(active, workloadMedian) },
     };
     const baseScore =
       weights.mc * factors.mc.points +
-      weights.zip * factors.zip.points +
       weights.overall * factors.overall.points +
+      weights.contract * factors.contract.points +
+      weights.zip * factors.zip.points +
       weights.usedAfc * factors.usedAfc.points +
       weights.workload * factors.workload.points;
-    const fub = input.fub.get(t.agent.id) ?? { state: 'neutral', reason: 'not_connected' };
+    const fub: FubAdjustment = input.fub.get(t.agent.id) ?? { state: 'neutral', reason: 'paused' };
     const adjustment = fub.state === 'applied' ? fub.points : 0;
+    const coverage: CoverageMatch = t.agent.coveredZips.some((zip) => target.has(zip))
+      ? 'exact'
+      : t.agent.coveredZips.some((zip) => nearby.has(zip))
+        ? 'nearby'
+        : 'not_listed';
     return {
       agentId: t.agent.id,
       name: t.agent.name,
@@ -401,9 +459,11 @@ export function rankAgents(input: {
       score: round1(baseScore + adjustment),
       baseScore: round1(baseScore),
       evidenceStrength: evidenceStrength(t.overall.trials, t.mc.trials, t.zip.trials),
-      coversZip: t.agent.coveredZips.some((zip) => target.has(zip)),
+      coverage,
       factors,
       excludedOutcomes: t.excluded,
+      unknownLossReasons: t.unknownLossReasons,
+      afcUnknown: t.afcUnknown,
       fub,
       reasons: [] as string[],
     } satisfies AgentRecommendation;
@@ -437,18 +497,20 @@ function plural(count: number, word: string): string {
 
 function buildReasons(entry: AgentRecommendation, zips: readonly string[]): string[] {
   const weights = AGENT_RECOMMENDATION_POLICY.weights;
-  const { mc, zip, overall, usedAfc, workload } = entry.factors;
+  const { mc, overall, contract, zip, usedAfc, workload } = entry.factors;
   const candidates: { lift: number; text: string }[] = [];
   if (mc.applicable && mc.trials > 0) candidates.push({ lift: weights.mc * (mc.points - 50), text: `Closed ${mc.successes} of ${mc.trials} finished referrals with this MC` });
-  if (zip.applicable && zip.trials > 0) candidates.push({ lift: weights.zip * (zip.points - 50), text: `Closed ${zip.successes} of ${zip.trials} finished referrals in ${zips.length === 1 ? `ZIP ${zips[0]}` : 'these ZIPs'}` });
   if (overall.trials > 0) candidates.push({ lift: weights.overall * (overall.points - 50), text: `Closed ${overall.successes} of ${overall.trials} finished referrals overall` });
+  if (contract.trials > 0) candidates.push({ lift: weights.contract * (contract.points - 50), text: `Reached a contract on ${contract.successes} of ${plural(contract.trials, 'referral')}` });
+  if (zip.applicable && zip.trials > 0) candidates.push({ lift: weights.zip * (zip.points - 50), text: `Closed ${zip.successes} of ${zip.trials} finished referrals in ${zips.length === 1 ? `ZIP ${zips[0]}` : 'these ZIPs'}` });
   if (usedAfc.trials > 0) candidates.push({ lift: weights.usedAfc * (usedAfc.points - 50), text: `Clients financed with AFC on ${usedAfc.successes} of ${plural(usedAfc.trials, 'closed purchase')}` });
   candidates.push({ lift: weights.workload * (workload.points - 50), text: `${plural(workload.active, 'active referral')} right now` });
   if (entry.fub.state === 'applied' && entry.fub.points !== 0) {
     candidates.push({ lift: entry.fub.points, text: `Follow Up Boss shows calls or texts to ${Math.round(entry.fub.contactedShare * 100)}% of assigned contacts` });
   }
   const reasons = candidates.sort((a, b) => b.lift - a.lift).slice(0, 3).map((candidate) => candidate.text);
-  if (reasons.length < 3 && entry.coversZip) reasons.push(`Lists ${zips.length === 1 ? `ZIP ${zips[0]}` : 'a referral ZIP'} in coverage`);
+  if (reasons.length < 3 && entry.coverage === 'exact') reasons.push(`Lists ${zips.length === 1 ? `ZIP ${zips[0]}` : 'a referral ZIP'} in coverage`);
+  if (reasons.length < 3 && entry.coverage === 'nearby') reasons.push(`Covers an area within ${AGENT_RECOMMENDATION_POLICY.nearbyZipMiles} miles`);
   if (reasons.length < 3 && overall.trials === 0) reasons.push('No finished referrals in the last 24 months yet');
   return reasons.slice(0, 3);
 }

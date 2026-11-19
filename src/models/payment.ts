@@ -57,6 +57,8 @@ const paymentSchema = new Schema(
     },
     agentId: { type: Schema.Types.ObjectId, ref: 'Agent', default: null },
     usedAfc: { type: Boolean, default: true },
+    // Answer given on the closing form; null when it was never asked at closing.
+    usedAfcAtClosing: { type: Boolean, default: null },
     usedAssignedAgent: { type: Boolean, default: true },
     underContractDate: { type: Date, default: null },
     invoiceDate: Date,

@@ -7,6 +7,7 @@ import { agentsDiffer, participantBelongsToReferral, sameOriginRequest, type Int
 import { connectMongo } from '@/lib/mongoose';
 import { Referral } from '@/models/referral';
 import { canViewReferral } from '@/lib/rbac';
+import { VERIFIED_FUB_ACCOUNT_ID } from '@/lib/intelligence/access-control';
 import { authorizeFubViewer } from '@/lib/server/intelligence-viewer';
 import { readAgentLink, readCustomerLink, writeAgentLink, writeCustomerLink } from '@/lib/server/intelligence-links';
 
@@ -39,11 +40,11 @@ export async function GET(request: NextRequest, context: RouteContext): Promise<
       participantKey: 'borrower',
       personId: null,
       referrioAgent: loaded.referrioAgent,
-      remote: null,
+      remote: loaded.configured ? null : { state: 'unavailable', reason: 'not_configured' },
       agentsDiffer: false,
     }));
   }
-  if (!loaded.secret || !loaded.url) {
+  if (!loaded.configured || !loaded.secret || !loaded.url) {
     logRead({ referralId: loaded.referralId, personId: link.fubPersonId, outcome: 'unavailable', reason: 'not_configured' });
     return json(panelFromRead({
       participantKey: 'borrower',
@@ -138,6 +139,7 @@ async function loadAuthorized(referralId: string): Promise<
       ok: true;
       organization: IntelligenceOrg;
       accountId: string;
+      configured: boolean;
       referralId: string;
       userId: string;
       agentId: string | null;
@@ -155,8 +157,10 @@ async function loadAuthorized(referralId: string): Promise<
   } | null>();
   if (!referral) return { ok: false, status: 404, reason: 'referral' };
   const organization = referral.org === 'AHA' || referral.org === 'AFC' ? referral.org : null;
-  const accountId = process.env.REFERRIO_FUB_ACCOUNT_ID ?? '';
-  if (!organization || !accountId) return { ok: false, status: 503, reason: 'not_configured' };
+  if (!organization) return { ok: false, status: 503, reason: 'not_configured' };
+  // Fall back to the verified AHA account so a missing preview env still finds saved links.
+  const configuredAccountId = process.env.REFERRIO_FUB_ACCOUNT_ID ?? '';
+  const accountId = configuredAccountId || VERIFIED_FUB_ACCOUNT_ID;
   const canView = canViewReferral(session, {
     org: organization,
     assignedAgent: referral.assignedAgent ?? undefined,
@@ -166,16 +170,19 @@ async function loadAuthorized(referralId: string): Promise<
   const agent = referral.assignedAgent && typeof referral.assignedAgent === 'object' && 'name' in referral.assignedAgent
     ? referral.assignedAgent
     : null;
+  const secret = process.env.REFERRIO_INTEGRATION_SECRET ?? '';
+  const url = trustedIntelligenceUrl(process.env.REFERRIO_INTELLIGENCE_URL ?? '') ?? '';
   return {
     ok: true,
     organization,
     accountId,
+    configured: Boolean(configuredAccountId && secret && url),
     referralId,
     userId: userId ?? '',
     agentId: agent?._id ? String(agent._id) : null,
     referrioAgent: agent?.name ?? null,
-    secret: process.env.REFERRIO_INTEGRATION_SECRET ?? '',
-    url: trustedIntelligenceUrl(process.env.REFERRIO_INTELLIGENCE_URL ?? '') ?? '',
+    secret,
+    url,
   };
 }
 

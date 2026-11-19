@@ -113,13 +113,16 @@ export function IntelligencePanel({ referralId }: { referralId: string }) {
     }
   }
 
-  const showForm = access === 'allowed' && activity.status !== 'unavailable' && (!link || editing);
+  const showForm = access === 'allowed' && activity.status !== 'unavailable' && activity.status !== 'not_configured' && (!link || editing);
   return (
     <section className={`${railCardClasses} min-w-0 max-w-full`} aria-labelledby="intelligence-panel-title">
       <h2 id="intelligence-panel-title" className={railTitleClasses}>Customer communication</h2>
       <p className="mt-1 text-sm text-foreground-muted">Stored Follow Up Boss activity for the linked customer.</p>
       <ActivityBody access={access} link={link} activity={activity} onRetry={() => void load(true)} />
-      {link ? (
+      {link && activity.status === 'not_configured' ? (
+        <p className="mt-4 min-w-0 break-words text-sm">Linked to FUB contact {link.personId}</p>
+      ) : null}
+      {link && activity.status !== 'not_configured' ? (
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <p className="mr-auto min-w-0 break-words text-sm">Linked to FUB contact {link.personId}</p>
           <button className={buttonClasses({ variant: 'secondary', size: 'md' })} type="button" disabled={saving} onClick={() => { setDraft(String(link.personId)); setEditing(true); setNotice(null); }}>Change</button>
@@ -171,6 +174,9 @@ function ActivityBody({
         <button className={buttonClasses({ variant: 'secondary', size: 'sm' })} type="button" onClick={onRetry}>Retry</button>
       </div>
     );
+  }
+  if (activity.status === 'not_configured') {
+    return <p className="mt-4 text-sm">Follow Up Boss isn&apos;t set up here, so activity can&apos;t be checked. Saved links are unchanged.</p>;
   }
   if (!link) return <p className="mt-4 text-sm">This customer isn&apos;t linked.</p>;
   if (activity.status === 'unavailable' || activity.status === 'not_requested') {

@@ -685,6 +685,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
           latestAttributedDeal.usedAfc = false;
         } else if (typeof parsed.data.usedAfc === 'boolean') {
           latestAttributedDeal.usedAfc = parsed.data.usedAfc;
+          latestAttributedDeal.usedAfcAtClosing = parsed.data.usedAfc;
         }
       }
       if (mappedDealStatus === 'terminated') {

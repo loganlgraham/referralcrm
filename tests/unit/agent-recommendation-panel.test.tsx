@@ -12,10 +12,12 @@ function rec(id: string, name: string, rank: number): AgentRecommendation {
     score: 70 - rank,
     baseScore: 70 - rank,
     evidenceStrength: rank === 1 ? 'Strong' : 'Limited',
-    coversZip: false,
-    factors: { mc: rate, zip: rate, overall: rate, usedAfc: rate, workload: { active: 2, poolMedian: 2, points: 50 } },
-    excludedOutcomes: 0,
-    fub: { state: 'neutral', reason: 'not_linked' },
+    coverage: 'not_listed',
+    factors: { mc: rate, overall: rate, contract: rate, zip: rate, usedAfc: rate, workload: { active: 2, poolMedian: 2, points: 50 } },
+    excludedOutcomes: rank === 1 ? 3 : 0,
+    unknownLossReasons: rank === 1 ? 3 : 0,
+    afcUnknown: 0,
+    fub: { state: 'neutral', reason: 'paused' },
     reasons: [`${name} reason one`, `${name} reason two`, `${name} reason three`],
   };
 }
@@ -27,12 +29,12 @@ function body(names: string[]): AgentRecommendationResponse {
     policyVersion: 'test',
     state: 'ready',
     generatedAt: '2026-11-19T20:00:00.000Z',
-    inputs: { mcId: 'mc', mcName: 'Karim L', zips: ['80014'], bucket: 'AHA' },
+    inputs: { mcId: 'mc', mcName: 'Karim L', zips: ['80014'], bucket: 'AHA', radiusMiles: null },
     recommendations: names.map((name, index) => rec(`id-${name}`, name, index + 1)),
-    totals: { eligible: names.length, inactive: 0, noZipCoverage: 0, windowStart: '2024-11-19T20:00:00.000Z', resolvedOutcomes: 4, activeOutcomes: 0, excludedOutcomes: 0 },
-    baselines: { overall: 0.3, mc: 0.3, zip: 0.3, usedAfc: 0.8 },
+    totals: { eligible: names.length, inactive: 0, outsideRadius: 0, windowStart: '2024-11-19T20:00:00.000Z', resolvedOutcomes: 4, activeOutcomes: 0, excludedOutcomes: 3, unknownLossReasons: 3 },
+    baselines: { overall: 0.3, mc: 0.3, contract: 0.5, zip: 0.3, usedAfc: 0 },
     workloadMedian: 2,
-    fub: { state: 'not_permitted', linkedAgents: 0, adjustedAgents: 0 },
+    fub: { state: 'paused', linkedAgents: 0, adjustedAgents: 0 },
   };
 }
 
@@ -68,7 +70,17 @@ describe('agent recommendation panel', () => {
     expect(screen.getByText('Strong evidence')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /assign|send|follow up boss/i })).not.toBeInTheDocument();
     expect(screen.getByText('How this was calculated')).toBeInTheDocument();
-    expect(screen.getByText(/Uses Referrio data only/)).toBeInTheDocument();
+    expect(screen.getByText('Uses Referrio data only. Follow Up Boss activity is not part of the score yet.')).toBeInTheDocument();
+    expect(screen.getByText('3 losses with no reason recorded not counted.')).toBeInTheDocument();
+    expect(screen.getByText('Contract')).toBeInTheDocument();
+  });
+
+  it('describes the 15-mile out-of-state scope', async () => {
+    global.fetch = jest.fn(() => respond({ ...body(['Ana', 'Ben']), inputs: { mcId: null, mcName: null, zips: ['80107'], bucket: 'AHA_OOS', radiusMiles: 15 } })) as typeof fetch;
+    render(<AgentRecommendationPanel referralId="r1" mcId={null} zips={['80107']} />);
+    await flush();
+    expect(await screen.findByText(/covering an area within 15 miles of 80107/)).toBeInTheDocument();
+    expect(screen.getByText(/ZIP success uses only past referrals in these exact ZIPs/)).toBeInTheDocument();
   });
 
   it('refreshes when the MC or ZIP changes', async () => {

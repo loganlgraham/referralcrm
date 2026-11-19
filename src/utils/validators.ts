@@ -200,6 +200,8 @@ export const paymentSchema = z.object({
     .union([z.string().trim().regex(/^[0-9a-fA-F]{24}$/), z.literal(null)])
     .optional(),
   usedAfc: z.boolean().optional(),
+  /** True only when the closing form asked the AFC question and `usedAfc` is that answer. */
+  usedAfcConfirmedAtClosing: z.boolean().optional(),
   usedAssignedAgent: z.boolean().optional(),
   invoiceDate: z.string().optional(),
   paidDate: z.string().optional(),

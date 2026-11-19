@@ -1632,6 +1632,9 @@ export function ReferralDeals({
             : typeof confirmedUsedAfc === 'boolean'
               ? confirmedUsedAfc
               : Boolean(deal.usedAfc);
+        if (deal.side !== 'sell' && typeof confirmedUsedAfc === 'boolean') {
+          patchPayload.usedAfcConfirmedAtClosing = true;
+        }
       }
       if (nextStatus === 'terminated') {
         patchPayload.terminatedReason = resolvedTerminationReason;

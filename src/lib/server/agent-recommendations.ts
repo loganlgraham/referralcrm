@@ -11,6 +11,7 @@ import {
   type FubActivityInput,
   type HistoryReferral,
 } from '@/lib/recommendations/agent-policy';
+import { zipsWithinMiles } from '@/lib/recommendations/nearby-zips';
 import { emptyRecommendationResponse, type AgentRecommendationResponse, type RecommendationFubState } from '@/lib/recommendations/agent-recommendation-response';
 import { fetchStoredAgentActivity } from '@/lib/intelligence/agent-activity';
 import { VERIFIED_FUB_ACCOUNT_ID } from '@/lib/intelligence/access-control';
@@ -72,13 +73,12 @@ export async function buildAgentRecommendations(input: {
 
   const [agentDocs, mcDoc] = await Promise.all([
     bucket
-      ? Agent.find({ ahaDesignation: bucket }).select('name active ahaDesignation zipCoverage coverageLocations').lean<{
+      ? Agent.find({ ahaDesignation: bucket }).select('name active ahaDesignation zipCoverage').lean<{
           _id: Types.ObjectId;
           name?: string;
           active?: boolean;
           ahaDesignation?: string | null;
           zipCoverage?: string[];
-          coverageLocations?: { zipCodes?: string[] }[];
         }[]>()
       : Promise.resolve([]),
     mcId ? LenderMC.findById(mcId).select('name').lean<{ name?: string } | null>() : Promise.resolve(null),
@@ -88,16 +88,18 @@ export async function buildAgentRecommendations(input: {
     name: doc.name ?? 'Unnamed agent',
     active: doc.active !== false,
     ahaDesignation: doc.ahaDesignation ?? null,
-    coveredZips: Array.from(new Set([...(doc.zipCoverage ?? []), ...(doc.coverageLocations ?? []).flatMap((location) => location.zipCodes ?? [])].map((zip) => String(zip).trim()))),
+    coveredZips: Array.from(new Set((doc.zipCoverage ?? []).map((zip) => String(zip).trim()))),
   }));
-  const eligibility = selectEligibleAgents({ org: input.referral.org ?? null, bucket, zips, agents: candidates });
-  const inputs = { mcId: mcDoc ? mcId : null, mcName: mcDoc?.name ?? null, zips, bucket };
+  const radiusMiles = bucket === 'AHA_OOS' ? AGENT_RECOMMENDATION_POLICY.nearbyZipMiles : null;
+  const nearbyZips = radiusMiles === null ? [] : zipsWithinMiles(zips, radiusMiles);
+  const eligibility = selectEligibleAgents({ org: input.referral.org ?? null, bucket, zips, nearbyZips, agents: candidates });
+  const inputs = { mcId: mcDoc ? mcId : null, mcName: mcDoc?.name ?? null, zips, bucket, radiusMiles };
   const effectiveMcId = mcDoc ? mcId : null;
   const start = windowStart(now);
   const totalsBase = {
     eligible: eligibility.eligible.length,
     inactive: eligibility.excluded.inactive,
-    noZipCoverage: eligibility.excluded.noZipCoverage,
+    outsideRadius: eligibility.excluded.outsideRadius,
     windowStart: start.toISOString(),
   };
   if (eligibility.reason !== 'ok') {
@@ -143,8 +145,8 @@ export async function buildAgentRecommendations(input: {
     }[]>();
   const paymentDocs = historyDocs.length
     ? await Payment.find({ referralId: { $in: historyDocs.map((doc) => doc._id) } })
-        .select('referralId agentId side status agentAttribution usedAssignedAgent usedAfc')
-        .lean<{ referralId: Types.ObjectId; agentId?: IdLike; side?: 'buy' | 'sell'; status?: string; agentAttribution?: string | null; usedAssignedAgent?: boolean; usedAfc?: boolean }[]>()
+        .select('referralId agentId side status agentAttribution usedAssignedAgent usedAfcAtClosing')
+        .lean<{ referralId: Types.ObjectId; agentId?: IdLike; side?: 'buy' | 'sell'; status?: string; agentAttribution?: string | null; usedAssignedAgent?: boolean; usedAfcAtClosing?: boolean | null }[]>()
     : [];
   const paymentsByReferral = new Map<string, HistoryReferral['payments']>();
   for (const payment of paymentDocs) {
@@ -157,7 +159,7 @@ export async function buildAgentRecommendations(input: {
         status: payment.status ?? null,
         agentAttribution: payment.agentAttribution ?? null,
         usedAssignedAgent: typeof payment.usedAssignedAgent === 'boolean' ? payment.usedAssignedAgent : null,
-        usedAfc: typeof payment.usedAfc === 'boolean' ? payment.usedAfc : null,
+        usedAfcAtClosing: typeof payment.usedAfcAtClosing === 'boolean' ? payment.usedAfcAtClosing : null,
       },
     ]);
   }
@@ -187,9 +189,12 @@ export async function buildAgentRecommendations(input: {
     for (const id of agents) activeCounts.set(id, (activeCounts.get(id) ?? 0) + 1);
   }
 
-  const fubInput = await readFubActivity({ referralId, eligibleIds: eligibility.eligible.map((agent) => agent.id), permitted: input.fubPermitted });
-  const fub = fubAdjustments(eligibility.eligible.map((agent) => agent.id), fubInput.policy);
-  const result = rankAgents({ candidates: eligibility.eligible, outcomes, activeCounts, mcId: effectiveMcId, zips, fub });
+  const eligibleIdList = eligibility.eligible.map((agent) => agent.id);
+  const fubInput = AGENT_RECOMMENDATION_POLICY.fubContributionEnabled
+    ? await readFubActivity({ referralId, eligibleIds: eligibleIdList, permitted: input.fubPermitted })
+    : PAUSED_FUB;
+  const fub = fubAdjustments(eligibleIdList, fubInput.policy);
+  const result = rankAgents({ candidates: eligibility.eligible, outcomes, activeCounts, mcId: effectiveMcId, zips, nearbyZips, fub });
   const adjustedAgents = result.ranked.filter((entry) => entry.fub.state === 'applied').length;
 
   return {
@@ -205,6 +210,7 @@ export async function buildAgentRecommendations(input: {
       resolvedOutcomes: outcomes.filter((outcome) => outcome.outcome === 'closed' || outcome.outcome === 'not_closed').length,
       activeOutcomes: outcomes.filter((outcome) => outcome.outcome === 'active').length,
       excludedOutcomes: outcomes.filter((outcome) => outcome.outcome === 'excluded').length,
+      unknownLossReasons: outcomes.filter((outcome) => outcome.excludedBecause === 'unknown_loss_reason').length,
     },
     baselines: result.baselines,
     workloadMedian: result.workloadMedian,
@@ -212,11 +218,15 @@ export async function buildAgentRecommendations(input: {
   };
 }
 
-async function readFubActivity(input: { referralId: string; eligibleIds: string[]; permitted: boolean }): Promise<{
+type FubRead = {
   state: RecommendationFubState;
   linkedAgents: number;
   policy: { permitted: boolean; connected: boolean; activity: FubActivityInput };
-}> {
+};
+
+const PAUSED_FUB: FubRead = { state: 'paused', linkedAgents: 0, policy: { permitted: false, connected: false, activity: new Map() } };
+
+async function readFubActivity(input: { referralId: string; eligibleIds: string[]; permitted: boolean }): Promise<FubRead> {
   const activity: FubActivityInput = new Map();
   if (!input.permitted) return { state: 'not_permitted', linkedAgents: 0, policy: { permitted: false, connected: false, activity } };
   const links = await IntelligenceAgentLink.find({

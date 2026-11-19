@@ -238,5 +238,17 @@ describe('intelligence reads', () => {
       remote: { state: 'no_records', officialScoring: false, personId: 38620, latest: null, followUp: null, fubAssignedUser: null, projectedClosings: [], freshness: { readAt: '2026-11-18T17:00:00.000Z', note: 'Read from stored records.' }, detailPath: null },
       agentsDiffer: false,
     }).activity).toEqual({ status: 'no_activity', coverageDetail: null });
+    expect(panelFromRead({
+      participantKey: 'borrower',
+      personId: 38620,
+      referrioAgent: null,
+      remote: { state: 'unavailable', reason: 'not_configured' },
+      agentsDiffer: false,
+    })).toEqual({
+      officialScoring: false,
+      access: 'allowed',
+      link: { personId: 38620, participantKey: 'borrower' },
+      activity: { status: 'not_configured' },
+    });
   });
 });
