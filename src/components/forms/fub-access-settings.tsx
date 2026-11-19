@@ -5,6 +5,7 @@ import { formatDenverDateTime } from '@/lib/intelligence/access-control';
 import { FieldGroup, selectFieldClasses } from '@/components/ui/field-group';
 
 type Organization = 'AFC' | 'AHA';
+const FUB_ORGANIZATION: Organization = 'AHA';
 
 type AccessPage = {
   owner: { id: string; name: string; email: string; assignedAt: string | null };
@@ -15,7 +16,6 @@ type AccessPage = {
     email: string;
     isOwner: boolean;
     disabled: boolean;
-    afc: boolean;
     aha: boolean;
   }>;
   history: Array<{
@@ -66,15 +66,15 @@ export function FubAccessSettings() {
     void load();
   }, [load]);
 
-  async function changeAccess(adminId: string, organization: Organization, access: boolean) {
-    const key = `${adminId}:${organization}`;
+  async function changeAccess(adminId: string, access: boolean) {
+    const key = `${adminId}:${FUB_ORGANIZATION}`;
     setPending(key);
     setMessage(null);
     try {
       const response = await fetch('/api/admin/fub-access', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ userId: adminId, organization, access }),
+        body: JSON.stringify({ userId: adminId, access }),
       });
       const body = (await response.json().catch(() => null)) as { message?: string; error?: string } | null;
       if (!response.ok) {
@@ -122,11 +122,11 @@ function FubAccessControls({
   setSelectedAdminId: (id: string) => void;
   pending: string | null;
   message: string | null;
-  changeAccess: (adminId: string, organization: Organization, access: boolean) => Promise<void>;
+  changeAccess: (adminId: string, access: boolean) => Promise<void>;
 }) {
   const assignableAdmins = useMemo(() => page.admins.filter((admin) => !admin.isOwner && !admin.disabled), [page.admins]);
   const selectedAdmin = assignableAdmins.find((admin) => admin.id === selectedAdminId) ?? assignableAdmins[0] ?? null;
-  const grantedCount = assignableAdmins.filter((admin) => admin.afc || admin.aha).length;
+  const grantedCount = assignableAdmins.filter((admin) => admin.aha).length;
   const history = page.history.slice(0, 5);
 
   return (
@@ -151,20 +151,13 @@ function FubAccessControls({
         </select>
 
         {selectedAdmin ? (
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <div className="mt-3">
             <AccessToggle
-              label="AFC"
-              checked={selectedAdmin.afc}
-              disabled={!page.connection.configured || pending !== null}
-              pending={pending === `${selectedAdmin.id}:AFC`}
-              onChange={(access) => void changeAccess(selectedAdmin.id, 'AFC', access)}
-            />
-            <AccessToggle
-              label="AHA"
+              label="Can view AHA FUB activity"
               checked={selectedAdmin.aha}
               disabled={!page.connection.configured || pending !== null}
-              pending={pending === `${selectedAdmin.id}:AHA`}
-              onChange={(access) => void changeAccess(selectedAdmin.id, 'AHA', access)}
+              pending={pending === `${selectedAdmin.id}:${FUB_ORGANIZATION}`}
+              onChange={(access) => void changeAccess(selectedAdmin.id, access)}
             />
           </div>
         ) : (
@@ -183,7 +176,7 @@ function FubAccessControls({
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
         <p className="text-foreground-muted">
-          {grantedCount} admin{grantedCount === 1 ? '' : 's'} with FUB visibility
+          {grantedCount} admin{grantedCount === 1 ? '' : 's'} with AHA FUB visibility
         </p>
         {message ? (
           <p className="text-foreground" role="status">
@@ -198,7 +191,7 @@ function FubAccessControls({
           <ul className="mt-2 space-y-1">
             {history.map((entry) => (
               <li key={`${entry.at}:${entry.targetName}:${entry.organization}:${entry.action}`} className="break-words text-sm text-foreground-muted">
-                {formatDenverDateTime(entry.at)} · {entry.organization} {entry.action === 'grant' ? 'granted' : 'revoked'} for {entry.targetName}
+                {formatDenverDateTime(entry.at)} · {entry.action === 'grant' ? 'Granted' : 'Revoked'} AHA for {entry.targetName}
               </li>
             ))}
           </ul>
@@ -224,8 +217,8 @@ function AccessToggle({
   return (
     <label className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
       <span className="min-w-0">
-        <span className="block text-sm font-medium text-foreground">{label}</span>
-        <span className="block text-xs text-foreground-muted">{pending ? 'Saving…' : PERMISSION}</span>
+        <span className="block text-sm font-medium text-foreground">{pending ? 'Saving…' : label}</span>
+        <span className="block text-xs text-foreground-muted">{PERMISSION}</span>
       </span>
       <input
         type="checkbox"

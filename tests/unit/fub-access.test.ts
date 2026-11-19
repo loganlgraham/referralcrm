@@ -50,7 +50,7 @@ function accessInput(overrides: Partial<Parameters<typeof planAccessChange>[0]> 
     actorUserId: OWNER_ID,
     ownerUserId: OWNER_ID,
     target: { id: ADMIN_ID, role: 'admin', status: 'active' as const },
-    organization: 'AFC',
+    organization: 'AHA',
     configuredAccountId: VERIFIED_FUB_ACCOUNT_ID,
     requestedAccess: true,
     current: 'absent' as const,
@@ -144,28 +144,37 @@ describe('account owner bootstrap', () => {
 describe('Follow Up Boss access', () => {
   const grant = { organization: 'AHA' as const, fubAccountId: VERIFIED_FUB_ACCOUNT_ID, userId: ADMIN_ID };
 
-  it('gives the owner both organizations and keeps referral checks', () => {
-    for (const referralOrg of ['AFC', 'AHA'] as const) {
-      expect(authorizeIntelligencePanel({
-        userId: OWNER_ID,
-        role: 'agent',
-        storedRole: 'admin',
-        accountStatus: 'active',
-        isOwner: true,
-        canViewReferral: true,
-        referralOrg,
-        grant: null,
-        configuredAccountId: VERIFIED_FUB_ACCOUNT_ID,
-        verifiedAccountId: VERIFIED_FUB_ACCOUNT_ID,
-      }).ok).toBe(true);
-    }
+  it('gives the owner AHA access only and keeps referral checks', () => {
+    expect(authorizeIntelligencePanel({
+      userId: OWNER_ID,
+      role: 'agent',
+      storedRole: 'admin',
+      accountStatus: 'active',
+      isOwner: true,
+      canViewReferral: true,
+      referralOrg: 'AHA',
+      grant: null,
+      configuredAccountId: VERIFIED_FUB_ACCOUNT_ID,
+      verifiedAccountId: VERIFIED_FUB_ACCOUNT_ID,
+    }).ok).toBe(true);
+    expect(authorizeIntelligencePanel({
+      userId: OWNER_ID,
+      role: 'admin',
+      storedRole: 'admin',
+      isOwner: true,
+      canViewReferral: true,
+      referralOrg: 'AFC',
+      grant: null,
+      configuredAccountId: VERIFIED_FUB_ACCOUNT_ID,
+      verifiedAccountId: VERIFIED_FUB_ACCOUNT_ID,
+    }).reason).toBe('wrong_organization');
     expect(authorizeIntelligencePanel({
       userId: OWNER_ID,
       role: 'admin',
       storedRole: 'admin',
       isOwner: true,
       canViewReferral: false,
-      referralOrg: 'AFC',
+      referralOrg: 'AHA',
       grant: null,
       configuredAccountId: VERIFIED_FUB_ACCOUNT_ID,
       verifiedAccountId: VERIFIED_FUB_ACCOUNT_ID,
@@ -258,10 +267,11 @@ describe('Follow Up Boss access', () => {
     }).reason).toBe('disabled');
   });
 
-  it('grants and revokes one organization without creating a second grant or a duplicate audit', () => {
-    const afc = planAccessChange(accessInput());
-    const aha = planAccessChange(accessInput({ organization: 'AHA', current: 'absent' }));
-    expect(afc.ok && afc.changed && afc.audit.organization).toBe('AFC');
+  it('grants and revokes AHA only without creating a duplicate audit', () => {
+    const afc = planAccessChange(accessInput({ organization: 'AFC' }));
+    const aha = planAccessChange(accessInput({ current: 'absent' }));
+    expect(afc.ok).toBe(false);
+    expect(!afc.ok && afc.reason).toBe('wrong_organization');
     expect(aha.ok && aha.changed && aha.audit.before).toBe('absent');
     expect(planAccessChange(accessInput({ current: 'granted' }))).toEqual({ ok: true, changed: false, dropCache: false });
     const revoked = planAccessChange(accessInput({ requestedAccess: false, current: 'granted' }));
@@ -302,10 +312,11 @@ describe('Follow Up Boss access', () => {
       fubAccountId: '1',
     });
     expect(command).toEqual({ userId: ADMIN_ID, organization: 'AHA', access: true });
+    expect(parseFubAccessCommand({ userId: ADMIN_ID, organization: 'AFC', access: true })).toEqual({ error: 'malformed' });
     expect(parseFubAccessCommand({ userId: 'nope', organization: 'AFC', access: true })).toEqual({ error: 'malformed' });
     expect(fubConnectionSummary(VERIFIED_FUB_ACCOUNT_ID)).toEqual({ configured: true, accountId: VERIFIED_FUB_ACCOUNT_ID, domain: 'americanhomeagents3' });
     expect(fubConnectionSummary('')).toEqual({ configured: false });
-    expect(fubAccessFeedback('AFC', planAccessChange(accessInput()))).toBe('View FUB Intelligence granted for AFC.');
+    expect(fubAccessFeedback('AHA', planAccessChange(accessInput()))).toBe('View FUB Intelligence granted for AHA.');
     expect(fubAccessFeedback('AHA', planAccessChange(accessInput({ actorIsOwner: false })))).toBe('Only the account owner can manage Follow Up Boss access.');
   });
 

@@ -3,6 +3,7 @@ import type { IntelligenceOrg, IntelligenceRole } from '@/lib/intelligence/panel
 export const OWNER_EMAIL = 'logan.graham@americanfinancing.net';
 export const VERIFIED_FUB_ACCOUNT_ID = '1846967076';
 export const VERIFIED_FUB_DOMAIN = 'americanhomeagents3';
+export const VERIFIED_FUB_ORGANIZATION = 'AHA';
 export const PRODUCTION_MONGO_HOST = 'referralcrm.4vy9f98.mongodb.net';
 export const PRODUCTION_MONGO_DATABASE = 'test';
 export const SANDBOX_MONGO_HOST = 'referriosandbox.34q13cy.mongodb.net';
@@ -189,9 +190,9 @@ export function parseFubAccessCommand(body: unknown): { userId: string; organiza
   if (!body || typeof body !== 'object') return { error: 'malformed' };
   const record = body as Record<string, unknown>;
   if (typeof record.userId !== 'string' || !OBJECT_ID.test(record.userId)) return { error: 'malformed' };
-  if (record.organization !== 'AFC' && record.organization !== 'AHA') return { error: 'malformed' };
+  if (record.organization !== undefined && record.organization !== VERIFIED_FUB_ORGANIZATION) return { error: 'malformed' };
   if (typeof record.access !== 'boolean') return { error: 'malformed' };
-  return { userId: record.userId, organization: record.organization, access: record.access };
+  return { userId: record.userId, organization: VERIFIED_FUB_ORGANIZATION, access: record.access };
 }
 
 export function fubConnectionSummary(configuredAccountId: string): { configured: true; accountId: string; domain: string } | { configured: false } {
@@ -215,7 +216,7 @@ export function planAccessChange(input: {
   if (!input.actorIsOwner) return { ok: false, status: 403, reason: 'forbidden' };
   if (!input.configuredAccountId) return { ok: false, status: 409, reason: 'not_configured' };
   if (input.configuredAccountId !== VERIFIED_FUB_ACCOUNT_ID) return { ok: false, status: 403, reason: 'wrong_account' };
-  if (input.organization !== 'AFC' && input.organization !== 'AHA') return { ok: false, status: 400, reason: 'wrong_organization' };
+  if (input.organization !== VERIFIED_FUB_ORGANIZATION) return { ok: false, status: 400, reason: 'wrong_organization' };
   const organization = input.organization;
   if (input.target && input.ownerUserId && input.target.id === input.ownerUserId && !input.requestedAccess) {
     return { ok: false, status: 409, reason: 'owner_protected' };

@@ -1,4 +1,5 @@
 export type IntelligenceOrg = 'AHA' | 'AFC';
+export const REFERRIO_FUB_ORGANIZATION: IntelligenceOrg = 'AHA';
 
 export type IntelligenceRole = 'admin' | 'manager' | 'mc' | 'agent' | 'viewer' | null;
 
@@ -40,7 +41,8 @@ export function authorizeIntelligencePanel(input: {
   if (input.verifiedAccountId !== undefined && input.configuredAccountId !== input.verifiedAccountId) {
     return { ok: false, status: 403, reason: 'wrong_account' };
   }
-  if (input.isOwner && (input.referralOrg === 'AFC' || input.referralOrg === 'AHA')) return { ok: true };
+  if (input.referralOrg !== REFERRIO_FUB_ORGANIZATION) return { ok: false, status: 403, reason: 'wrong_organization' };
+  if (input.isOwner) return { ok: true };
   if (!input.grant || input.grant.userId !== input.userId) return { ok: false, status: 403, reason: 'unmapped' };
   if (input.grant.revokedAt) return { ok: false, status: 403, reason: 'revoked' };
   if (input.grant.organization !== input.referralOrg) return { ok: false, status: 403, reason: 'wrong_organization' };

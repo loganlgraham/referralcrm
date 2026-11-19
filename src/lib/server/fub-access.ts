@@ -2,6 +2,7 @@ import { Types } from 'mongoose';
 import {
   OWNER_EMAIL,
   VERIFIED_FUB_ACCOUNT_ID,
+  VERIFIED_FUB_ORGANIZATION,
   accessRaceResult,
   fubConnectionSummary,
   normalizeEmail,
@@ -124,18 +125,16 @@ export async function readFubAccessPage(actorUserId: string) {
     .toArray();
   const grants = await IntelligenceAccess.find({
     fubAccountId: VERIFIED_FUB_ACCOUNT_ID,
-    organization: { $in: ['AFC', 'AHA'] },
+    organization: VERIFIED_FUB_ORGANIZATION,
   })
     .select('userId organization revokedAt audit')
     .lean<Array<{ userId: Types.ObjectId; organization: FubOrganization; revokedAt?: Date | null; audit?: StoredAudit[] }>>();
-  const accessByUser = new Map<string, { afc: boolean; aha: boolean }>();
-  for (const admin of admins) accessByUser.set(String(admin._id), { afc: false, aha: false });
+  const accessByUser = new Map<string, boolean>();
+  for (const admin of admins) accessByUser.set(String(admin._id), false);
   for (const grant of grants) {
     if (grant.revokedAt) continue;
-    const row = accessByUser.get(String(grant.userId));
-    if (!row) continue;
-    if (grant.organization === 'AFC') row.afc = true;
-    if (grant.organization === 'AHA') row.aha = true;
+    if (!accessByUser.has(String(grant.userId))) continue;
+    accessByUser.set(String(grant.userId), true);
   }
   const names = new Map<string, string>();
   for (const admin of admins) names.set(String(admin._id), displayName(admin));
@@ -172,7 +171,7 @@ export async function readFubAccessPage(actorUserId: string) {
     connection: fubConnectionSummary(process.env.REFERRIO_FUB_ACCOUNT_ID ?? ''),
     admins: admins.map((admin) => {
       const id = String(admin._id);
-      const access = accessByUser.get(id) ?? { afc: false, aha: false };
+      const access = accessByUser.get(id) ?? false;
       const isOwner = id === ownerUserId;
       return {
         id,
@@ -180,8 +179,7 @@ export async function readFubAccessPage(actorUserId: string) {
         email: typeof admin.email === 'string' ? admin.email : '',
         isOwner,
         disabled: storedAccountStatus(admin as StoredFields) !== 'active',
-        afc: isOwner || access.afc,
-        aha: isOwner || access.aha,
+        aha: isOwner || access,
       };
     }),
     history: history.map((entry) => ({
