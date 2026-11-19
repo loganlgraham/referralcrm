@@ -179,7 +179,7 @@ function percent(value: number): string {
 }
 
 function record(successes: number, trials: number): string {
-  return trials === 0 ? 'No record' : `${successes} of ${trials}`;
+  return trials === 0 ? '—' : `${successes}/${trials}`;
 }
 
 function CalculationDetails({ body, shown }: { body: AgentRecommendationResponse | null; shown: AgentRecommendation[] }) {
@@ -222,6 +222,7 @@ function CalculationDetails({ body, shown }: { body: AgentRecommendationResponse
             </tbody>
           </table>
         </div>
+        <p className="text-xs">Closed out of finished referrals (AFC: closed purchases financed with AFC). — means no record yet.</p>
         <p className="break-words">{`Group averages: close rate ${percent(body.baselines.overall)}, with this MC ${percent(body.baselines.mc)}, in these ZIPs ${percent(body.baselines.zip)}, financed with AFC ${percent(body.baselines.usedAfc)}. Typical workload: ${body.workloadMedian ?? 0} active.`}</p>
         <p className="break-words">{fubSentence(body.fub.state, body.fub.adjustedAgents)}</p>
         <ul className="list-disc space-y-1 pl-5">
