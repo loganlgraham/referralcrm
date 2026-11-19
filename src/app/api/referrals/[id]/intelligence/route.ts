@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Types } from 'mongoose';
 import { getCurrentSession } from '@/lib/auth';
-import { VERIFIED_FUB_ACCOUNT_ID, resolveViewerAuthority } from '@/lib/intelligence/access-control';
 import { dropIntelligenceCacheForParticipant, fetchCustomerIntelligence, trustedIntelligenceUrl } from '@/lib/intelligence/remote';
 import { deniedPanel, panelFromRead, savedPanel } from '@/lib/intelligence/panel-response';
-import { agentsDiffer, authorizeIntelligencePanel, participantBelongsToReferral, sameOriginRequest, type IntelligenceOrg } from '@/lib/intelligence/panel';
+import { agentsDiffer, participantBelongsToReferral, sameOriginRequest, type IntelligenceOrg } from '@/lib/intelligence/panel';
 import { connectMongo } from '@/lib/mongoose';
 import { Referral } from '@/models/referral';
 import { canViewReferral } from '@/lib/rbac';
-import { readOwnerUserId } from '@/lib/server/fub-access';
-import { readAccessGrant, readAgentLink, readCustomerLink, writeAgentLink, writeCustomerLink } from '@/lib/server/intelligence-links';
-import { User } from '@/models/user';
+import { authorizeFubViewer } from '@/lib/server/intelligence-viewer';
+import { readAgentLink, readCustomerLink, writeAgentLink, writeCustomerLink } from '@/lib/server/intelligence-links';
 
 interface RouteContext {
   params: { id: string };
@@ -163,40 +161,7 @@ async function loadAuthorized(referralId: string): Promise<
     org: organization,
     assignedAgent: referral.assignedAgent ?? undefined,
   });
-  const userId = session?.user?.id ?? null;
-  const stored = userId && Types.ObjectId.isValid(userId)
-    ? await User.collection.findOne(
-        { _id: new Types.ObjectId(userId) },
-        { projection: { role: 1, disabled: 1, active: 1, status: 1 } },
-      )
-    : null;
-  const viewer = resolveViewerAuthority({
-    sessionUserId: userId,
-    sessionRole: session?.user?.role ?? null,
-    storedUser: stored
-      ? {
-          id: String(stored._id),
-          role: typeof stored.role === 'string' ? stored.role : null,
-          disabled: stored.disabled === true,
-          active: typeof stored.active === 'boolean' ? stored.active : null,
-          status: typeof stored.status === 'string' ? stored.status : null,
-        }
-      : null,
-    ownerUserId: await readOwnerUserId(),
-  });
-  const grant = viewer.userId ? await readAccessGrant({ organization, fubAccountId: accountId, userId: viewer.userId }) : null;
-  const access = authorizeIntelligencePanel({
-    userId: viewer.userId,
-    role: viewer.role,
-    storedRole: viewer.role,
-    accountStatus: viewer.status,
-    isOwner: viewer.isOwner,
-    canViewReferral: canView,
-    referralOrg: organization,
-    grant,
-    configuredAccountId: accountId,
-    verifiedAccountId: VERIFIED_FUB_ACCOUNT_ID,
-  });
+  const { access, userId } = await authorizeFubViewer({ session, organization, accountId, canViewReferral: canView });
   if (!access.ok) return { ok: false, status: access.status, reason: access.reason };
   const agent = referral.assignedAgent && typeof referral.assignedAgent === 'object' && 'name' in referral.assignedAgent
     ? referral.assignedAgent
@@ -206,7 +171,7 @@ async function loadAuthorized(referralId: string): Promise<
     organization,
     accountId,
     referralId,
-    userId: viewer.userId ?? '',
+    userId: userId ?? '',
     agentId: agent?._id ? String(agent._id) : null,
     referrioAgent: agent?.name ?? null,
     secret: process.env.REFERRIO_INTEGRATION_SECRET ?? '',

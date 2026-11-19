@@ -28,6 +28,7 @@ import type { Contact } from '@/components/referrals/contact-assignment';
 import { AdminTasksCard } from '@/components/referrals/admin-tasks-card';
 import { AdminDetailHeader } from '@/components/referrals/admin-referral-detail';
 import { TeamCard } from '@/components/referrals/team-card';
+import { AgentRecommendationPanel } from '@/components/referrals/agent-recommendation-panel';
 import { RailCard, railCardClasses, railTitleClasses } from '@/components/referrals/referral-rail';
 
 type ViewerRole = 'admin' | 'manager' | 'agent' | 'mc' | 'viewer' | string;
@@ -418,6 +419,12 @@ export function ReferralHeader({
     }
     return referral.lookingInZip ?? '';
   }, [referral.lookingInZip, referral.lookingInZips]);
+  const recommendationZips = useMemo(
+    () => locationLabel.split(',').map((zip: string) => zip.trim()).filter((zip: string) => /^\d{5}$/.test(zip)),
+    [locationLabel]
+  );
+  const showAgentRecommendation =
+    (viewerRole === 'admin' || viewerRole === 'manager') && referral.org === 'AHA';
 
   const propertyLabel = useMemo(() => {
     if (effectivePropertyAddress && effectivePropertyAddress.trim().length > 0) {
@@ -911,6 +918,15 @@ export function ReferralHeader({
             showAgentCcField={showAgentCcField}
             showMcCcField={showMcCcField}
           />
+
+          {showAgentRecommendation ? (
+            <AgentRecommendationPanel
+              key={ahaBucket}
+              referralId={String(referral._id)}
+              mcId={effectiveMcContact?.id ?? null}
+              zips={recommendationZips}
+            />
+          ) : null}
 
           {railSlot}
 
