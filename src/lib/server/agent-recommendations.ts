@@ -3,7 +3,7 @@ import {
   AGENT_RECOMMENDATION_POLICY,
   deriveAgentOutcomes,
   fubAdjustments,
-  isActiveReferralStatus,
+  measuredActiveCounts,
   rankAgents,
   selectEligibleAgents,
   windowStart,
@@ -112,11 +112,13 @@ export async function buildAgentRecommendations(input: {
   const currentId = new Types.ObjectId(referralId);
   const agentMatch = [{ assignedAgent: { $in: eligibleIds } }, { buySideAgent: { $in: eligibleIds } }, { sellSideAgent: { $in: eligibleIds } }];
 
-  const [creditedReferralIds, activeDocs] = await Promise.all([
+  const [creditedReferralIds, activeLoad] = await Promise.all([
     Payment.distinct('referralId', { agentId: { $in: eligibleIds } }) as Promise<Types.ObjectId[]>,
     Referral.find({ deletedAt: null, _id: { $ne: currentId }, status: { $in: ACTIVE_STATUS_VALUES }, $or: agentMatch })
       .select('assignedAgent buySideAgent sellSideAgent status')
-      .lean<{ assignedAgent?: IdLike; buySideAgent?: IdLike; sellSideAgent?: IdLike; status?: string }[]>(),
+      .lean<{ assignedAgent?: IdLike; buySideAgent?: IdLike; sellSideAgent?: IdLike; status?: string }[]>()
+      .then((docs) => ({ complete: true as const, docs }))
+      .catch(() => ({ complete: false as const, docs: null })),
   ]);
   const historyDocs = await Referral.find({
     deletedAt: null,
@@ -182,13 +184,18 @@ export async function buildAgentRecommendations(input: {
 
   const eligibleSet = new Set(eligibility.eligible.map((agent) => agent.id));
   const outcomes = deriveAgentOutcomes(history, now).filter((outcome) => eligibleSet.has(outcome.agentId));
-  // Seed every eligible agent at 0 so a missing map entry never means "unknown empty."
-  const activeCounts = new Map<string, number>(eligibility.eligible.map((agent) => [agent.id, 0]));
-  for (const doc of activeDocs) {
-    if (!isActiveReferralStatus(doc.status ?? null)) continue;
-    const agents = new Set([idOf(doc.assignedAgent), idOf(doc.buySideAgent), idOf(doc.sellSideAgent)].filter((id): id is string => id !== null && eligibleSet.has(id)));
-    for (const id of agents) activeCounts.set(id, (activeCounts.get(id) ?? 0) + 1);
-  }
+  const activeCounts = measuredActiveCounts({
+    eligibleIds: eligibility.eligible.map((agent) => agent.id),
+    activeReferrals: activeLoad.complete && activeLoad.docs
+      ? activeLoad.docs.map((doc) => ({
+          status: doc.status ?? null,
+          assignedAgentId: idOf(doc.assignedAgent),
+          buySideAgentId: idOf(doc.buySideAgent),
+          sellSideAgentId: idOf(doc.sellSideAgent),
+        }))
+      : null,
+    complete: activeLoad.complete,
+  });
 
   const eligibleIdList = eligibility.eligible.map((agent) => agent.id);
   const fubInput = AGENT_RECOMMENDATION_POLICY.fubContributionEnabled

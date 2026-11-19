@@ -3,6 +3,7 @@ import {
   compareRecommendations,
   deriveAgentOutcomes,
   fubAdjustments,
+  measuredActiveCounts,
   rankAgents,
   ratePoints,
   referralAnchorDate,
@@ -287,6 +288,24 @@ describe('scoring', () => {
     expect(measuredEmpty!.factors.workload.points).toBeGreaterThan(50);
     expect(unknown.ranked.find((entry) => entry.agentId === 'a')?.reasons.some((reason) => /active referral/.test(reason))).toBe(false);
     expect(measuredEmpty?.reasons.some((reason) => /0 active referral/.test(reason))).toBe(true);
+  });
+
+  it('assigns known zero workload only after a successful complete referral read', () => {
+    const eligibleIds = ['a', 'b'];
+    const rows = [
+      { status: 'Active Lead', assignedAgentId: 'a', buySideAgentId: null, sellSideAgentId: null },
+      { status: 'Paired', assignedAgentId: 'b', buySideAgentId: 'b', sellSideAgentId: null },
+    ];
+    expect(measuredActiveCounts({ eligibleIds, activeReferrals: null, complete: false })).toEqual(new Map());
+    expect(measuredActiveCounts({ eligibleIds, activeReferrals: rows, complete: false })).toEqual(new Map());
+    expect(measuredActiveCounts({ eligibleIds, activeReferrals: rows.slice(0, 1), complete: false })).toEqual(new Map());
+    const completeEmpty = measuredActiveCounts({ eligibleIds, activeReferrals: [], complete: true });
+    expect(completeEmpty.get('a')).toBe(0);
+    expect(completeEmpty.get('b')).toBe(0);
+    expect(completeEmpty.size).toBe(2);
+    const complete = measuredActiveCounts({ eligibleIds, activeReferrals: rows, complete: true });
+    expect(complete.get('a')).toBe(1);
+    expect(complete.get('b')).toBe(1);
   });
 
   it('marks the suggestion provisional when every eligible agent has limited history', () => {

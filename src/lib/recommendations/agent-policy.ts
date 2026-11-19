@@ -185,6 +185,36 @@ export function isActiveReferralStatus(status: string | null): boolean {
   return status !== null && ACTIVE_STATUSES.has(status);
 }
 
+export type ActiveReferralLoadRow = {
+  status: string | null;
+  assignedAgentId: string | null;
+  buySideAgentId: string | null;
+  sellSideAgentId: string | null;
+};
+
+/**
+ * Known active loads require a successful, complete referral read. Failed,
+ * partial, or truncated reads return an empty map so every agent stays
+ * unknown (neutral 50) instead of a confirmed empty load.
+ */
+export function measuredActiveCounts(input: {
+  eligibleIds: readonly string[];
+  activeReferrals: readonly ActiveReferralLoadRow[] | null;
+  complete: boolean;
+}): Map<string, number> {
+  if (!input.complete || input.activeReferrals === null) return new Map();
+  const eligible = new Set(input.eligibleIds);
+  const counts = new Map<string, number>(input.eligibleIds.map((id) => [id, 0]));
+  for (const row of input.activeReferrals) {
+    if (!isActiveReferralStatus(row.status)) continue;
+    const agents = new Set(
+      [row.assignedAgentId, row.buySideAgentId, row.sellSideAgentId].filter((id): id is string => id !== null && eligible.has(id)),
+    );
+    for (const id of agents) counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  return counts;
+}
+
 export type CandidateAgent = {
   id: string;
   name: string;
