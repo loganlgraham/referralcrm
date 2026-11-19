@@ -173,6 +173,9 @@ Notes:
 
 - If `MONGODB_URI` is omitted in development, the app falls back to `mongodb://localhost:27017/referralcrm`.
 - `NEXTAUTH_SECRET` is required for auth/JWT stability.
+- Production data is the Atlas host `referralcrm.4vy9f98.mongodb.net`, database name `test`. That name is the live database. Do not rename or replace it because it is called `test`.
+- The local sandbox is a different Atlas host, `referriosandbox.34q13cy.mongodb.net`, and it also uses the database name `test`. A `.env.local` file points at that sandbox. It is not production. Read production from a clean environment so a shell that already loaded `.env.local` cannot substitute the sandbox.
+- FUB Intelligence account `1846967076` (`americanhomeagents3`) belongs to AHA only. Referrio account ownership does not grant AFC access to that account, and AFC referrals must not request or display this account's Intelligence data.
 
 ### Auth and User Management
 

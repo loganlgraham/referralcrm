@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { Types } from 'mongoose';
 
+import { userRemovalDecision } from '@/lib/intelligence/access-control';
+import { readOwnerUserId } from '@/lib/server/fub-access';
 import { connectMongo } from '@/lib/mongoose';
 import { LenderMC } from '@/models/lender';
 import { User } from '@/models/user';
@@ -174,6 +176,8 @@ export async function DELETE(_request: NextRequest, { params }: Params): Promise
   await Referral.updateMany({ lender: lender._id }, { $unset: { lender: '' } });
 
   if (lender.userId) {
+    const decision = userRemovalDecision(String(lender.userId) === (await readOwnerUserId()));
+    if (!decision.ok) return NextResponse.json({ error: decision.error }, { status: decision.status });
     await User.findByIdAndDelete(lender.userId);
   }
 

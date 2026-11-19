@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth-config';
+import { roleSelectionDecision } from '@/lib/intelligence/access-control';
+import { readOwnerUserId } from '@/lib/server/fub-access';
 import { connectMongo } from '@/lib/mongoose';
 import { User } from '@/models/user';
 import { Agent } from '@/models/agent';
@@ -27,9 +29,12 @@ export async function POST(req: NextRequest) {
     .lean<{ _id: any; role?: string | null; name?: string | null; email: string }>();
   if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-  if (user?.role) {
-    return NextResponse.json({ error: 'Role already set' }, { status: 409 });
-  }
+  const decision = roleSelectionDecision({
+    currentRole: user.role ?? null,
+    requestedRole: role,
+    isOwner: String(user._id) === (await readOwnerUserId()),
+  });
+  if (!decision.ok) return NextResponse.json({ error: decision.error }, { status: decision.status });
 
   await User.updateOne({ _id: user._id }, { $set: { role } });
 
