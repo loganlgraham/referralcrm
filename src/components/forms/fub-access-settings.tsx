@@ -131,22 +131,9 @@ function FubAccessControls({
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 text-sm text-foreground-muted sm:grid-cols-2">
-        <div className="rounded-lg border border-border bg-background-subtle p-3">
-          <p className="font-medium text-foreground">Owner</p>
-          <p className="mt-1 break-words">{page.owner.name}</p>
-        </div>
-        <div className="rounded-lg border border-border bg-background-subtle p-3">
-          <p className="font-medium text-foreground">FUB account</p>
-          <p className="mt-1 break-words">
-            {page.connection.configured ? `${page.connection.domain} (${page.connection.accountId})` : 'Not configured'}
-          </p>
-        </div>
-      </div>
-
       <div className="rounded-xl border border-border p-3">
         <label className="block text-sm font-medium text-foreground" htmlFor="fub-admin-select">
-          Admin
+          Give access to
         </label>
         <select
           id="fub-admin-select"
@@ -183,6 +170,15 @@ function FubAccessControls({
         ) : (
           <p className="mt-3 text-sm text-foreground-muted">Add an active admin before granting FUB visibility.</p>
         )}
+      </div>
+
+      <div className="space-y-1 text-sm text-foreground-muted">
+        <p>
+          Owner: <span className="text-foreground">{page.owner.name}</span>
+        </p>
+        <p>
+          FUB: <span className="text-foreground">{page.connection.configured ? `${page.connection.domain} (${page.connection.accountId})` : 'Not configured'}</span>
+        </p>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
