@@ -445,7 +445,7 @@ export function SettingsForm() {
       <PageHeader
         eyebrow="Administration"
         title="Settings"
-        description="Manage referral fee policies, Follow Up Boss access, reports, and data exports."
+        description="Manage referral fees, FUB access, reports, and exports."
       />
 
       <FubAccessSettings />
