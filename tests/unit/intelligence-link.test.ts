@@ -237,6 +237,6 @@ describe('intelligence reads', () => {
       referrioAgent: null,
       remote: { state: 'no_records', officialScoring: false, personId: 38620, latest: null, followUp: null, fubAssignedUser: null, projectedClosings: [], freshness: { readAt: '2026-11-18T17:00:00.000Z', note: 'Read from stored records.' }, detailPath: null },
       agentsDiffer: false,
-    }).activity).toEqual({ status: 'no_activity' });
+    }).activity).toEqual({ status: 'no_activity', coverageDetail: null });
   });
 });

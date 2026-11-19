@@ -94,4 +94,59 @@ describe('intelligence panel', () => {
     expect(bodies).toEqual([{ participantKey: 'borrower', personId: null }]);
     expect(screen.queryByText('Linked to FUB contact 38620')).not.toBeInTheDocument();
   });
+
+  it('keeps stored activity visible and puts an access failure in coverage details', async () => {
+    global.fetch = jest.fn(async () => jsonResponse({
+      officialScoring: false,
+      access: 'allowed',
+      link: { personId: 38620, participantKey: 'borrower' },
+      activity: {
+        status: 'ready',
+        incomplete: false,
+        latest: { channel: 'text', direction: 'outbound', occurredAt: '2026-11-18T21:46:51.000Z', displayTime: '11/18/2026 2:46 PM' },
+        followUp: { status: 'no_inbound', nextAction: 'No inbound call or text is stored.', detail: 'No inbound call or text is stored.' },
+        fubAssignedUser: { id: 10, name: 'Andrew Landauer' },
+        projectedClosings: [],
+        referrioAgent: 'Weston Martin',
+        agentsDiffer: true,
+        freshnessNote: "Call coverage couldn't load.",
+        coverageDetail: "Call coverage couldn't load. Stored activity is unchanged. This customer's API-visible text read is complete.",
+      },
+    })) as typeof fetch;
+
+    render(<IntelligencePanel referralId="ref-1" />);
+    expect(await screen.findByText('Linked to FUB contact 38620')).toBeInTheDocument();
+    expect(screen.getByText(/Text outbound, 11\/18\/2026 2:46 PM/)).toBeInTheDocument();
+    expect(screen.getByText(/Andrew Landauer \(10\)/)).toBeInTheDocument();
+    expect(screen.getByText("Call coverage couldn't load.")).toBeInTheDocument();
+    expect(screen.queryByText('Some stored activity may be missing.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Call collection is not finished. An API-visible collection is not every real-world call.')).not.toBeInTheDocument();
+    expect(screen.getByText(/This customer's API-visible text read is complete/)).toBeInTheDocument();
+    expect(screen.getByText('Coverage').closest('details')?.hasAttribute('open')).toBe(false);
+  });
+
+  it('shows an unfinished collection separately from an access failure', async () => {
+    global.fetch = jest.fn(async () => jsonResponse({
+      officialScoring: false,
+      access: 'allowed',
+      link: { personId: 38620, participantKey: 'borrower' },
+      activity: {
+        status: 'ready',
+        incomplete: true,
+        latest: { channel: 'text', direction: 'outbound', occurredAt: '2026-11-18T21:46:51.000Z', displayTime: '11/18/2026 2:46 PM' },
+        followUp: { status: 'no_inbound', nextAction: 'No inbound call or text is stored.', detail: 'No inbound call or text is stored.' },
+        fubAssignedUser: { id: 10, name: 'Andrew Landauer' },
+        projectedClosings: [],
+        referrioAgent: null,
+        agentsDiffer: false,
+        freshnessNote: 'Some stored activity may be missing.',
+        coverageDetail: 'Call collection is not finished. An API-visible collection is not every real-world call.',
+      },
+    })) as typeof fetch;
+
+    render(<IntelligencePanel referralId="ref-1" />);
+    expect(await screen.findByText('Some stored activity may be missing.')).toBeInTheDocument();
+    expect(screen.queryByText("Call coverage couldn't load.")).not.toBeInTheDocument();
+    expect(screen.getByText(/Call collection is not finished/)).toBeInTheDocument();
+  });
 });

@@ -10,6 +10,7 @@ export type RemoteCustomer = {
   fubAssignedUser: { id: number; name: string } | null;
   projectedClosings: { dealId: number; stage: string | null; display: string; dateOnly: boolean; projection: true }[];
   freshness: { readAt: string; note: string };
+  coverageDetail?: string | null;
   detailPath: string | null;
 };
 
@@ -121,6 +122,7 @@ export async function fetchCustomerIntelligence(input: {
       fubAssignedUser: payload.fubAssignedUser ?? null,
       projectedClosings: payload.projectedClosings ?? [],
       freshness: payload.freshness ?? { readAt: new Date(nowMs).toISOString(), note: 'Stored read.' },
+      coverageDetail: typeof payload.coverageDetail === 'string' ? payload.coverageDetail : null,
       detailPath: payload.detailPath ?? null,
     };
     cache.set(key, { at: nowMs, value });

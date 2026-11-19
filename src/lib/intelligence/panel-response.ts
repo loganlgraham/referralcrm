@@ -6,7 +6,7 @@ export type PanelActivity =
   | { status: 'not_requested' }
   | { status: 'not_found' }
   | { status: 'unavailable' }
-  | { status: 'no_activity' }
+  | { status: 'no_activity'; coverageDetail: string | null }
   | {
       status: 'ready';
       incomplete: boolean;
@@ -16,6 +16,8 @@ export type PanelActivity =
       projectedClosings: RemoteCustomer['projectedClosings'];
       referrioAgent: string | null;
       agentsDiffer: boolean;
+      freshnessNote: string;
+      coverageDetail: string | null;
     };
 
 export type PanelResponse = {
@@ -67,7 +69,7 @@ export function panelFromRead(input: {
     return { officialScoring: false, access: 'allowed', link, activity: { status: 'not_found' } };
   }
   if (input.remote.state === 'no_records') {
-    return { officialScoring: false, access: 'allowed', link, activity: { status: 'no_activity' } };
+    return { officialScoring: false, access: 'allowed', link, activity: { status: 'no_activity', coverageDetail: input.remote.coverageDetail ?? null } };
   }
   return {
     officialScoring: false,
@@ -82,6 +84,8 @@ export function panelFromRead(input: {
       projectedClosings: input.remote.projectedClosings,
       referrioAgent: input.referrioAgent,
       agentsDiffer: input.agentsDiffer,
+      freshnessNote: input.remote.freshness.note,
+      coverageDetail: input.remote.coverageDetail ?? null,
     },
   };
 }

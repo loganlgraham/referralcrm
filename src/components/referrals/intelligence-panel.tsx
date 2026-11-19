@@ -115,13 +115,13 @@ export function IntelligencePanel({ referralId }: { referralId: string }) {
 
   const showForm = access === 'allowed' && activity.status !== 'unavailable' && (!link || editing);
   return (
-    <section className={railCardClasses} aria-labelledby="intelligence-panel-title">
+    <section className={`${railCardClasses} min-w-0 max-w-full`} aria-labelledby="intelligence-panel-title">
       <h2 id="intelligence-panel-title" className={railTitleClasses}>Customer communication</h2>
       <p className="mt-1 text-sm text-foreground-muted">Stored Follow Up Boss activity for the linked customer.</p>
       <ActivityBody access={access} link={link} activity={activity} onRetry={() => void load(true)} />
       {link ? (
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          <p className="mr-auto text-sm">Linked to FUB contact {link.personId}</p>
+          <p className="mr-auto min-w-0 break-words text-sm">Linked to FUB contact {link.personId}</p>
           <button className={buttonClasses({ variant: 'secondary', size: 'md' })} type="button" disabled={saving} onClick={() => { setDraft(String(link.personId)); setEditing(true); setNotice(null); }}>Change</button>
           <button className={buttonClasses({ variant: 'secondary', size: 'md' })} type="button" disabled={saving} onClick={() => void removeLink()}>Remove</button>
         </div>
@@ -183,15 +183,22 @@ function ActivityBody({
     );
   }
   if (activity.status === 'not_found') return <p className="mt-4 text-sm">This contact isn&apos;t in the stored records.</p>;
-  if (activity.status === 'no_activity') return <p className="mt-4 text-sm">No activity is stored for this contact.</p>;
+  if (activity.status === 'no_activity') {
+    return (
+      <div className="mt-4 min-w-0 text-sm">
+        <p>No activity is stored for this contact.</p>
+        <CoverageDetail detail={activity.coverageDetail} />
+      </div>
+    );
+  }
   return <ReadyActivity activity={activity} />;
 }
 
 function ReadyActivity({ activity }: { activity: Extract<PanelActivity, { status: 'ready' }> }) {
   const latest = activity.latest;
   return (
-    <div className="mt-4 grid gap-3 text-sm">
-      {activity.incomplete ? <p>Some stored activity may be missing.</p> : null}
+    <div className="mt-4 grid min-w-0 gap-3 break-words text-sm">
+      {banner(activity) ? <p>{banner(activity)}</p> : null}
       <p><span className="font-semibold">Latest communication. </span>{latest ? `${label(latest.channel)} ${latest.direction}, ${latest.displayTime}` : 'No occurrence time is stored.'}</p>
       <p><span className="font-semibold">Follow-up. </span>{activity.followUp?.nextAction ?? 'Current follow-up status is unknown.'}</p>
       <p><span className="font-semibold">Referral agent. </span>{activity.referrioAgent ?? 'No referral agent is assigned.'}</p>
@@ -207,7 +214,23 @@ function ReadyActivity({ activity }: { activity: Extract<PanelActivity, { status
           </ul>
         ) : <p>No projected closing is stored.</p>}
       </div>
+      <CoverageDetail detail={activity.coverageDetail} />
     </div>
+  );
+}
+
+function banner(activity: Extract<PanelActivity, { status: 'ready' }>): string | null {
+  if (activity.freshnessNote !== 'Read from stored records.') return activity.freshnessNote;
+  return activity.incomplete ? 'Some stored activity may be missing.' : null;
+}
+
+function CoverageDetail({ detail }: { detail: string | null }) {
+  if (!detail) return null;
+  return (
+    <details className="min-w-0">
+      <summary>Coverage</summary>
+      <p className="mt-1 break-words text-foreground-muted">{detail}</p>
+    </details>
   );
 }
 
