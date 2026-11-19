@@ -1,7 +1,8 @@
 import { createHmac } from 'node:crypto';
+import { getVercelOidcToken } from '@vercel/functions/oidc';
 
 export type RemoteCustomer = {
-  state: 'ready' | 'incomplete' | 'unavailable' | 'no_records';
+  state: 'ready' | 'incomplete' | 'no_records';
   officialScoring: false;
   personId: number;
   latest: { channel: string; direction: string; occurredAt: string; displayTime: string } | null;
@@ -13,7 +14,8 @@ export type RemoteCustomer = {
 };
 
 export type RemoteResult =
-  | { state: 'unavailable'; reason: string }
+  | { state: 'unavailable'; reason: string; upstreamStatus?: number }
+  | { state: 'not_found'; personId: number }
   | RemoteCustomer;
 
 type CacheEntry = { at: number; value: RemoteCustomer };
@@ -56,13 +58,15 @@ export async function fetchCustomerIntelligence(input: {
   fetchImpl?: typeof fetch;
   now?: number;
   timeoutMs?: number;
+  protectionToken?: string | null;
+  fresh?: boolean;
 }): Promise<RemoteResult> {
   const destination = trustedIntelligenceUrl(input.url);
   if (!destination) return { state: 'unavailable', reason: 'not_configured' };
   const key = `${input.organization}:${input.fubAccountId}:${input.referralId}:${input.participantKey}:${input.personId}`;
   const hit = cache.get(key);
   const nowMs = input.now ?? Date.now();
-  if (hit && nowMs - hit.at < CACHE_MS && hit.value.personId === input.personId) return hit.value;
+  if (!input.fresh && hit && nowMs - hit.at < CACHE_MS && hit.value.personId === input.personId) return hit.value;
   const exp = Math.floor(nowMs / 1000) + 60;
   const body = {
     organization: input.organization,
@@ -73,26 +77,41 @@ export async function fetchCustomerIntelligence(input: {
     exp,
   };
   const signature = createHmac('sha256', input.secret).update(canonical(body)).digest('hex');
+  const headers: Record<string, string> = {
+    'content-type': 'application/json',
+    'x-referrio-signature': signature,
+  };
+  const protectionToken = await resolveProtectionToken(input.protectionToken);
+  if (protectionToken) headers['x-vercel-trusted-oidc-idp-token'] = protectionToken;
   const fetchImpl = input.fetchImpl ?? fetch;
   try {
     const response = await fetchImpl(destination, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-referrio-signature': signature },
+      headers,
       body: JSON.stringify(body),
       signal: abortAfter(input.timeoutMs ?? 8_000),
       cache: 'no-store',
       redirect: 'manual',
     });
-    if (response.status >= 300 && response.status < 400) return { state: 'unavailable', reason: 'unavailable' };
-    if (!response.ok) return { state: 'unavailable', reason: response.status === 403 ? 'wrong_scope' : 'unavailable' };
-    const payload = await response.json() as Partial<RemoteCustomer>;
-    if (payload.personId !== input.personId || payload.officialScoring !== false) {
-      return { state: 'unavailable', reason: 'tampered_person' };
+    if (response.status >= 300 && response.status < 400) {
+      return { state: 'unavailable', reason: 'unavailable', upstreamStatus: response.status };
     }
+    const payload = await response.json().catch(() => null) as (Omit<Partial<RemoteCustomer>, 'state'> & { state?: 'ready' | 'incomplete' | 'no_records' | 'unavailable' | 'not_found'; reason?: unknown }) | null;
+    if (!response.ok) {
+      return {
+        state: 'unavailable',
+        reason: upstreamReason(payload, response.status),
+        upstreamStatus: response.status,
+      };
+    }
+    if (!payload || payload.personId !== input.personId || payload.officialScoring !== false) {
+      return { state: 'unavailable', reason: 'tampered_person', upstreamStatus: response.status };
+    }
+    if (payload.state === 'not_found') return { state: 'not_found', personId: input.personId };
     if (payload.state !== 'ready' && payload.state !== 'incomplete' && payload.state !== 'no_records' && payload.state !== 'unavailable') {
-      return { state: 'unavailable', reason: 'malformed' };
+      return { state: 'unavailable', reason: 'malformed', upstreamStatus: response.status };
     }
-    if (payload.state === 'unavailable') return { state: 'unavailable', reason: 'unavailable' };
+    if (payload.state === 'unavailable') return { state: 'unavailable', reason: 'unavailable', upstreamStatus: response.status };
     const value: RemoteCustomer = {
       state: payload.state,
       officialScoring: false,
@@ -120,6 +139,22 @@ function abortAfter(ms: number): AbortSignal {
     }
   }
   return new AbortController().signal;
+}
+
+async function resolveProtectionToken(override: string | null | undefined): Promise<string | null> {
+  if (override !== undefined) return override || null;
+  try {
+    const token = await getVercelOidcToken();
+    return token || null;
+  } catch {
+    return null;
+  }
+}
+
+function upstreamReason(payload: { reason?: unknown } | null, status: number): string {
+  if (typeof payload?.reason === 'string' && payload.reason.length > 0 && payload.reason.length < 80) return payload.reason;
+  if (status === 401 || status === 403) return 'deployment_protection';
+  return 'unavailable';
 }
 
 function canonical(body: { organization: string; fubAccountId: string; referralId: string; participantKey: string; personId: number; exp: number }): string {

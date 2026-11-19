@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { agentsDiffer, authorizeIntelligencePanel, participantBelongsToReferral, reviewIdentitySuggestion, sameOriginRequest } from '@/lib/intelligence/panel';
 import { createMemoryLinks, setAgentLink, setCustomerLink } from '@/lib/intelligence/links';
+import { panelFromRead } from '@/lib/intelligence/panel-response';
 import { clearIntelligenceCache, fetchCustomerIntelligence, trustedIntelligenceUrl } from '@/lib/intelligence/remote';
 
 const base = {
@@ -99,7 +100,7 @@ describe('intelligence reads', () => {
         } as Response;
       },
     });
-    expect(tampered).toEqual({ state: 'unavailable', reason: 'tampered_person' });
+    expect(tampered).toEqual({ state: 'unavailable', reason: 'tampered_person', upstreamStatus: 200 });
     expect(calls).toEqual(['https://intelligence.example/api/integration/referrio/customer']);
     const timedOut = await fetchCustomerIntelligence({
       organization: 'AHA',
@@ -174,5 +175,68 @@ describe('intelligence reads', () => {
     expect(panel.includes('REFERRIO_INTEGRATION_SECRET')).toBe(false);
     expect(panel.includes('SUPABASE_SECRET_KEY')).toBe(false);
     expect(panel.includes('detailHref')).toBe(false);
+    expect(panel.includes('This is not no activity.')).toBe(false);
+    expect(panel.includes('x-vercel-trusted-oidc-idp-token')).toBe(false);
+    expect(remote.includes('x-vercel-trusted-oidc-idp-token')).toBe(true);
+  });
+
+  it('keeps the saved person when the activity read fails and sends the protection token', async () => {
+    const seen: Record<string, string>[] = [];
+    const upstream = await fetchCustomerIntelligence({
+      organization: 'AHA',
+      fubAccountId: '1846967076',
+      referralId: 'ref-1',
+      participantKey: 'borrower',
+      personId: 38620,
+      secret: 'secret',
+      url: 'https://intelligence.example/api/integration/referrio/customer',
+      protectionToken: 'preview-token',
+      fetchImpl: async (_url, init) => {
+        seen.push((init?.headers ?? {}) as Record<string, string>);
+        return { ok: false, status: 401, json: async () => { throw new Error('protection'); } } as Response;
+      },
+    });
+    expect(upstream).toEqual({ state: 'unavailable', reason: 'deployment_protection', upstreamStatus: 401 });
+    expect(seen[0]?.['x-vercel-trusted-oidc-idp-token']).toBe('preview-token');
+    expect(JSON.stringify(seen[0]).includes('secret')).toBe(false);
+    const panel = panelFromRead({
+      participantKey: 'borrower',
+      personId: 38620,
+      referrioAgent: 'Ada',
+      remote: upstream,
+      agentsDiffer: false,
+    });
+    expect(panel.link).toEqual({ personId: 38620, participantKey: 'borrower' });
+    expect(panel.activity).toEqual({ status: 'unavailable' });
+    const missing = await fetchCustomerIntelligence({
+      organization: 'AHA',
+      fubAccountId: '1846967076',
+      referralId: 'ref-1',
+      participantKey: 'borrower',
+      personId: 38620,
+      secret: 'secret',
+      url: 'https://intelligence.example/api/integration/referrio/customer',
+      protectionToken: null,
+      fresh: true,
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        json: async () => ({ state: 'not_found', officialScoring: false, personId: 38620 }),
+      }) as Response,
+    });
+    expect(panelFromRead({
+      participantKey: 'borrower',
+      personId: 38620,
+      referrioAgent: null,
+      remote: missing,
+      agentsDiffer: false,
+    }).activity).toEqual({ status: 'not_found' });
+    expect(panelFromRead({
+      participantKey: 'borrower',
+      personId: 38620,
+      referrioAgent: null,
+      remote: { state: 'no_records', officialScoring: false, personId: 38620, latest: null, followUp: null, fubAssignedUser: null, projectedClosings: [], freshness: { readAt: '2026-11-18T17:00:00.000Z', note: 'Read from stored records.' }, detailPath: null },
+      agentsDiffer: false,
+    }).activity).toEqual({ status: 'no_activity' });
   });
 });
