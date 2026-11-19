@@ -5,12 +5,14 @@ import { LOST_REASON_COUNTS_AGAINST_AGENT, LOST_REASON_VALUES, type LostReason }
  * or feeds an official ranking.
  */
 export const AGENT_RECOMMENDATION_POLICY = {
-  version: 'draft-2026-11-19b',
+  version: 'draft-2026-11-19c',
   officialScoring: false,
   weights: { mc: 0.3, overall: 0.2, contract: 0.15, workload: 0.15, zip: 0.1, usedAfc: 0.1 },
   windowMonths: 24,
   /** Pseudo-referrals pulling a small record toward the pool rate. */
   priorStrength: 10,
+  /** Resolved referrals needed before history is treated as adequate. */
+  minResolvedForEvidence: 5,
   /** Out-of-state agents qualify when a covered ZIP is this close to a referral ZIP. */
   nearbyZipMiles: 15,
   fubContributionEnabled: false,
@@ -242,7 +244,13 @@ export type RateEvidence = {
   applicable: boolean;
 };
 
-export type WorkloadEvidence = { active: number; poolMedian: number; points: number };
+export type WorkloadEvidence = {
+  active: number;
+  poolMedian: number;
+  points: number;
+  /** False when active load was never measured; scores the neutral 50 and is not called empty. */
+  known: boolean;
+};
 
 export type FubAdjustment =
   | { state: 'applied'; points: number; contactedShare: number; assignedPeople: number }
@@ -266,6 +274,10 @@ export type AgentRecommendation = {
   rank: number;
   score: number;
   baseScore: number;
+  /** Weighted rate factors only — no workload — used by the evidence gate. */
+  outcomeScore: number;
+  /** True when resolved eligible referrals meet minResolvedForEvidence. */
+  adequateHistory: boolean;
   evidenceStrength: EvidenceStrength;
   coverage: CoverageMatch;
   factors: {
@@ -284,6 +296,10 @@ export type AgentRecommendation = {
   fub: FubAdjustment;
   reasons: string[];
 };
+
+export function hasAdequateHistory(resolvedTrials: number): boolean {
+  return resolvedTrials >= AGENT_RECOMMENDATION_POLICY.minResolvedForEvidence;
+}
 
 /** Shrink toward the pool rate, so a 1-for-1 record cannot beat solid history. */
 export function shrinkRate(successes: number, trials: number, baseline: number): number {
@@ -384,12 +400,17 @@ export function fubAdjustments(
 export function rankAgents(input: {
   candidates: readonly CandidateAgent[];
   outcomes: readonly AgentOutcome[];
+  /**
+   * Measured active-referral counts. Only agents present in the map have a
+   * known workload; missing entries score the neutral 50 and are not treated
+   * as a confirmed empty load.
+   */
   activeCounts: ReadonlyMap<string, number>;
   mcId: string | null;
   zips: readonly string[];
   nearbyZips?: readonly string[];
   fub: ReadonlyMap<string, FubAdjustment>;
-}): { ranked: AgentRecommendation[]; baselines: Record<RateFactorKey, number>; workloadMedian: number } {
+}): { ranked: AgentRecommendation[]; baselines: Record<RateFactorKey, number>; workloadMedian: number; provisional: boolean } {
   const target = new Set(input.zips);
   const nearby = new Set(input.nearbyZips ?? []);
   const byAgent = new Map<string, AgentOutcome[]>();
@@ -425,26 +446,35 @@ export function rankAgents(input: {
     zip: overallBase,
     usedAfc: pooled(tallies.map((t) => t.usedAfc), 0),
   };
-  const workloadMedian = median(input.candidates.map((agent) => input.activeCounts.get(agent.id) ?? 0));
+  const knownLoads = input.candidates
+    .filter((agent) => input.activeCounts.has(agent.id))
+    .map((agent) => input.activeCounts.get(agent.id) ?? 0);
+  const workloadMedian = median(knownLoads);
   const weights = AGENT_RECOMMENDATION_POLICY.weights;
 
   const scored = tallies.map((t) => {
-    const active = input.activeCounts.get(t.agent.id) ?? 0;
+    const known = input.activeCounts.has(t.agent.id);
+    const active = known ? (input.activeCounts.get(t.agent.id) ?? 0) : 0;
     const factors = {
       mc: rate(t.mc, baselines.mc, input.mcId !== null),
       overall: rate(t.overall, baselines.overall, true),
       contract: rate(t.contract, baselines.contract, true),
       zip: rate(t.zip, baselines.zip, target.size > 0),
       usedAfc: rate(t.usedAfc, baselines.usedAfc, true),
-      workload: { active, poolMedian: workloadMedian, points: workloadPoints(active, workloadMedian) },
+      workload: {
+        active,
+        poolMedian: workloadMedian,
+        points: known ? workloadPoints(active, workloadMedian) : 50,
+        known,
+      },
     };
-    const baseScore =
+    const outcomeScore =
       weights.mc * factors.mc.points +
       weights.overall * factors.overall.points +
       weights.contract * factors.contract.points +
       weights.zip * factors.zip.points +
-      weights.usedAfc * factors.usedAfc.points +
-      weights.workload * factors.workload.points;
+      weights.usedAfc * factors.usedAfc.points;
+    const baseScore = outcomeScore + weights.workload * factors.workload.points;
     const fub: FubAdjustment = input.fub.get(t.agent.id) ?? { state: 'neutral', reason: 'paused' };
     const adjustment = fub.state === 'applied' ? fub.points : 0;
     const coverage: CoverageMatch = t.agent.coveredZips.some((zip) => target.has(zip))
@@ -452,12 +482,15 @@ export function rankAgents(input: {
       : t.agent.coveredZips.some((zip) => nearby.has(zip))
         ? 'nearby'
         : 'not_listed';
+    const adequateHistory = hasAdequateHistory(t.overall.trials);
     return {
       agentId: t.agent.id,
       name: t.agent.name,
       rank: 0,
       score: round1(baseScore + adjustment),
       baseScore: round1(baseScore),
+      outcomeScore: round1(outcomeScore),
+      adequateHistory,
       evidenceStrength: evidenceStrength(t.overall.trials, t.mc.trials, t.zip.trials),
       coverage,
       factors,
@@ -474,14 +507,26 @@ export function rankAgents(input: {
     entry.rank = index + 1;
     entry.reasons = buildReasons(entry, input.zips);
   });
-  return { ranked: scored, baselines, workloadMedian };
+  const provisional = scored.length > 0 && scored.every((entry) => !entry.adequateHistory);
+  return { ranked: scored, baselines, workloadMedian, provisional };
 }
 
-/** Score, then more finished referrals, lighter load, name, and id, so ties never flip. */
+/**
+ * Evidence gate: a limited-history agent is not promoted above an adequately
+ * evidenced eligible agent whose outcomes are comparable or stronger. Workload
+ * alone cannot flip that. Capacity and availability are enforced earlier by
+ * eligibility — blocked agents never enter this list.
+ */
 export function compareRecommendations(a: AgentRecommendation, b: AgentRecommendation): number {
+  if (a.adequateHistory !== b.adequateHistory) {
+    if (a.adequateHistory && a.outcomeScore + 1e-9 >= b.outcomeScore) return -1;
+    if (b.adequateHistory && b.outcomeScore + 1e-9 >= a.outcomeScore) return 1;
+  }
   if (b.score !== a.score) return b.score - a.score;
   if (b.factors.overall.trials !== a.factors.overall.trials) return b.factors.overall.trials - a.factors.overall.trials;
-  if (a.factors.workload.active !== b.factors.workload.active) return a.factors.workload.active - b.factors.workload.active;
+  if (a.factors.workload.known && b.factors.workload.known && a.factors.workload.active !== b.factors.workload.active) {
+    return a.factors.workload.active - b.factors.workload.active;
+  }
   const byName = a.name.localeCompare(b.name, 'en', { sensitivity: 'base' });
   if (byName !== 0) return byName;
   return a.agentId < b.agentId ? -1 : a.agentId > b.agentId ? 1 : 0;
@@ -504,7 +549,9 @@ function buildReasons(entry: AgentRecommendation, zips: readonly string[]): stri
   if (contract.trials > 0) candidates.push({ lift: weights.contract * (contract.points - 50), text: `Reached a contract on ${contract.successes} of ${plural(contract.trials, 'referral')}` });
   if (zip.applicable && zip.trials > 0) candidates.push({ lift: weights.zip * (zip.points - 50), text: `Closed ${zip.successes} of ${zip.trials} finished referrals in ${zips.length === 1 ? `ZIP ${zips[0]}` : 'these ZIPs'}` });
   if (usedAfc.trials > 0) candidates.push({ lift: weights.usedAfc * (usedAfc.points - 50), text: `Clients financed with AFC on ${usedAfc.successes} of ${plural(usedAfc.trials, 'closed purchase')}` });
-  candidates.push({ lift: weights.workload * (workload.points - 50), text: `${plural(workload.active, 'active referral')} right now` });
+  if (workload.known) {
+    candidates.push({ lift: weights.workload * (workload.points - 50), text: `${plural(workload.active, 'active referral')} right now` });
+  }
   if (entry.fub.state === 'applied' && entry.fub.points !== 0) {
     candidates.push({ lift: entry.fub.points, text: `Follow Up Boss shows calls or texts to ${Math.round(entry.fub.contactedShare * 100)}% of assigned contacts` });
   }

@@ -11,9 +11,11 @@ function rec(id: string, name: string, rank: number): AgentRecommendation {
     rank,
     score: 70 - rank,
     baseScore: 70 - rank,
+    outcomeScore: 55 - rank,
+    adequateHistory: rank === 1,
     evidenceStrength: rank === 1 ? 'Strong' : 'Limited',
     coverage: 'not_listed',
-    factors: { mc: rate, overall: rate, contract: rate, zip: rate, usedAfc: rate, workload: { active: 2, poolMedian: 2, points: 50 } },
+    factors: { mc: rate, overall: rate, contract: rate, zip: rate, usedAfc: rate, workload: { active: 2, poolMedian: 2, points: 50, known: true } },
     excludedOutcomes: rank === 1 ? 3 : 0,
     unknownLossReasons: rank === 1 ? 3 : 0,
     afcUnknown: 0,
@@ -22,12 +24,13 @@ function rec(id: string, name: string, rank: number): AgentRecommendation {
   };
 }
 
-function body(names: string[]): AgentRecommendationResponse {
+function body(names: string[], overrides: Partial<AgentRecommendationResponse> = {}): AgentRecommendationResponse {
   return {
     officialScoring: false,
     preview: true,
     policyVersion: 'test',
     state: 'ready',
+    provisional: false,
     generatedAt: '2026-11-19T20:00:00.000Z',
     inputs: { mcId: 'mc', mcName: 'Karim L', zips: ['80014'], bucket: 'AHA', radiusMiles: null },
     recommendations: names.map((name, index) => rec(`id-${name}`, name, index + 1)),
@@ -35,6 +38,7 @@ function body(names: string[]): AgentRecommendationResponse {
     baselines: { overall: 0.3, mc: 0.3, contract: 0.5, zip: 0.3, usedAfc: 0 },
     workloadMedian: 2,
     fub: { state: 'paused', linkedAgents: 0, adjustedAgents: 0 },
+    ...overrides,
   };
 }
 
@@ -135,5 +139,13 @@ describe('agent recommendation panel', () => {
     const { container } = render(<AgentRecommendationPanel referralId="r1" mcId={null} zips={[]} />);
     await flush();
     await waitFor(() => expect(container).toBeEmptyDOMElement());
+  });
+
+  it('explains a provisional suggestion when every agent has limited history', async () => {
+    global.fetch = jest.fn(() => respond(body(['Ana', 'Ben'], { provisional: true }))) as typeof fetch;
+    render(<AgentRecommendationPanel referralId="r1" mcId="mc" zips={['80014']} />);
+    await flush();
+    expect(await screen.findByText(/Provisional suggestion — every eligible agent has limited history/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Choose another agent' })).toBeInTheDocument();
   });
 });

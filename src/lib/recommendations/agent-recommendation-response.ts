@@ -7,6 +7,8 @@ export type AgentRecommendationResponse = {
   preview: true;
   policyVersion: string;
   state: 'ready' | 'not_applicable' | 'needs_bucket' | 'needs_zip' | 'no_candidates' | 'denied' | 'unavailable';
+  /** True when every eligible candidate has limited history (< minResolvedForEvidence). */
+  provisional: boolean;
   generatedAt: string;
   inputs: { mcId: string | null; mcName: string | null; zips: string[]; bucket: 'AHA' | 'AHA_OOS' | null; radiusMiles: number | null };
   recommendations: AgentRecommendation[];
@@ -31,6 +33,7 @@ export function emptyRecommendationResponse(state: AgentRecommendationResponse['
     preview: true,
     policyVersion,
     state,
+    provisional: false,
     generatedAt: new Date().toISOString(),
     inputs: { mcId: null, mcName: null, zips: [], bucket: null, radiusMiles: null },
     recommendations: [],

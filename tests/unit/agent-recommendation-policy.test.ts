@@ -1,5 +1,6 @@
 import {
   AGENT_RECOMMENDATION_POLICY,
+  compareRecommendations,
   deriveAgentOutcomes,
   fubAdjustments,
   rankAgents,
@@ -63,14 +64,19 @@ function agent(id: string, overrides: Partial<CandidateAgent> = {}): CandidateAg
 
 const noFub = (ids: string[]) => new Map<string, FubAdjustment>(ids.map((id) => [id, { state: 'neutral', reason: 'paused' }]));
 
-function rank(history: HistoryReferral[], ids: string[], options: { mcId?: string | null; zips?: string[] } = {}) {
+function rank(
+  history: HistoryReferral[],
+  ids: string[],
+  options: { mcId?: string | null; zips?: string[]; activeCounts?: Map<string, number>; candidates?: CandidateAgent[] } = {},
+) {
+  const candidates = options.candidates ?? ids.map((id) => agent(id));
   return rankAgents({
-    candidates: ids.map((id) => agent(id)),
+    candidates,
     outcomes: deriveAgentOutcomes(history, NOW),
-    activeCounts: new Map(),
+    activeCounts: options.activeCounts ?? new Map(),
     mcId: options.mcId === undefined ? MC : options.mcId,
     zips: options.zips ?? ['80014'],
-    fub: noFub(ids),
+    fub: noFub(candidates.map((entry) => entry.id)),
   });
 }
 
@@ -232,6 +238,81 @@ describe('scoring', () => {
     expect(lucky?.factors.overall).toMatchObject({ successes: 1, trials: 1 });
     expect(lucky?.evidenceStrength).toBe('Limited');
     expect(result.ranked[0]?.evidenceStrength).toBe('Strong');
+  });
+
+  it('does not let workload alone promote limited history over adequate history with stronger outcomes', () => {
+    const thinId = 'thin';
+    const solidId = 'solid';
+    // Pool shaped like the preview case: many average closers, one 1-for-1 with an
+    // empty load, and one 9-for-9 with a heavy load.
+    const history = [
+      ...worked(thinId, 1, 1),
+      ...worked(solidId, 9, 9),
+      ...worked('peer-a', 8, 7),
+      ...worked('peer-b', 8, 7),
+      ...worked('peer-c', 8, 6),
+    ];
+    const activeCounts = new Map([
+      [thinId, 0],
+      [solidId, 12],
+      ['peer-a', 4],
+      ['peer-b', 4],
+      ['peer-c', 3],
+    ]);
+    const result = rank(history, [thinId, solidId, 'peer-a', 'peer-b', 'peer-c'], { activeCounts, mcId: null });
+    const thin = result.ranked.find((entry) => entry.agentId === thinId)!;
+    const solid = result.ranked.find((entry) => entry.agentId === solidId)!;
+    expect(thin.adequateHistory).toBe(false);
+    expect(solid.adequateHistory).toBe(true);
+    expect(thin.factors.overall).toMatchObject({ successes: 1, trials: 1 });
+    expect(solid.factors.overall).toMatchObject({ successes: 9, trials: 9 });
+    expect(thin.factors.workload).toMatchObject({ active: 0, known: true });
+    expect(solid.factors.workload).toMatchObject({ active: 12, known: true });
+    expect(solid.outcomeScore).toBeGreaterThanOrEqual(thin.outcomeScore);
+    expect(thin.factors.workload.points).toBeGreaterThan(solid.factors.workload.points);
+    // Even if the empty-load boost made the limited agent’s full score higher, the gate keeps solid first.
+    expect(compareRecommendations({ ...thin, score: solid.score + 5 }, solid)).toBeGreaterThan(0);
+    expect(result.ranked[0]?.agentId).toBe(solidId);
+    expect(result.ranked.map((entry) => entry.agentId)).toContain(thinId);
+    expect(result.provisional).toBe(false);
+  });
+
+  it('does not treat a missing workload measurement as a confirmed empty load', () => {
+    const history = [...worked('a', 6, 3), ...worked('peer', 6, 3)];
+    const unknown = rank(history, ['a', 'peer']);
+    const empty = rank(history, ['a', 'peer'], { activeCounts: new Map([['a', 0], ['peer', 4]]) });
+    expect(unknown.ranked.find((entry) => entry.agentId === 'a')?.factors.workload).toMatchObject({ known: false, points: 50, active: 0 });
+    const measuredEmpty = empty.ranked.find((entry) => entry.agentId === 'a');
+    expect(measuredEmpty?.factors.workload).toMatchObject({ known: true, active: 0 });
+    expect(measuredEmpty!.factors.workload.points).toBeGreaterThan(50);
+    expect(unknown.ranked.find((entry) => entry.agentId === 'a')?.reasons.some((reason) => /active referral/.test(reason))).toBe(false);
+    expect(measuredEmpty?.reasons.some((reason) => /0 active referral/.test(reason))).toBe(true);
+  });
+
+  it('marks the suggestion provisional when every eligible agent has limited history', () => {
+    const history = [...worked('a', 1, 1), ...worked('b', 2, 1), ...worked('c', 3, 2)];
+    const result = rank(history, ['a', 'b', 'c'], { activeCounts: new Map([['a', 0], ['b', 1], ['c', 2]]) });
+    expect(result.ranked.every((entry) => !entry.adequateHistory)).toBe(true);
+    expect(result.provisional).toBe(true);
+    expect(result.ranked[0]?.evidenceStrength).toBe('Limited');
+  });
+
+  it('keeps inactive agents out even when their history would otherwise win', () => {
+    const history = [...worked('blocked', 20, 18), ...worked('open', 6, 3)];
+    const eligibility = selectEligibleAgents({
+      org: 'AHA',
+      bucket: 'AHA',
+      zips: [],
+      nearbyZips: [],
+      agents: [agent('blocked', { active: false }), agent('open')],
+    });
+    expect(eligibility.eligible.map((entry) => entry.id)).toEqual(['open']);
+    const result = rank(history, [], {
+      candidates: eligibility.eligible,
+      activeCounts: new Map([['open', 2]]),
+    });
+    expect(result.ranked.map((entry) => entry.agentId)).toEqual(['open']);
+    expect(result.ranked.some((entry) => entry.agentId === 'blocked')).toBe(false);
   });
 
   it('keeps MC history prominent', () => {

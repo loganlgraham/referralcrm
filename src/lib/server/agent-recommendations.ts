@@ -182,7 +182,8 @@ export async function buildAgentRecommendations(input: {
 
   const eligibleSet = new Set(eligibility.eligible.map((agent) => agent.id));
   const outcomes = deriveAgentOutcomes(history, now).filter((outcome) => eligibleSet.has(outcome.agentId));
-  const activeCounts = new Map<string, number>();
+  // Seed every eligible agent at 0 so a missing map entry never means "unknown empty."
+  const activeCounts = new Map<string, number>(eligibility.eligible.map((agent) => [agent.id, 0]));
   for (const doc of activeDocs) {
     if (!isActiveReferralStatus(doc.status ?? null)) continue;
     const agents = new Set([idOf(doc.assignedAgent), idOf(doc.buySideAgent), idOf(doc.sellSideAgent)].filter((id): id is string => id !== null && eligibleSet.has(id)));
@@ -202,6 +203,7 @@ export async function buildAgentRecommendations(input: {
     preview: true,
     policyVersion: version,
     state: 'ready',
+    provisional: result.provisional,
     generatedAt: now.toISOString(),
     inputs,
     recommendations: result.ranked.slice(0, RETURNED_AGENTS),

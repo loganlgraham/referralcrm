@@ -54,6 +54,11 @@ export function AgentRecommendationPanel({ referralId, mcId, zips }: { referralI
         <span className={metaPillClasses}>Preview</span>
       </div>
       <p className="mt-0.5 text-[13px] text-foreground-subtle">Draft suggestion. It does not assign anyone.</p>
+      {body?.state === 'ready' && body.provisional ? (
+        <p className="mt-1 text-xs text-foreground-subtle" role="note">
+          Provisional suggestion — every eligible agent has limited history (fewer than {AGENT_RECOMMENDATION_POLICY.minResolvedForEvidence} finished referrals).
+        </p>
+      ) : null}
 
       {load.status === 'loading' ? <p className="mt-4 text-sm">Loading suggestions…</p> : null}
       {load.status === 'error' || body?.state === 'unavailable' ? (
@@ -252,6 +257,8 @@ function CalculationDetails({ body, shown }: { body: AgentRecommendationResponse
           <li>Close rates count finished referrals only: closed versus lost or terminated. Active referrals and projected closings are left out.</li>
           <li>Contract rate counts each referral once from deal records, even if it went under contract more than once. A contract that fell through still counts as reaching contract, but not as a closing.</li>
           <li>{`Small records are pulled toward the group average (${AGENT_RECOMMENDATION_POLICY.priorStrength} referrals' worth), so a 1-for-1 record does not outrank solid history and an agent with no history scores average.`}</li>
+          <li>{`Agents with fewer than ${AGENT_RECOMMENDATION_POLICY.minResolvedForEvidence} finished referrals have limited history. Workload alone cannot put them above an eligible agent with adequate history and comparable or stronger outcomes. Inactive or capacity-blocked agents stay out of the list.`}</li>
+          {body.provisional ? <li>Every eligible agent has limited history, so this suggestion is provisional.</li> : null}
           <li>Losses marked as never reached, already had an agent, not qualified, no longer buying, out of area, already bought, or bad contact info are not counted against the agent. Losses with no reason recorded are shown but not counted.</li>
           <li>AFC financing counts only answers given on the closing form. Older closings and defaulted answers are unknown and left out.</li>
           <li>A closing or contract goes to the agent on the deal record. Agents who were reassigned away do not get the result.</li>
