@@ -26,6 +26,7 @@ import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/em
 import { renderAgentCloseEmail, renderBorrowerCloseEmail } from '@/lib/email-templates/close-nps';
 import { getReferralAppBaseUrl } from '@/lib/referral-links';
 import { createNPSToken } from '@/lib/server/nps';
+import { normalizeDealPropertyZipInput } from '@/utils/deal-property-zip';
 import {
   deriveReferralStatusFromSides,
   getAgentIdForSide,
@@ -372,7 +373,14 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     if (details) {
       const propertyAddress = details.propertyAddress.trim();
       const propertyCity = details.propertyCity.trim();
-      const propertyPostalCode = details.propertyPostalCode.trim();
+      const normalizedPostalCode = normalizeDealPropertyZipInput(details.propertyPostalCode);
+      if (!normalizedPostalCode.ok || !normalizedPostalCode.zip) {
+        return NextResponse.json(
+          { error: { fieldErrors: { propertyPostalCode: ['Enter a valid property ZIP code.'] } } },
+          { status: 422 }
+        );
+      }
+      const propertyPostalCode = normalizedPostalCode.zip;
       let propertyState = details.propertyState.trim().toUpperCase();
 
       const inferredState = await inferStateFromPostalCode(propertyPostalCode);
@@ -416,6 +424,11 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
             side: underContractSide,
             contractPriceCents: referral.estPurchasePriceCents ?? null,
             usedAfc: underContractUsedAfc,
+            propertyAddress: details ? referral.propertyAddress ?? null : undefined,
+            propertyCity: details ? referral.propertyCity ?? null : undefined,
+            propertyState: details ? referral.propertyState ?? null : undefined,
+            propertyPostalCode: details ? referral.propertyPostalCode ?? null : undefined,
+            propertyPostalCodeSource: details ? 'manual' : undefined,
           },
         }
       );
@@ -437,6 +450,11 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
           usedAfc: underContractUsedAfc,
           underContractDate: new Date(),
           agentId: sideAgentId,
+          propertyAddress: details ? referral.propertyAddress ?? null : null,
+          propertyCity: details ? referral.propertyCity ?? null : null,
+          propertyState: details ? referral.propertyState ?? null : null,
+          propertyPostalCode: details ? referral.propertyPostalCode ?? null : null,
+          propertyPostalCodeSource: details ? 'manual' : null,
         });
         createdDeal = newDeal.toObject();
       }
@@ -453,6 +471,11 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         usedAfc: underContractUsedAfc,
         underContractDate: new Date(),
         agentId: sideAgentId,
+        propertyAddress: details ? referral.propertyAddress ?? null : null,
+        propertyCity: details ? referral.propertyCity ?? null : null,
+        propertyState: details ? referral.propertyState ?? null : null,
+        propertyPostalCode: details ? referral.propertyPostalCode ?? null : null,
+        propertyPostalCodeSource: details ? 'manual' : null,
       });
       createdDeal = newDeal.toObject();
     }

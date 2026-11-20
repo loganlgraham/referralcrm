@@ -233,6 +233,34 @@ describe('Payments POST outside-agent handling', () => {
     });
   });
 
+  it('normalizes a manually entered ZIP+4 when creating a deal', async () => {
+    const referralDoc = makeReferralDoc();
+    mockedReferralFindById.mockResolvedValue(referralDoc);
+
+    const response = await postHandler(
+      makeRequest({
+        referralId: '507f1f77bcf86cd799439011',
+        status: 'under_contract',
+        expectedAmountCents: 190000,
+        receivedAmountCents: 0,
+        usedAssignedAgent: true,
+        usedAfc: true,
+        propertyAddress: '50 Memorial Dr',
+        propertyCity: 'Cambridge',
+        propertyState: 'MA',
+        propertyPostalCode: '02142-1314',
+      })
+    );
+
+    expect(response.status).toBe(201);
+    expect(mockedPaymentCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        propertyPostalCode: '02142',
+        propertyPostalCodeSource: 'manual',
+      })
+    );
+  });
+
   it('rejects terminated status without terminatedReason', async () => {
     const referralDoc = makeReferralDoc();
     mockedReferralFindById.mockResolvedValue(referralDoc);

@@ -50,6 +50,12 @@ const paymentSchema = new Schema(
     },
     netReferralFeePaidCents: { type: Number, default: null },
     propertyAddress: { type: String, default: null },
+    propertyPostalCode: { type: String, default: null },
+    propertyPostalCodeSource: {
+      type: String,
+      enum: ['manual', 'address_extracted', 'address_verified', null],
+      default: null,
+    },
     agentAttribution: {
       type: String,
       enum: ['AHA', 'AHA_OOS', 'OUTSIDE_AGENT'],

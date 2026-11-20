@@ -6,6 +6,10 @@ import {
   REFERRAL_TIMELINE_VALUES
 } from '@/constants/referrals';
 import { DEAL_STATUS_VALUES, TERMINATED_REASON_VALUES } from '@/constants/deals';
+import {
+  DEAL_PROPERTY_ZIP_SOURCE_VALUES,
+  normalizeDealPropertyZipInput,
+} from '@/utils/deal-property-zip';
 
 const zipArraySchema = z
   .array(z.string().trim().regex(/^\d{5}$/))
@@ -186,6 +190,20 @@ export const createLenderNoteSchema = z.object({
 
 const POST_TERMINATION_REFERRAL_STATUSES = ['Active Lead', 'In Communication', 'Lost'] as const;
 
+const dealPropertyPostalCodeSchema = z
+  .union([z.string(), z.null()])
+  .transform((value, ctx) => {
+    const normalized = normalizeDealPropertyZipInput(value);
+    if (!normalized.ok) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Enter a valid 5-digit property ZIP code',
+      });
+      return z.NEVER;
+    }
+    return normalized.zip;
+  });
+
 export const paymentSchema = z.object({
   referralId: z.string().min(1),
   status: z.enum(DEAL_STATUS_VALUES).default('under_contract'),
@@ -213,6 +231,8 @@ export const paymentSchema = z.object({
   contractPriceCents: z.number().int().min(0).nullable().optional(),
   netReferralFeePaidCents: z.number().int().min(0).optional(),
   propertyAddress: z.union([z.string().trim().min(1), z.null()]).optional(),
+  propertyPostalCode: dealPropertyPostalCodeSchema.optional(),
+  propertyPostalCodeSource: z.enum(DEAL_PROPERTY_ZIP_SOURCE_VALUES).nullable().optional(),
   propertyCity: z.union([z.string().trim().min(1), z.null()]).optional(),
   propertyState: z
     .union([
