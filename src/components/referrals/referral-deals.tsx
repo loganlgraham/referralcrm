@@ -87,6 +87,7 @@ type DealUpdatePayload = {
   propertyAddress: string | null;
   propertyCity: string | null;
   propertyState: string | null;
+  propertyPostalCode: string | null;
   agentId: string | null;
   closingDate: string | null;
   underContractDate: string | null;
@@ -164,6 +165,16 @@ const toDateInputValue = (sourceIso?: string | null): string => {
 };
 
 const sanitizeStateInput = (value: string) => value.replace(/[^A-Za-z]/g, '').toUpperCase().slice(0, 2);
+
+const sanitizeZipInput = (value: string) => value.replace(/[^\d-]/g, '').slice(0, 10);
+
+const isValidOptionalZip = (value: string) => !value.trim() || /^\d{5}(?:-\d{4})?$/.test(value.trim());
+
+const formatDealPropertyAddress = (deal: ReferralPayment) => {
+  const stateZip = [deal.propertyState, deal.propertyPostalCode].filter(Boolean).join(' ');
+  const cityLine = [deal.propertyCity, stateZip].filter(Boolean).join(', ');
+  return [deal.propertyAddress, cityLine].filter((part): part is string => Boolean(part?.trim())).join(' · ');
+};
 
 function DealFormSection({ title, className, children }: { title: string; className?: string; children: ReactNode }) {
   return (
@@ -368,6 +379,7 @@ function DealCard({
   const [propertyAddress, setPropertyAddress] = useState(deal.propertyAddress ?? '');
   const [propertyCity, setPropertyCity] = useState(deal.propertyCity ?? '');
   const [propertyState, setPropertyState] = useState(deal.propertyState ?? '');
+  const [propertyPostalCode, setPropertyPostalCode] = useState(deal.propertyPostalCode ?? '');
   const [closingDate, setClosingDate] = useState(deal.closingDate ? deal.closingDate.slice(0, 10) : '');
   const [underContractDate, setUnderContractDate] = useState(deal.underContractDate ? deal.underContractDate.slice(0, 10) : '');
   const [agentId, setAgentId] = useState(deal.agentId ?? deal.agent?.id ?? '');
@@ -404,6 +416,7 @@ function DealCard({
     setPropertyAddress(deal.propertyAddress ?? '');
     setPropertyCity(deal.propertyCity ?? '');
     setPropertyState(deal.propertyState ?? '');
+    setPropertyPostalCode(deal.propertyPostalCode ?? '');
     setClosingDate(deal.closingDate ? deal.closingDate.slice(0, 10) : '');
     setUnderContractDate(deal.underContractDate ? deal.underContractDate.slice(0, 10) : '');
     // Properly handle agentId from either deal.agentId or deal.agent?.id
@@ -590,6 +603,10 @@ function DealCard({
       toast.error('Enter an expected amount or fill price, commission, and referral fee percentages');
       return;
     }
+    if (!isValidOptionalZip(propertyPostalCode)) {
+      toast.error('Enter a valid property ZIP code');
+      return;
+    }
 
     const statusToSend = viewerRole === 'admin' && markPaid ? 'paid' : status;
     let nextReferralStatus: TerminationResolvedStatus | undefined;
@@ -632,6 +649,7 @@ function DealCard({
       propertyAddress: propertyAddress.trim() || null,
       propertyCity: propertyCity.trim() || null,
       propertyState: propertyState.trim().toUpperCase() || null,
+      propertyPostalCode: propertyPostalCode.trim() || null,
       closingDate: closingDateToSend,
       underContractDate: underContractDate ? dateStringToLocalISO(underContractDate) : null,
       // Always include agentId, even if empty (will be converted to null)
@@ -756,6 +774,7 @@ function DealCard({
   };
 
   const dealStatus = (deal.status as DealStatus | undefined) ?? 'under_contract';
+  const propertyDisplay = formatDealPropertyAddress(deal);
   const trackOptions = DEAL_STATUS_VALUES.filter(
     (value) => value === dealStatus || statusOptions.some((option) => option.value === value)
   );
@@ -819,7 +838,7 @@ function DealCard({
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-base font-bold tracking-[-0.01em] text-foreground">
-            {deal.propertyAddress?.trim() || 'No address yet'}
+            {propertyDisplay || 'No address yet'}
           </h3>
           <p className="mt-0.5 text-[13px] text-foreground-muted">{metaItems.join(' · ')}</p>
         </div>
@@ -1055,6 +1074,17 @@ function DealCard({
                 disabled={saving}
               />
             </DealField>
+            <DealField label="ZIP">
+              <input
+                type="text"
+                inputMode="numeric"
+                value={propertyPostalCode}
+                onChange={(event) => setPropertyPostalCode(sanitizeZipInput(event.target.value))}
+                className={inputFieldClasses}
+                placeholder="80202"
+                disabled={saving}
+              />
+            </DealField>
             <DealField label="Agent" className="sm:col-span-2">
               <select
                 value={agentId}
@@ -1196,6 +1226,7 @@ export function ReferralDeals({
   const [propertyAddress, setPropertyAddress] = useState('');
   const [propertyCity, setPropertyCity] = useState('');
   const [propertyState, setPropertyState] = useState('');
+  const [propertyPostalCode, setPropertyPostalCode] = useState('');
   const [closingDate, setClosingDate] = useState('');
   const [underContractDate, setUnderContractDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [agentId, setAgentId] = useState('');
@@ -1454,6 +1485,10 @@ export function ReferralDeals({
       toast.error('Enter an expected amount or fill price, commission, and referral fee percentages');
       return;
     }
+    if (!isValidOptionalZip(propertyPostalCode)) {
+      toast.error('Enter a valid property ZIP code');
+      return;
+    }
 
       if (status === 'terminated' && !terminatedReason) {
         toast.error('Select a termination reason');
@@ -1485,6 +1520,7 @@ export function ReferralDeals({
           propertyAddress: propertyAddress.trim() || null,
           propertyCity: propertyCity.trim() || null,
           propertyState: propertyState.trim().toUpperCase() || null,
+          propertyPostalCode: propertyPostalCode.trim() || null,
           closingDate: closingDateToSend,
           underContractDate: underContractDate ? dateStringToLocalISO(underContractDate) : new Date().toISOString(),
           agentId: agentId || null,
@@ -1515,6 +1551,7 @@ export function ReferralDeals({
           propertyAddress: propertyAddress.trim() || null,
           propertyCity: propertyCity.trim() || null,
           propertyState: propertyState.trim().toUpperCase() || null,
+          propertyPostalCode: propertyPostalCode.trim() || null,
           closingDate: closingDateToSend,
           underContractDate: underContractDate ? dateStringToLocalISO(underContractDate) : new Date().toISOString(),
           agent: agentId ? { id: agentId, name: agents.find((option) => option.id === agentId)?.name ?? null } : null,
@@ -1750,6 +1787,7 @@ export function ReferralDeals({
         propertyAddress: payload.propertyAddress ?? null,
         propertyCity: payload.propertyCity ?? null,
         propertyState: payload.propertyState ?? null,
+        propertyPostalCode: payload.propertyPostalCode ?? null,
         closingDate: patchResult.closingDate ?? payload.closingDate ?? null,
         underContractDate: payload.underContractDate ?? null,
         agentId: updatedAgentId,
@@ -1931,6 +1969,17 @@ export function ReferralDeals({
                 onChange={(event) => setPropertyState(sanitizeStateInput(event.target.value))}
                 className={cn(inputFieldClasses, 'uppercase')}
                 placeholder="ST"
+                disabled={submitting}
+              />
+            </DealField>
+            <DealField label="ZIP">
+              <input
+                type="text"
+                inputMode="numeric"
+                value={propertyPostalCode}
+                onChange={(event) => setPropertyPostalCode(sanitizeZipInput(event.target.value))}
+                className={inputFieldClasses}
+                placeholder="80202"
                 disabled={submitting}
               />
             </DealField>
