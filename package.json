@@ -16,7 +16,8 @@
     "test:e2e": "playwright test",
     "fixture:paired-fub": "tsx scripts/paired-fub-fixture-launcher.ts",
     "seed": "tsx scripts/seed.ts",
-    "send-auto-reminders": "tsx scripts/send-auto-update-reminders.ts"
+    "send-auto-reminders": "tsx scripts/send-auto-update-reminders.ts",
+    "migrate:fee-breakdown-documents": "tsx scripts/migrate-fee-breakdown-documents.ts"
   },
   "dependencies": {
     "@next-auth/mongodb-adapter": "^1.1.1",
