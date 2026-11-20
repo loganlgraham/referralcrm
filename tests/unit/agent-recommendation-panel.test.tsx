@@ -19,6 +19,8 @@ function rec(id: string, name: string, rank: number): AgentRecommendation {
     excludedOutcomes: rank === 1 ? 3 : 0,
     unknownLossReasons: rank === 1 ? 3 : 0,
     afcUnknown: 0,
+    missingOutcomes: rank === 1 ? 3 : 0,
+    outcomeCompleteness: rank === 1 ? 4 / 7 : 1,
     fub: { state: 'neutral', reason: 'paused' },
     reasons: [`${name} reason one`, `${name} reason two`, `${name} reason three`],
   };
@@ -77,7 +79,9 @@ describe('agent recommendation panel', () => {
     expect(screen.getByText('How this was calculated')).toBeInTheDocument();
     expect(screen.getByText('Uses Referrio data only. Follow Up Boss activity is not part of the score yet.')).toBeInTheDocument();
     expect(screen.getByText('3 losses with no reason recorded not counted.')).toBeInTheDocument();
-    expect(screen.getByText('Contract')).toBeInTheDocument();
+    expect(screen.getByText('Contract known')).toBeInTheDocument();
+    expect(screen.getByText(/Close \(finished only\): closed out of finished referrals since 11\/19\/2024/)).toBeInTheDocument();
+    expect(screen.getByText(/Contract known: conversion is ranked only when there are documented contracts and documented failures to reach contract/)).toBeInTheDocument();
   });
 
   it('describes the 15-mile out-of-state scope', async () => {

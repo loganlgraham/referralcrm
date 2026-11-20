@@ -73,8 +73,10 @@ function top(overrides: Partial<AgentRecommendation> = {}): AgentRecommendation 
     excludedOutcomes: 0,
     unknownLossReasons: 0,
     afcUnknown: 0,
+    missingOutcomes: 0,
+    outcomeCompleteness: 1,
     fub: { state: 'neutral', reason: 'paused' },
-    reasons: ['Closed 6 of 8 finished referrals overall', 'Reached a contract on 7 of 8 referrals'],
+    reasons: ['Closed 6 of 8 finished referrals overall', 'Reached a contract on 7 of 8 referrals with known contract results'],
     ...overrides,
   };
 }

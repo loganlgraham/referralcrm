@@ -323,12 +323,18 @@ export type AgentRecommendation = {
   unknownLossReasons: number;
   /** Closed purchases whose AFC answer was not recorded at closing. */
   afcUnknown: number;
+  /** Active or missing-result rows that reduce confidence without lowering performance. */
+  missingOutcomes: number;
+  outcomeCompleteness: number;
   fub: FubAdjustment;
   reasons: string[];
 };
 
-export function hasAdequateHistory(resolvedTrials: number): boolean {
-  return resolvedTrials >= AGENT_RECOMMENDATION_POLICY.minResolvedForEvidence;
+const MODERATE_COMPLETENESS_THRESHOLD = 0.6;
+const STRONG_COMPLETENESS_THRESHOLD = 0.75;
+
+export function hasAdequateHistory(resolvedTrials: number, completeness = 1): boolean {
+  return resolvedTrials >= AGENT_RECOMMENDATION_POLICY.minResolvedForEvidence && completeness >= MODERATE_COMPLETENESS_THRESHOLD;
 }
 
 /** Shrink toward the pool rate, so a 1-for-1 record cannot beat solid history. */
@@ -361,7 +367,7 @@ function median(values: readonly number[]): number {
 type Tally = { successes: number; trials: number };
 
 function rate(tally: Tally, baseline: number, applicable: boolean): RateEvidence {
-  if (!applicable) return { successes: 0, trials: 0, baseline, adjusted: baseline, points: 50, applicable: false };
+  if (!applicable) return { ...tally, baseline, adjusted: baseline, points: 50, applicable: false };
   const adjusted = shrinkRate(tally.successes, tally.trials, baseline);
   return { ...tally, baseline, adjusted, points: ratePoints(adjusted, baseline), applicable: true };
 }
@@ -372,9 +378,14 @@ function pooled(tallies: readonly Tally[], fallback: number): number {
   return tallies.reduce((sum, tally) => sum + tally.successes, 0) / trials;
 }
 
-export function evidenceStrength(overallTrials: number, mcTrials: number, zipTrials: number): EvidenceStrength {
-  if (overallTrials >= 15 && (mcTrials >= 5 || zipTrials >= 5)) return 'Strong';
-  if (overallTrials >= 5) return 'Moderate';
+function outcomeCompleteness(resolvedTrials: number, missingOutcomes: number): number {
+  const total = resolvedTrials + missingOutcomes;
+  return total === 0 ? 1 : resolvedTrials / total;
+}
+
+export function evidenceStrength(overallTrials: number, mcTrials: number, zipTrials: number, completeness = 1): EvidenceStrength {
+  if (overallTrials >= 15 && (mcTrials >= 5 || zipTrials >= 5) && completeness >= STRONG_COMPLETENESS_THRESHOLD) return 'Strong';
+  if (overallTrials >= 5 && completeness >= MODERATE_COMPLETENESS_THRESHOLD) return 'Moderate';
   return 'Limited';
 }
 
@@ -453,15 +464,26 @@ export function rankAgents(input: {
     const contractRows = rows.filter((row) => row.contract !== 'excluded');
     const answers = rows.flatMap((row) => row.afcAnswers);
     const afc = answers.filter((answer): answer is boolean => answer !== null);
+    const unknownLossReasons = rows.filter((row) => row.excludedBecause === 'unknown_loss_reason').length;
+    const missingOutcomes = rows.filter(
+      (row) => row.outcome === 'active' || row.excludedBecause === 'unknown_loss_reason' || row.excludedBecause === 'closed_without_record',
+    ).length;
+    const contract = {
+      successes: contractRows.filter((row) => row.contract === 'contracted').length,
+      trials: contractRows.length,
+    };
+    const contractHasFailure = contract.successes < contract.trials;
     return {
       agent,
       overall: count(resolved),
       mc: count(input.mcId ? resolved.filter((row) => row.lenderId === input.mcId) : []),
       zip: count(resolved.filter((row) => row.zips.some((zip) => target.has(zip)))),
-      contract: { successes: contractRows.filter((row) => row.contract === 'contracted').length, trials: contractRows.length },
+      contract,
+      contractApplicable: contract.trials > 0 && contractHasFailure,
       usedAfc: { successes: afc.filter(Boolean).length, trials: afc.length },
       excluded: rows.filter((row) => row.outcome === 'excluded').length,
-      unknownLossReasons: rows.filter((row) => row.excludedBecause === 'unknown_loss_reason').length,
+      unknownLossReasons,
+      missingOutcomes,
       afcUnknown: answers.length - afc.length,
     };
   });
@@ -472,7 +494,7 @@ export function rankAgents(input: {
   const baselines: Record<RateFactorKey, number> = {
     mc: overallBase,
     overall: overallBase,
-    contract: pooled(tallies.map((t) => t.contract), 0),
+    contract: pooled(tallies.filter((t) => t.contractApplicable).map((t) => t.contract), 0),
     zip: overallBase,
     usedAfc: pooled(tallies.map((t) => t.usedAfc), 0),
   };
@@ -488,7 +510,7 @@ export function rankAgents(input: {
     const factors = {
       mc: rate(t.mc, baselines.mc, input.mcId !== null),
       overall: rate(t.overall, baselines.overall, true),
-      contract: rate(t.contract, baselines.contract, true),
+      contract: rate(t.contract, baselines.contract, t.contractApplicable),
       zip: rate(t.zip, baselines.zip, target.size > 0),
       usedAfc: rate(t.usedAfc, baselines.usedAfc, true),
       workload: {
@@ -498,6 +520,7 @@ export function rankAgents(input: {
         known,
       },
     };
+    const completeness = outcomeCompleteness(t.overall.trials, t.missingOutcomes);
     const outcomeScore =
       weights.mc * factors.mc.points +
       weights.overall * factors.overall.points +
@@ -512,7 +535,7 @@ export function rankAgents(input: {
       : t.agent.coveredZips.some((zip) => nearby.has(zip))
         ? 'nearby'
         : 'not_listed';
-    const adequateHistory = hasAdequateHistory(t.overall.trials);
+    const adequateHistory = hasAdequateHistory(t.overall.trials, completeness);
     return {
       agentId: t.agent.id,
       name: t.agent.name,
@@ -521,12 +544,14 @@ export function rankAgents(input: {
       baseScore: round1(baseScore),
       outcomeScore: round1(outcomeScore),
       adequateHistory,
-      evidenceStrength: evidenceStrength(t.overall.trials, t.mc.trials, t.zip.trials),
+      evidenceStrength: evidenceStrength(t.overall.trials, t.mc.trials, t.zip.trials, completeness),
       coverage,
       factors,
       excludedOutcomes: t.excluded,
       unknownLossReasons: t.unknownLossReasons,
       afcUnknown: t.afcUnknown,
+      missingOutcomes: t.missingOutcomes,
+      outcomeCompleteness: completeness,
       fub,
       reasons: [] as string[],
     } satisfies AgentRecommendation;
@@ -574,9 +599,12 @@ function buildReasons(entry: AgentRecommendation, zips: readonly string[]): stri
   const weights = AGENT_RECOMMENDATION_POLICY.weights;
   const { mc, overall, contract, zip, usedAfc, workload } = entry.factors;
   const candidates: { lift: number; text: string }[] = [];
+  const contractCountReason = !contract.applicable && contract.successes > 0
+    ? plural(contract.successes, 'documented contract')
+    : null;
   if (mc.applicable && mc.trials > 0) candidates.push({ lift: weights.mc * (mc.points - 50), text: `Closed ${mc.successes} of ${mc.trials} finished referrals with this MC` });
   if (overall.trials > 0) candidates.push({ lift: weights.overall * (overall.points - 50), text: `Closed ${overall.successes} of ${overall.trials} finished referrals overall` });
-  if (contract.trials > 0) candidates.push({ lift: weights.contract * (contract.points - 50), text: `Reached a contract on ${contract.successes} of ${plural(contract.trials, 'referral')}` });
+  if (contract.applicable && contract.trials > 0) candidates.push({ lift: weights.contract * (contract.points - 50), text: `Reached a contract on ${contract.successes} of ${plural(contract.trials, 'referral')} with known contract results` });
   if (zip.applicable && zip.trials > 0) candidates.push({ lift: weights.zip * (zip.points - 50), text: `Closed ${zip.successes} of ${zip.trials} finished referrals in ${zips.length === 1 ? `ZIP ${zips[0]}` : 'these ZIPs'}` });
   if (usedAfc.trials > 0) candidates.push({ lift: weights.usedAfc * (usedAfc.points - 50), text: `Clients financed with AFC on ${usedAfc.successes} of ${plural(usedAfc.trials, 'closed purchase')}` });
   if (workload.known) {
@@ -585,9 +613,17 @@ function buildReasons(entry: AgentRecommendation, zips: readonly string[]): stri
   if (entry.fub.state === 'applied' && entry.fub.points !== 0) {
     candidates.push({ lift: entry.fub.points, text: `Follow Up Boss shows calls or texts to ${Math.round(entry.fub.contactedShare * 100)}% of assigned contacts` });
   }
-  const reasons = candidates.sort((a, b) => b.lift - a.lift).slice(0, 3).map((candidate) => candidate.text);
-  if (reasons.length < 3 && entry.coverage === 'exact') reasons.push(`Lists ${zips.length === 1 ? `ZIP ${zips[0]}` : 'a referral ZIP'} in coverage`);
-  if (reasons.length < 3 && entry.coverage === 'nearby') reasons.push(`Covers an area within ${AGENT_RECOMMENDATION_POLICY.nearbyZipMiles} miles`);
-  if (reasons.length < 3 && overall.trials === 0) reasons.push('No finished referrals in the last 24 months yet');
-  return reasons.slice(0, 3);
+  const summaryParts = [
+    overall.successes > 0 && (workload.active > 0 || entry.unknownLossReasons > 0) ? `${overall.successes} closed` : null,
+    workload.known && workload.active > 0 ? `${workload.active} active` : null,
+    entry.unknownLossReasons > 0 ? `${entry.unknownLossReasons} ${entry.unknownLossReasons === 1 ? 'loss' : 'losses'} without a reason` : null,
+  ].filter((part): part is string => part !== null);
+  const reasons = summaryParts.length > 0 ? [summaryParts.join(' · ')] : [];
+  if (contractCountReason) reasons.push(contractCountReason);
+  reasons.push(...candidates.sort((a, b) => b.lift - a.lift).map((candidate) => candidate.text));
+  const uniqueReasons = Array.from(new Set(reasons)).slice(0, 3);
+  if (uniqueReasons.length < 3 && entry.coverage === 'exact') uniqueReasons.push(`Lists ${zips.length === 1 ? `ZIP ${zips[0]}` : 'a referral ZIP'} in coverage`);
+  if (uniqueReasons.length < 3 && entry.coverage === 'nearby') uniqueReasons.push(`Covers an area within ${AGENT_RECOMMENDATION_POLICY.nearbyZipMiles} miles`);
+  if (uniqueReasons.length < 3 && overall.trials === 0) uniqueReasons.push('No finished referrals in the last 24 months yet');
+  return uniqueReasons.slice(0, 3);
 }

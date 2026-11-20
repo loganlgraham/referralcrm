@@ -374,6 +374,61 @@ describe('scoring', () => {
     expect(entry?.excludedOutcomes).toBe(2);
   });
 
+  it('labels Leah-shaped outcome samples without calling them all referrals', () => {
+    const leah = 'leah';
+    const history = [
+      ...Array.from({ length: 8 }, () => closed({ agentId: leah })),
+      referral({
+        assignedAgentId: leah,
+        buySideAgentId: leah,
+        status: 'Closed',
+        lostReason: null,
+        payments: [
+          deal({ agentId: leah, status: 'terminated' }),
+          deal({ agentId: leah, status: 'paid' }),
+        ],
+      }),
+      ...Array.from({ length: 12 }, () => referral({ assignedAgentId: leah, buySideAgentId: leah, status: 'Active Lead', lostReason: null })),
+      ...Array.from({ length: 10 }, () => referral({ assignedAgentId: leah, buySideAgentId: leah, status: 'Lost', lostReason: null })),
+      ...worked('peer', 6, 3),
+    ];
+    const result = rank(history, [leah, 'peer'], { mcId: null, activeCounts: new Map([[leah, 12], ['peer', 0]]) });
+    const entry = result.ranked.find((candidate) => candidate.agentId === leah);
+
+    expect(entry?.factors.overall).toMatchObject({ successes: 9, trials: 9 });
+    expect(entry?.factors.contract).toMatchObject({ successes: 9, trials: 9, points: 50, applicable: false });
+    expect(entry?.unknownLossReasons).toBe(10);
+    expect(entry?.factors.workload).toMatchObject({ active: 12, known: true });
+    expect(entry?.evidenceStrength).toBe('Limited');
+    expect(entry?.adequateHistory).toBe(false);
+    expect(entry?.reasons[0]).toBe('9 closed · 12 active · 10 losses without a reason');
+    expect(entry?.reasons).toContain('Closed 9 of 9 finished referrals overall');
+    expect(entry?.reasons).toContain('9 documented contracts');
+    expect(entry?.reasons).not.toContain('Reached a contract on 9 of 9 referrals');
+  });
+
+  it('withholds contract-rate scoring until there is a documented failure to reach contract', () => {
+    const positiveOnly = rank(
+      Array.from({ length: 6 }, () => referral({ status: 'Active Lead', payments: [deal({ status: 'under_contract', agentId: 'positive' })], assignedAgentId: 'positive' })),
+      ['positive'],
+      { mcId: null, activeCounts: new Map([['positive', 6]]) },
+    ).ranked[0];
+    expect(positiveOnly?.factors.contract).toMatchObject({ successes: 6, trials: 6, applicable: false, points: 50 });
+    expect(positiveOnly?.reasons).toContain('6 documented contracts');
+
+    const withFailures = rank(
+      [
+        ...Array.from({ length: 3 }, () => referral({ status: 'Terminated', lostReason: null, payments: [deal({ status: 'terminated', agentId: 'mixed' })], assignedAgentId: 'mixed' })),
+        ...Array.from({ length: 3 }, () => referral({ assignedAgentId: 'mixed', lostReason: 'chose_other_agent_postcontact' })),
+      ],
+      ['mixed'],
+      { mcId: null },
+    ).ranked[0];
+    expect(withFailures?.factors.contract.applicable).toBe(true);
+    expect(withFailures?.factors.contract).toMatchObject({ successes: 3, trials: 6 });
+    expect(withFailures?.reasons).toContain('Reached a contract on 3 of 6 referrals with known contract results');
+  });
+
   it('rewards contract conversion even when the deal fell through', () => {
     const history = [
       ...Array.from({ length: 6 }, () => ({ ...referral({ status: 'Terminated', lostReason: null, payments: [deal({ status: 'terminated', agentId: 'reached' })] }), assignedAgentId: 'reached' })),
@@ -382,7 +437,7 @@ describe('scoring', () => {
     const result = rank(history, ['reached', 'stalled']);
     const reached = result.ranked.find((entry) => entry.agentId === 'reached');
     expect(reached?.factors.overall).toMatchObject({ successes: 0, trials: 6 });
-    expect(reached?.factors.contract).toMatchObject({ successes: 6, trials: 6 });
+    expect(reached?.factors.contract).toMatchObject({ successes: 6, trials: 6, points: 50, applicable: false });
     expect(result.ranked[0]?.agentId).toBe('reached');
   });
 

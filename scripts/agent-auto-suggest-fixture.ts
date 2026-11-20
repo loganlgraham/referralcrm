@@ -471,7 +471,7 @@ function renderHtml(results: ScenarioResult[]): string {
     <div class="card team" aria-label="Auto-suggested example">
       <div><strong>Buy-side Agent</strong> <span class="badge">Auto-suggested</span></div>
       <div>Fixture Leah</div>
-      <ul class="reasons"><li>Closed 6 of 8 finished referrals overall</li><li>Reached a contract on 7 of 8 referrals</li></ul>
+      <ul class="reasons"><li>Closed 6 of 8 finished referrals overall</li><li>Reached a contract on 7 of 8 referrals with known contract results</li></ul>
     </div>
     <div class="card">
       <table>

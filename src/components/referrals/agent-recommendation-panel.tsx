@@ -260,6 +260,13 @@ function record(successes: number, trials: number): string {
   return trials === 0 ? '—' : `${successes}/${trials}`;
 }
 
+function contractRecord(entry: AgentRecommendation): string {
+  const contract = entry.factors.contract;
+  if (contract.trials === 0) return '—';
+  if (!contract.applicable) return `${contract.successes} known`;
+  return record(contract.successes, contract.trials);
+}
+
 function unknownLossLabel(count: number): string {
   return `${count} ${count === 1 ? 'loss' : 'losses'} with no reason recorded`;
 }
@@ -292,8 +299,8 @@ function CalculationDetails({ body, shown }: { body: AgentRecommendationResponse
               <tr className="text-foreground-subtle">
                 <th className="py-1 pr-2 font-semibold">Agent</th>
                 <th className="py-1 pr-2 font-semibold">MC</th>
-                <th className="py-1 pr-2 font-semibold">Close</th>
-                <th className="py-1 pr-2 font-semibold">Contract</th>
+                <th className="py-1 pr-2 font-semibold">Close finished</th>
+                <th className="py-1 pr-2 font-semibold">Contract known</th>
                 <th className="py-1 pr-2 font-semibold">ZIP</th>
                 <th className="py-1 pr-2 font-semibold">AFC</th>
                 <th className="py-1 pr-2 font-semibold">Active</th>
@@ -306,7 +313,7 @@ function CalculationDetails({ body, shown }: { body: AgentRecommendationResponse
                   <td className="break-words py-1 pr-2">{entry.name}</td>
                   <td className="py-1 pr-2">{entry.factors.mc.applicable ? record(entry.factors.mc.successes, entry.factors.mc.trials) : 'No MC'}</td>
                   <td className="py-1 pr-2">{record(entry.factors.overall.successes, entry.factors.overall.trials)}</td>
-                  <td className="py-1 pr-2">{record(entry.factors.contract.successes, entry.factors.contract.trials)}</td>
+                  <td className="py-1 pr-2">{contractRecord(entry)}</td>
                   <td className="py-1 pr-2">{entry.factors.zip.applicable ? record(entry.factors.zip.successes, entry.factors.zip.trials) : 'No ZIP'}</td>
                   <td className="py-1 pr-2">{record(entry.factors.usedAfc.successes, entry.factors.usedAfc.trials)}</td>
                   <td className="py-1 pr-2">{entry.factors.workload.active}</td>
@@ -316,15 +323,17 @@ function CalculationDetails({ body, shown }: { body: AgentRecommendationResponse
             </tbody>
           </table>
         </div>
-        <p className="text-xs">Close: closed out of finished referrals. Contract: reached a contract out of referrals with a known result. AFC: closed purchases financed with AFC. — means no record yet.</p>
+        <p className="text-xs">
+          {`Close (finished only): closed out of finished referrals since ${windowStart}; active referrals and excused or unknown-reason losses are excluded. Contract known: conversion is ranked only when there are documented contracts and documented failures to reach contract; positive-only contract evidence is shown as a count. Terminated contracts count, duplicate deals on the same referral count once, and active referrals without contract evidence are excluded. AFC: closed purchases financed with AFC. — means no record yet.`}
+        </p>
         {shown.some((entry) => entry.unknownLossReasons > 0) ? (
           <p className="break-words text-xs">{`Losses with no reason recorded, not counted: ${shown.filter((entry) => entry.unknownLossReasons > 0).map((entry) => `${entry.name} ${entry.unknownLossReasons}`).join(', ')}.`}</p>
         ) : null}
-        <p className="break-words">{`Group averages: close rate ${percent(body.baselines.overall)} (also the comparison point for MC and ZIP results), contract rate ${percent(body.baselines.contract)}${body.baselines.usedAfc > 0 ? `, financed with AFC ${percent(body.baselines.usedAfc)}` : ''}. Typical workload: ${body.workloadMedian ?? 0} active.`}</p>
+        <p className="break-words">{`Group averages: close rate ${percent(body.baselines.overall)} (also the comparison point for MC and ZIP results), contract conversion ${percent(body.baselines.contract)} where enough contract outcomes exist${body.baselines.usedAfc > 0 ? `, financed with AFC ${percent(body.baselines.usedAfc)}` : ''}. Typical workload: ${body.workloadMedian ?? 0} active.`}</p>
         <p className="break-words">{fubSentence(body.fub.state, body.fub.adjustedAgents)}</p>
         <ul className="list-disc space-y-1 pl-5">
           <li>Close rates count finished referrals only: closed versus lost or terminated. Active referrals and projected closings are left out.</li>
-          <li>Contract rate counts each referral once from deal records, even if it went under contract more than once. A contract that fell through still counts as reaching contract, but not as a closing.</li>
+          <li>Contract conversion needs both documented contracts and documented failures to reach contract. Missing contract evidence is not a failure, and positive-only contract evidence is shown but scored neutral.</li>
           <li>{`Small records are pulled toward the group average (${AGENT_RECOMMENDATION_POLICY.priorStrength} referrals' worth), so a 1-for-1 record does not outrank solid history and an agent with no history scores average.`}</li>
           <li>{`Agents with fewer than ${AGENT_RECOMMENDATION_POLICY.minResolvedForEvidence} finished referrals have limited history. Workload alone cannot put them above an eligible agent with adequate history and comparable or stronger outcomes. Inactive or capacity-blocked agents stay out of the list.`}</li>
           {body.provisional ? <li>Every eligible agent has limited history, so this suggestion is provisional.</li> : null}
