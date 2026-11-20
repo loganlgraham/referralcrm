@@ -15,7 +15,8 @@
     "test:api": "cross-env NODE_ENV=test TZ=America/Denver jest --config jest.api.config.ts",
     "test:e2e": "playwright test",
     "seed": "tsx scripts/seed.ts",
-    "send-auto-reminders": "tsx scripts/send-auto-update-reminders.ts"
+    "send-auto-reminders": "tsx scripts/send-auto-update-reminders.ts",
+    "migrate:fee-breakdown-documents": "tsx scripts/migrate-fee-breakdown-documents.ts"
   },
   "dependencies": {
     "@next-auth/mongodb-adapter": "^1.1.1",

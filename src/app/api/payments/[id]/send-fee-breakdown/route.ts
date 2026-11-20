@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Types } from 'mongoose';
-import fs from 'fs';
-import path from 'path';
 import { randomBytes } from 'crypto';
 import { addDays } from 'date-fns';
 
@@ -18,6 +16,11 @@ import { FeeBreakdownVerification } from '@/models/fee-breakdown-verification';
 import { buildCcList, getReferralNotificationRecipients } from '@/lib/server/cc-recipients';
 import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
+import {
+  FeeBreakdownDocumentError,
+  loadFeeBreakdownAttachments,
+  type FeeBreakdownAttachment,
+} from '@/lib/server/fee-breakdown-documents';
 
 interface PaymentLean {
   _id: Types.ObjectId;
@@ -208,48 +211,19 @@ export async function POST(
       agentEmail
     );
 
-    // Read and prepare PDF attachments
-    const attachments = [];
+    let attachments: FeeBreakdownAttachment[];
     try {
-      const wiringInstructionsPath = path.join(process.cwd(), 'AHA Commission Wiring Instructions.pdf');
-      const w9Path = path.join(process.cwd(), 'AHA W9 2026.pdf');
-
-      console.log('[Fee Breakdown] Current working directory:', process.cwd());
-      console.log('[Fee Breakdown] Looking for PDFs at:', {
-        wiring: wiringInstructionsPath,
-        w9: w9Path,
-      });
-
-      const wiringExists = fs.existsSync(wiringInstructionsPath);
-      const w9Exists = fs.existsSync(w9Path);
-
-      console.log('[Fee Breakdown] PDF files found:', {
-        wiring: wiringExists,
-        w9: w9Exists,
-      });
-
-      if (wiringExists) {
-        const wiringInstructionsPdf = fs.readFileSync(wiringInstructionsPath);
-        console.log('[Fee Breakdown] Read wiring instructions PDF, size:', wiringInstructionsPdf.length, 'bytes');
-        attachments.push({
-          filename: 'AHA Commission Wiring Instructions.pdf',
-          content: wiringInstructionsPdf,
-        });
-      }
-
-      if (w9Exists) {
-        const w9Pdf = fs.readFileSync(w9Path);
-        console.log('[Fee Breakdown] Read W9 PDF, size:', w9Pdf.length, 'bytes');
-        attachments.push({
-          filename: 'AHA W9 2026.pdf',
-          content: w9Pdf,
-        });
-      }
-
-      console.log('[Fee Breakdown] Attachments prepared:', attachments.length);
+      attachments = await loadFeeBreakdownAttachments();
     } catch (error) {
-      console.error('[Fee Breakdown] Error reading PDF attachments:', error);
-      // Continue without attachments rather than failing the entire email
+      const details = error instanceof Error ? error.message : 'Unknown attachment error';
+      console.error('[Fee Breakdown] Attachments unavailable:', details);
+      return NextResponse.json(
+        {
+          error: 'Fee breakdown attachments unavailable',
+          details: error instanceof FeeBreakdownDocumentError ? details : 'Unable to load fee breakdown attachments',
+        },
+        { status: 503 }
+      );
     }
 
     const actorId = isCronRequest ? 'cron' : (session?.user?.id || 'system');
@@ -308,7 +282,7 @@ export async function POST(
         subject,
         html,
         text,
-        attachments: attachments.length > 0 ? attachments : undefined,
+        attachments,
       });
     } catch (err) {
       sendError = err;
