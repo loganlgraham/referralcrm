@@ -282,4 +282,48 @@ describe('Payments GET role visibility', () => {
     );
     expect(response.body.summary).not.toHaveProperty('totalRevenueCents');
   });
+
+  it('serializes deal property ZIP and provenance fields', async () => {
+    mockedGetCurrentSession.mockResolvedValue({
+      user: { id: 'admin-1', role: 'admin', name: 'Admin User' },
+    } as any);
+    mockedPaymentCountDocuments.mockResolvedValueOnce(1);
+    mockedPaymentFind.mockReturnValueOnce(
+      makeFindQuery([
+        {
+          _id: { toString: () => 'pay-zip-1' },
+          referralId: {
+            _id: { toString: () => 'ref-1' },
+            borrower: { name: 'Borrower One' },
+          },
+          status: 'under_contract',
+          expectedAmountCents: 0,
+          receivedAmountCents: 0,
+          propertyAddress: '50 Memorial Dr',
+          propertyCity: 'Cambridge',
+          propertyState: 'MA',
+          propertyPostalCode: '02142',
+          propertyPostalCodeSource: 'address_extracted',
+          side: 'buy',
+          usedAfc: true,
+          usedAssignedAgent: true,
+        } as any,
+      ])
+    );
+
+    const response = await getHandler(makeRequest(''));
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        items: [
+          expect.objectContaining({
+            _id: 'pay-zip-1',
+            propertyPostalCode: '02142',
+            propertyPostalCodeSource: 'address_extracted',
+          }),
+        ],
+      })
+    );
+  });
 });

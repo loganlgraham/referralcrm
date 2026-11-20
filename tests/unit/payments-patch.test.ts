@@ -248,6 +248,18 @@ describe('Payments PATCH outside-agent normalization', () => {
     expect(mockedCreateAdminNotifications).not.toHaveBeenCalled();
   });
 
+  it('rejects invalid property ZIP values on deal edits', async () => {
+    const response = await patchHandler(
+      makeRequest({
+        id: 'pay-1',
+        propertyPostalCode: '1234',
+      })
+    );
+
+    expect(response.status).toBe(422);
+    expect(mockedPaymentFindByIdAndUpdate).not.toHaveBeenCalled();
+  });
+
   it('notifies admins when an admin moves a deal to under contract', async () => {
     mockedPaymentFindById.mockResolvedValueOnce({
       _id: { toString: () => 'pay-1' },

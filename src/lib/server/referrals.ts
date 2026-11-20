@@ -1108,6 +1108,8 @@ export async function getReferralById(id: string) {
         propertyAddress: payment.propertyAddress ?? null,
         propertyCity: payment.propertyCity ?? null,
         propertyState: payment.propertyState ?? null,
+        propertyPostalCode: payment.propertyPostalCode ?? null,
+        propertyPostalCodeSource: payment.propertyPostalCodeSource ?? null,
         agent:
           payment.agentId
             ? {

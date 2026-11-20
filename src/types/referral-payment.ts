@@ -31,6 +31,8 @@ export interface ReferralPayment {
   propertyAddress?: string | null;
   propertyCity?: string | null;
   propertyState?: string | null;
+  propertyPostalCode?: string | null;
+  propertyPostalCodeSource?: 'manual' | 'address_extracted' | 'address_verified' | null;
   closingDate?: string | null;
   underContractDate?: string | null;
   agent?: { id: string; name: string | null } | null;
