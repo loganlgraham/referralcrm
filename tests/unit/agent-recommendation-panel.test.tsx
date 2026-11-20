@@ -72,6 +72,7 @@ describe('agent recommendation panel', () => {
     expect(alternatives).toHaveTextContent('Cy');
     expect(screen.queryByText('Dee')).not.toBeInTheDocument();
     expect(screen.getByText('Strong evidence')).toBeInTheDocument();
+    expect(screen.getByText(/does not assign anyone on hosted previews/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /assign|send|follow up boss/i })).not.toBeInTheDocument();
     expect(screen.getByText('How this was calculated')).toBeInTheDocument();
     expect(screen.getByText('Uses Referrio data only. Follow Up Boss activity is not part of the score yet.')).toBeInTheDocument();

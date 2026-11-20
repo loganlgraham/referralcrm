@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agent auto-suggest fixture</title>
+  <style>
+    :root { color-scheme: light; font-family: Manrope, system-ui, sans-serif; }
+    body { margin: 0; background: #f6f4ef; color: #1c1917; }
+    main { max-width: 920px; margin: 0 auto; padding: 24px 16px 48px; }
+    h1 { font-size: 1.5rem; margin: 0 0 8px; }
+    p { color: #57534e; }
+    .badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 2px 10px; background: #e7e5e4; font-size: 12px; }
+    .card { background: #fff; border: 1px solid #d6d3d1; border-radius: 12px; padding: 16px; margin-top: 16px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid #e7e5e4; vertical-align: top; }
+    .ok { color: #166534; font-weight: 700; }
+    .bad { color: #b91c1c; font-weight: 700; }
+    .team { display: grid; gap: 8px; }
+    .reasons { margin: 4px 0 0; padding-left: 18px; color: #57534e; font-size: 12px; }
+    @media (max-width: 390px) {
+      main { padding: 12px; }
+      h1 { font-size: 1.2rem; }
+      table { font-size: 12px; }
+      th:nth-child(3), td:nth-child(3) { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Intake auto-suggest fixture</h1>
+    <p>Isolated DB only. Hosted Vercel previews keep automatic assignment disabled.</p>
+    <div class="card team" aria-label="Auto-suggested example">
+      <div><strong>Buy-side Agent</strong> <span class="badge">Auto-suggested</span></div>
+      <div>Fixture Leah</div>
+      <ul class="reasons"><li>Closed 6 of 8 finished referrals overall</li><li>Reached a contract on 7 of 8 referrals</li></ul>
+    </div>
+    <div class="card">
+      <table>
+        <thead><tr><th>Scenario</th><th>Result</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr data-id="aha-apply"><td>AHA intake auto-suggest</td><td class="ok">pass</td><td>outcome=applied source=auto suggestion=applied ranked=ready</td></tr>
+<tr data-id="oos-apply"><td>AHA OOS 15-mile eligibility</td><td class="ok">pass</td><td>outcome=applied agent=6aff93a5185b7febfee07e60 oosAgent=6aff93a5185b7febfee07e60</td></tr>
+<tr data-id="missing-evidence"><td>Missing evidence stays unassigned</td><td class="ok">pass</td><td>outcome=none status=none thin=6aff93a5185b7febfee07e6a</td></tr>
+<tr data-id="duplicate-intake"><td>Duplicate intake does not reset selected agent</td><td class="ok">pass</td><td>dupFound=true outcome=skipped source=manual</td></tr>
+<tr data-id="override-persist"><td>Manual override survives ZIP recalculation</td><td class="ok">pass</td><td>outcome=skipped agent=6aff93a5185b7febfee07e6a source=manual</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Desktop and 390px layouts covered by this page’s responsive CSS.</p>
+  </main>
+</body>
+</html>

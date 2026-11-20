@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { selectFieldClasses } from '@/components/ui/field-group';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/cn';
+import { metaPillClasses } from '@/components/referrals/referral-rail';
 
 interface PaginatedResponse<T> {
   items: T[];
@@ -67,6 +68,12 @@ type AssignmentType = 'agent' | 'mc';
 
 type ViewerRole = 'admin' | 'manager' | 'agent' | 'mc' | 'viewer' | string;
 
+export type AgentSuggestionDisplay = {
+  status?: 'applied' | 'none' | 'skipped' | null;
+  reasons?: string[];
+  agentName?: string | null;
+};
+
 interface Props {
   referralId: string;
   type: AssignmentType;
@@ -77,6 +84,9 @@ interface Props {
   className?: string;
   /** Shown under the empty/pending state (e.g. agent waiting on MC pairing). */
   pendingHelper?: string;
+  /** Intake auto-suggest metadata for the buy-side agent slot. */
+  selectionSource?: 'auto' | 'manual' | null;
+  suggestion?: AgentSuggestionDisplay | null;
 }
 
 const directoryForType: Record<AssignmentType, string> = {
@@ -107,7 +117,9 @@ export function ContactAssignment({
   side,
   onContactChange,
   className,
-  pendingHelper
+  pendingHelper,
+  selectionSource = null,
+  suggestion = null,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [currentContact, setCurrentContact] = useState<Contact | null | undefined>(contact);
@@ -269,7 +281,7 @@ export function ContactAssignment({
       <div className="min-w-0">
           {formattedContact ? (
             <div className="mt-1.5">
-              <div className="flex min-w-0 items-center gap-1">
+              <div className="flex min-w-0 flex-wrap items-center gap-1">
                 {currentContact?.id ? (
                   <Link
                     href={type === 'agent' ? `/agents/${currentContact.id}` : `/lenders/${currentContact.id}`}
@@ -281,7 +293,17 @@ export function ContactAssignment({
                   <p className="min-w-0 break-words text-[15px] font-bold text-foreground">{formattedContact.name}</p>
                 )}
                 <CopyButton value={formattedContact.name} label="Copy name" />
+                {type === 'agent' && selectionSource === 'auto' ? (
+                  <span className={metaPillClasses}>Auto-suggested</span>
+                ) : null}
               </div>
+              {type === 'agent' && selectionSource === 'auto' && suggestion?.reasons && suggestion.reasons.length > 0 ? (
+                <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs text-foreground-muted">
+                  {suggestion.reasons.slice(0, 2).map((reason) => (
+                    <li key={reason} className="break-words">{reason}</li>
+                  ))}
+                </ul>
+              ) : null}
               <div className="mt-[3px] flex flex-col gap-0.5">
                 {formattedContact.email ? (
                   <ContactLine
@@ -308,6 +330,11 @@ export function ContactAssignment({
               <p className="text-sm font-semibold text-foreground-subtle">
                 {type === 'mc' ? 'Pending' : 'Unassigned'}
               </p>
+              {type === 'agent' && suggestion?.status === 'none' ? (
+                <p className="rounded-lg border border-border bg-surface-subtle px-2 py-1.5 text-xs leading-snug text-foreground-muted">
+                  No eligible agent suggestion for this referral yet.
+                </p>
+              ) : null}
               {pendingHelper ? (
                 <p className="rounded-lg border border-primary/20 bg-primary-soft px-2 py-1.5 text-xs leading-snug text-primary">
                   {pendingHelper}

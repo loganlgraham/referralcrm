@@ -80,6 +80,8 @@ export function TeamCard({
               contact={buySideContact}
               canAssign={canAssignBuyAgent}
               onContactChange={onBuySideAgentContactChange}
+              selectionSource={referral.agentSelectionSource ?? null}
+              suggestion={referral.agentSuggestion ?? null}
             />
             <ContactAssignment
               referralId={referralId}
@@ -100,6 +102,8 @@ export function TeamCard({
             onContactChange={
               primarySide === 'sell' ? onSellSideAgentContactChange : onBuySideAgentContactChange
             }
+            selectionSource={primarySide === 'buy' ? referral.agentSelectionSource ?? null : null}
+            suggestion={primarySide === 'buy' ? referral.agentSuggestion ?? null : null}
           />
         )}
         {showMc ? (

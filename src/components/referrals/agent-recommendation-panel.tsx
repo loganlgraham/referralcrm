@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { buttonClasses } from '@/components/ui/button';
 import { metaPillClasses, railCardClasses, railTitleClasses, railTextButtonClasses } from '@/components/referrals/referral-rail';
 import { AGENT_RECOMMENDATION_POLICY, type AgentRecommendation, type EvidenceStrength } from '@/lib/recommendations/agent-policy';
@@ -10,12 +11,32 @@ const REFRESH_DELAY_MS = 250;
 
 type LoadState = { status: 'loading' } | { status: 'error' } | { status: 'done'; body: AgentRecommendationResponse };
 
-export function AgentRecommendationPanel({ referralId, mcId, zips }: { referralId: string; mcId: string | null; zips: readonly string[] }) {
+export function AgentRecommendationPanel({
+  referralId,
+  mcId,
+  zips,
+  selectionSource = null,
+  canPersistAssignment = false,
+  onAssigned,
+}: {
+  referralId: string;
+  mcId: string | null;
+  zips: readonly string[];
+  selectionSource?: 'auto' | 'manual' | null;
+  canPersistAssignment?: boolean;
+  onAssigned?: (agent: { id: string; name: string }) => void;
+}) {
   const [load, setLoad] = useState<LoadState>({ status: 'loading' });
   const [override, setOverride] = useState<string | null>(null);
   const [choosing, setChoosing] = useState(false);
+  const [assigning, setAssigning] = useState(false);
+  const [localSource, setLocalSource] = useState<'auto' | 'manual' | null>(selectionSource);
   const generation = useRef(0);
   const zipKey = zips.join(',');
+
+  useEffect(() => {
+    setLocalSource(selectionSource);
+  }, [selectionSource]);
 
   const fetchSuggestions = useCallback(async () => {
     const current = ++generation.current;
@@ -38,6 +59,30 @@ export function AgentRecommendationPanel({ referralId, mcId, zips }: { referralI
     return () => clearTimeout(timer);
   }, [fetchSuggestions]);
 
+  const persistAssignment = async (agentId: string) => {
+    if (!canPersistAssignment || !agentId) return;
+    setAssigning(true);
+    try {
+      const response = await fetch(`/api/referrals/${referralId}/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId, side: 'buy' }),
+      });
+      if (!response.ok) throw new Error('Unable to save agent selection');
+      const ranked = load.status === 'done' && load.body.state === 'ready' ? load.body.recommendations : [];
+      const chosen = ranked.find((entry) => entry.agentId === agentId);
+      setLocalSource('manual');
+      setOverride(null);
+      onAssigned?.({ id: agentId, name: chosen?.name ?? 'Selected agent' });
+      toast.success(`Assigned ${chosen?.name ?? 'agent'}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Unable to save agent selection');
+    } finally {
+      setAssigning(false);
+      setChoosing(false);
+    }
+  };
+
   const body = load.status === 'done' ? load.body : null;
   const ranked = body?.state === 'ready' ? body.recommendations : [];
   const overrideAgent = override ? ranked.find((entry) => entry.agentId === override) ?? null : null;
@@ -46,6 +91,7 @@ export function AgentRecommendationPanel({ referralId, mcId, zips }: { referralI
 
   const top = ranked[0] ?? null;
   const alternatives = ranked.slice(1, 3);
+  const appliedAuto = localSource === 'auto';
 
   return (
     <section className={`${railCardClasses} min-w-0 max-w-full`} aria-labelledby="agent-recommendation-title" aria-busy={load.status === 'loading'}>
@@ -53,7 +99,13 @@ export function AgentRecommendationPanel({ referralId, mcId, zips }: { referralI
         <h2 id="agent-recommendation-title" className={railTitleClasses}>Suggested agent</h2>
         <span className={metaPillClasses}>Preview</span>
       </div>
-      <p className="mt-0.5 text-[13px] text-foreground-subtle">Draft suggestion. It does not assign anyone.</p>
+      <p className="mt-0.5 text-[13px] text-foreground-subtle">
+        {appliedAuto
+          ? 'Auto-suggested on intake. Choosing another agent saves a manual override.'
+          : canPersistAssignment
+            ? 'Draft suggestion. Choosing another agent assigns them on this referral.'
+            : 'Draft suggestion. It does not assign anyone on hosted previews.'}
+      </p>
       {body?.state === 'ready' && body.provisional ? (
         <p className="mt-1 text-xs text-foreground-subtle" role="note">
           Provisional suggestion — every eligible agent has limited history (fewer than {AGENT_RECOMMENDATION_POLICY.minResolvedForEvidence} finished referrals).
@@ -68,6 +120,9 @@ export function AgentRecommendationPanel({ referralId, mcId, zips }: { referralI
         </div>
       ) : null}
       {body && body.state !== 'ready' && body.state !== 'unavailable' ? <p className="mt-4 text-sm">{emptyMessage(body.state)}</p> : null}
+      {body?.state === 'ready' && !top ? (
+        <p className="mt-4 text-sm">No eligible agent suggestion for this referral yet.</p>
+      ) : null}
 
       {top ? (
         <div className="mt-4 grid min-w-0 gap-3 text-sm">
@@ -75,6 +130,7 @@ export function AgentRecommendationPanel({ referralId, mcId, zips }: { referralI
             <div className="flex flex-wrap items-center gap-2">
               <p className="break-words text-base font-semibold text-foreground">{top.name}</p>
               <EvidenceBadge strength={top.evidenceStrength} />
+              {appliedAuto ? <span className={metaPillClasses}>Auto-suggested</span> : null}
             </div>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-foreground-muted">
               {top.reasons.map((reason) => <li key={reason} className="break-words">{reason}</li>)}
@@ -98,7 +154,7 @@ export function AgentRecommendationPanel({ referralId, mcId, zips }: { referralI
             </div>
           ) : null}
 
-          {overrideAgent ? (
+          {overrideAgent && !canPersistAssignment ? (
             <div className="rounded-md border border-dashed border-border px-3 py-2" role="status">
               <p className="font-semibold">Preview selection — not assigned.</p>
               <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -111,12 +167,18 @@ export function AgentRecommendationPanel({ referralId, mcId, zips }: { referralI
 
           {choosing ? (
             <label className="grid gap-1">
-              <span>Preview a different agent</span>
+              <span>{canPersistAssignment ? 'Choose a different agent' : 'Preview a different agent'}</span>
               <select
                 className="min-w-0 rounded-md border border-border bg-surface px-3 py-2"
                 value={override ?? ''}
+                disabled={assigning}
                 onChange={(event) => {
-                  setOverride(event.target.value || null);
+                  const next = event.target.value || null;
+                  if (canPersistAssignment && next) {
+                    void persistAssignment(next);
+                    return;
+                  }
+                  setOverride(next);
                   setChoosing(false);
                 }}
               >
@@ -128,7 +190,14 @@ export function AgentRecommendationPanel({ referralId, mcId, zips }: { referralI
             </label>
           ) : (
             <div>
-              <button className={buttonClasses({ variant: 'secondary', size: 'md' })} type="button" onClick={() => setChoosing(true)}>Choose another agent</button>
+              <button
+                className={buttonClasses({ variant: 'secondary', size: 'md' })}
+                type="button"
+                disabled={assigning}
+                onClick={() => setChoosing(true)}
+              >
+                Choose another agent
+              </button>
             </div>
           )}
 
