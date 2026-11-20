@@ -8,11 +8,15 @@
  */
 import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
+import crypto from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { Types } from 'mongoose';
 
+process.env.AGENT_AUTO_ASSIGN_FIXTURE_MODE = 'true';
 process.env.ALLOW_AGENT_AUTO_ASSIGN = 'true';
+process.env.RESEND_INBOUND_SECRET = 'fixture-inbound-secret';
+process.env.RESEND_API_KEY = 'fixture-resend-key';
 delete process.env.VERCEL_ENV;
 
 type ScenarioResult = {
@@ -23,6 +27,39 @@ type ScenarioResult = {
 };
 
 type MemoryServer = { getUri: () => string; stop: () => Promise<boolean> };
+
+function signBody(rawBody: string, secret: string): string {
+  return crypto.createHmac('sha256', secret).update(rawBody, 'utf8').digest('hex');
+}
+
+function webhookRequest(rawBody: string): Request {
+  return {
+    headers: {
+      get: (name: string) => (name.toLowerCase() === 'resend-signature'
+        ? signBody(rawBody, process.env.RESEND_INBOUND_SECRET as string)
+        : null),
+    },
+    text: async () => rawBody,
+  } as unknown as Request;
+}
+
+function inboundText(input: {
+  first: string;
+  last: string;
+  email: string;
+  phone: string;
+  zip: string;
+  loan: string;
+}): string {
+  return [
+    `First: ${input.first}`,
+    `Last: ${input.last}`,
+    `BorrowerEmail: ${input.email}`,
+    `Phone: ${input.phone}`,
+    `ZipLookingIn: ${input.zip}`,
+    `LoanNumber: ${input.loan}`,
+  ].join('\n');
+}
 
 async function startIsolatedMongo(): Promise<{ uri: string; stop?: () => Promise<void> }> {
   if (process.env.MONGODB_URI) {
@@ -65,9 +102,10 @@ async function main(): Promise<void> {
   const { Referral } = await import('../src/models/referral');
   const { Agent } = await import('../src/models/agent');
   const { Payment } = await import('../src/models/payment');
-  const { applyIntakeAgentSuggestion, refreshAgentSuggestion, canPersistAutoAgentAssignment } =
+  const { refreshAgentSuggestion, canPersistAutoAgentAssignment } =
     await import('../src/lib/server/agent-auto-suggest');
   const { buildAgentRecommendations } = await import('../src/lib/server/agent-recommendations');
+  const { POST: inboundPost } = await import('../src/app/api/inbound-email/route');
 
   if (!canPersistAutoAgentAssignment()) {
     throw new Error('Fixture requires ALLOW_AGENT_AUTO_ASSIGN=true and VERCEL_ENV !== preview');
@@ -155,116 +193,165 @@ async function main(): Promise<void> {
 
   const results: ScenarioResult[] = [];
 
+  async function createViaInbound(input: {
+    messageId: string;
+    channel: 'AHA' | 'AHA_OOS';
+    first: string;
+    last: string;
+    email: string;
+    phone: string;
+    zip: string;
+    loan: string;
+  }): Promise<{ status: number; body: any; referralId: string | null }> {
+    (globalThis as { fetch?: typeof fetch }).fetch = (async () => ({
+      ok: true,
+      json: async () => ({
+        id: input.messageId,
+        from: 'Fixture <fixture@example.com>',
+        to: [`import+${input.channel === 'AHA_OOS' ? 'ahaoos' : 'aha'}@referrio.app`],
+        subject: input.channel === 'AHA_OOS' ? 'AHA Out of State Agent Needed' : 'Add Contact',
+        text: inboundText(input),
+        attachments: [],
+      }),
+    })) as unknown as typeof fetch;
+
+    const rawBody = JSON.stringify({
+      type: 'email.received',
+      data: { email_id: input.messageId },
+    });
+    const response = await inboundPost(webhookRequest(rawBody) as any);
+    const body = await response.json();
+    return {
+      status: response.status,
+      body,
+      referralId: typeof body?.referralId === 'string' ? body.referralId : null,
+    };
+  }
+
   // AHA apply
-  const aha = await Referral.create({
-    source: 'fixture',
-    clientType: 'Buyer',
-    borrower: { name: 'AHA Intake', email: 'aha-intake@example.com', phone: '303-555-2001' },
-    lookingInZip: '80107',
-    lookingInZips: ['80107'],
-    loanFileNumber: 'FIX-AHA-1',
-    org: 'AHA',
-    ahaBucket: 'AHA',
-    inboundEmail: { messageId: 'fixture-aha-1', channel: 'AHA', routeHint: 'import+aha' },
+  const ahaCreated = await createViaInbound({
+    messageId: 'fixture-aha-1',
+    channel: 'AHA',
+    first: 'AHA',
+    last: 'Intake',
+    email: 'aha-intake@example.com',
+    phone: '303-555-2001',
+    zip: '80107',
+    loan: 'FIX-AHA-1',
   });
-  // Mock ranking for determinism in fixture when history may not score as expected:
+  if (!ahaCreated.referralId) throw new Error(`AHA intake fixture failed: ${JSON.stringify(ahaCreated.body)}`);
+  const aha = await Referral.findById(ahaCreated.referralId).lean();
+  if (!aha) throw new Error('AHA referral missing after inbound create');
   const ranked = await buildAgentRecommendations({
-    referral: aha.toObject(),
+    referral: aha,
     mcOverride: undefined,
     zipOverride: null,
     fubPermitted: false,
   });
-  const applied = await applyIntakeAgentSuggestion(String(aha._id));
   const ahaReload = await Referral.findById(aha._id).lean();
   results.push({
     id: 'aha-apply',
     title: 'AHA intake auto-suggest',
     ok:
-      applied.outcome === 'applied' &&
+      ahaCreated.status === 200 &&
       ahaReload?.agentSelectionSource === 'auto' &&
       ahaReload?.agentSuggestion?.status === 'applied' &&
       String(ahaReload?.buySideAgent) === String(strong._id),
-    detail: `outcome=${applied.outcome} source=${ahaReload?.agentSelectionSource ?? 'null'} suggestion=${ahaReload?.agentSuggestion?.status ?? 'null'} ranked=${ranked.state}`,
+    detail: `status=${ahaCreated.status} source=${ahaReload?.agentSelectionSource ?? 'null'} suggestion=${ahaReload?.agentSuggestion?.status ?? 'null'} ranked=${ranked.state}`,
   });
 
   // AHA OOS 15-mile
-  const oosRef = await Referral.create({
-    source: 'fixture',
-    clientType: 'Buyer',
-    borrower: { name: 'OOS Intake', email: 'oos-intake@example.com', phone: '303-555-2002' },
-    lookingInZip: '80108',
-    lookingInZips: ['80108'],
-    loanFileNumber: 'FIX-OOS-1',
-    org: 'AHA',
-    ahaBucket: 'AHA_OOS',
-    inboundEmail: { messageId: 'fixture-oos-1', channel: 'AHA_OOS', routeHint: 'import+ahaoos' },
+  const oosCreated = await createViaInbound({
+    messageId: 'fixture-oos-1',
+    channel: 'AHA_OOS',
+    first: 'OOS',
+    last: 'Intake',
+    email: 'oos-intake@example.com',
+    phone: '303-555-2002',
+    zip: '80108',
+    loan: 'FIX-OOS-1',
   });
-  const oosApplied = await applyIntakeAgentSuggestion(String(oosRef._id));
-  const oosReload = await Referral.findById(oosRef._id).lean();
+  if (!oosCreated.referralId) throw new Error(`OOS intake fixture failed: ${JSON.stringify(oosCreated.body)}`);
+  const oosReload = await Referral.findById(oosCreated.referralId).lean();
   results.push({
     id: 'oos-apply',
     title: 'AHA OOS 15-mile eligibility',
     ok:
-      oosApplied.outcome === 'applied' &&
+      oosCreated.status === 200 &&
       String(oosReload?.buySideAgent) === String(oos._id) &&
       oosReload?.agentSelectionSource === 'auto',
-    detail: `outcome=${oosApplied.outcome} agent=${String(oosReload?.buySideAgent ?? '')} oosAgent=${String(oos._id)}`,
+    detail: `status=${oosCreated.status} agent=${String(oosReload?.buySideAgent ?? '')} oosAgent=${String(oos._id)}`,
   });
 
   // Missing evidence → none (only thin agent eligible)
   await Agent.updateOne({ _id: strong._id }, { $set: { active: false } });
-  const thinRef = await Referral.create({
-    source: 'fixture',
-    clientType: 'Buyer',
-    borrower: { name: 'Thin Intake', email: 'thin-intake@example.com', phone: '303-555-2003' },
-    lookingInZip: '80107',
-    lookingInZips: ['80107'],
-    loanFileNumber: 'FIX-THIN-1',
-    org: 'AHA',
-    ahaBucket: 'AHA',
-    inboundEmail: { messageId: 'fixture-thin-1', channel: 'AHA', routeHint: 'import+aha' },
+  const thinCreated = await createViaInbound({
+    messageId: 'fixture-thin-1',
+    channel: 'AHA',
+    first: 'Thin',
+    last: 'Intake',
+    email: 'thin-intake@example.com',
+    phone: '303-555-2003',
+    zip: '80107',
+    loan: 'FIX-THIN-1',
   });
-  const thinResult = await applyIntakeAgentSuggestion(String(thinRef._id));
-  const thinReload = await Referral.findById(thinRef._id).lean();
+  if (!thinCreated.referralId) throw new Error(`Thin intake fixture failed: ${JSON.stringify(thinCreated.body)}`);
+  const thinReload = await Referral.findById(thinCreated.referralId).lean();
   results.push({
     id: 'missing-evidence',
     title: 'Missing evidence stays unassigned',
     ok:
-      thinResult.outcome === 'none' &&
+      thinCreated.status === 200 &&
       !thinReload?.buySideAgent &&
       thinReload?.agentSuggestion?.status === 'none',
-    detail: `outcome=${thinResult.outcome} status=${thinReload?.agentSuggestion?.status ?? 'null'} thin=${String(thin._id)}`,
+    detail: `status=${thinCreated.status} suggestion=${thinReload?.agentSuggestion?.status ?? 'null'} thin=${String(thin._id)}`,
   });
   await Agent.updateOne({ _id: strong._id }, { $set: { active: true } });
 
   // Duplicate intake messageId does not reset agent
-  const dupBase = await Referral.create({
-    source: 'fixture',
-    clientType: 'Buyer',
-    borrower: { name: 'Dup Base', email: 'dup-base@example.com', phone: '303-555-2004' },
-    lookingInZip: '80107',
-    lookingInZips: ['80107'],
-    loanFileNumber: 'FIX-DUP-1',
-    org: 'AHA',
-    ahaBucket: 'AHA',
-    buySideAgent: strong._id,
-    assignedAgent: strong._id,
-    agentSelectionSource: 'manual',
-    inboundEmail: { messageId: 'fixture-dup-1', channel: 'AHA', routeHint: 'import+aha' },
+  const dupCreated = await createViaInbound({
+    messageId: 'fixture-dup-1',
+    channel: 'AHA',
+    first: 'Dup',
+    last: 'Base',
+    email: 'dup-base@example.com',
+    phone: '303-555-2004',
+    zip: '80107',
+    loan: 'FIX-DUP-1',
   });
-  const beforeDup = await Referral.findById(dupBase._id).lean();
-  const dupExisting = await Referral.findOne({ 'inboundEmail.messageId': 'fixture-dup-1' }).select('_id');
-  const dupSkipped = await applyIntakeAgentSuggestion(String(dupBase._id));
-  const afterDup = await Referral.findById(dupBase._id).lean();
+  if (!dupCreated.referralId) throw new Error(`Duplicate base intake failed: ${JSON.stringify(dupCreated.body)}`);
+  await Referral.updateOne(
+    { _id: dupCreated.referralId },
+    {
+      $set: {
+        buySideAgent: thin._id,
+        assignedAgent: thin._id,
+        agentSelectionSource: 'manual',
+      },
+    },
+  );
+  const beforeDup = await Referral.findById(dupCreated.referralId).lean();
+  const dupRetry = await createViaInbound({
+    messageId: 'fixture-dup-1',
+    channel: 'AHA',
+    first: 'Dup',
+    last: 'Base',
+    email: 'dup-base@example.com',
+    phone: '303-555-2004',
+    zip: '80107',
+    loan: 'FIX-DUP-1',
+  });
+  const dupCount = await Referral.countDocuments({ 'inboundEmail.messageId': 'fixture-dup-1' });
+  const afterDup = await Referral.findById(dupCreated.referralId).lean();
   results.push({
     id: 'duplicate-intake',
     title: 'Duplicate intake does not reset selected agent',
     ok:
-      Boolean(dupExisting) &&
-      dupSkipped.outcome === 'skipped' &&
+      dupRetry.status === 202 &&
+      dupCount === 1 &&
       String(afterDup?.buySideAgent) === String(beforeDup?.buySideAgent) &&
       afterDup?.agentSelectionSource === 'manual',
-    detail: `dupFound=${Boolean(dupExisting)} outcome=${dupSkipped.outcome} source=${afterDup?.agentSelectionSource}`,
+    detail: `retryStatus=${dupRetry.status} count=${dupCount} source=${afterDup?.agentSelectionSource}`,
   });
 
   // Override persistence across refresh

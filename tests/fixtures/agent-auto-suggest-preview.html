@@ -39,11 +39,11 @@
       <table>
         <thead><tr><th>Scenario</th><th>Result</th><th>Detail</th></tr></thead>
         <tbody>
-          <tr data-id="aha-apply"><td>AHA intake auto-suggest</td><td class="ok">pass</td><td>outcome=applied source=auto suggestion=applied ranked=ready</td></tr>
-<tr data-id="oos-apply"><td>AHA OOS 15-mile eligibility</td><td class="ok">pass</td><td>outcome=applied agent=6aff93a5185b7febfee07e60 oosAgent=6aff93a5185b7febfee07e60</td></tr>
-<tr data-id="missing-evidence"><td>Missing evidence stays unassigned</td><td class="ok">pass</td><td>outcome=none status=none thin=6aff93a5185b7febfee07e6a</td></tr>
-<tr data-id="duplicate-intake"><td>Duplicate intake does not reset selected agent</td><td class="ok">pass</td><td>dupFound=true outcome=skipped source=manual</td></tr>
-<tr data-id="override-persist"><td>Manual override survives ZIP recalculation</td><td class="ok">pass</td><td>outcome=skipped agent=6aff93a5185b7febfee07e6a source=manual</td></tr>
+          <tr data-id="aha-apply"><td>AHA intake auto-suggest</td><td class="ok">pass</td><td>status=200 source=auto suggestion=applied ranked=ready</td></tr>
+<tr data-id="oos-apply"><td>AHA OOS 15-mile eligibility</td><td class="ok">pass</td><td>status=200 agent=6aff967167147c3a5a5ccb12 oosAgent=6aff967167147c3a5a5ccb12</td></tr>
+<tr data-id="missing-evidence"><td>Missing evidence stays unassigned</td><td class="ok">pass</td><td>status=200 suggestion=none thin=6aff967167147c3a5a5ccb1c</td></tr>
+<tr data-id="duplicate-intake"><td>Duplicate intake does not reset selected agent</td><td class="ok">pass</td><td>retryStatus=202 count=1 source=manual</td></tr>
+<tr data-id="override-persist"><td>Manual override survives ZIP recalculation</td><td class="ok">pass</td><td>outcome=skipped agent=6aff967167147c3a5a5ccb1c source=manual</td></tr>
         </tbody>
       </table>
     </div>

@@ -10,7 +10,10 @@ import { logReferralActivity } from '@/lib/server/activities';
 import { Referral } from '@/models/referral';
 
 export type AutoSuggestEnv = {
+  AGENT_AUTO_ASSIGN_FIXTURE_MODE?: string | undefined;
   ALLOW_AGENT_AUTO_ASSIGN?: string | undefined;
+  MONGODB_URI?: string | undefined;
+  NODE_ENV?: string | undefined;
   VERCEL_ENV?: string | undefined;
 };
 
@@ -32,10 +35,36 @@ export type AutoSuggestResult =
   | { outcome: 'none'; reason: string }
   | { outcome: 'skipped'; reason: string };
 
-/** Hosted Vercel previews share production data — never persist auto-assign there. */
+function isIsolatedFixtureDatabase(uri: string | undefined): boolean {
+  if (!uri) return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(uri);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'mongodb:') return false;
+
+  const host = parsed.hostname.toLowerCase();
+  const localHost = host === '127.0.0.1' || host === 'localhost' || host === '::1';
+  if (!localHost) return false;
+
+  const dbName = parsed.pathname.replace(/^\//u, '').toLowerCase();
+  if (!dbName) return false;
+  if (dbName === 'referralcrm' || dbName.includes('production') || dbName.includes('prod')) {
+    return false;
+  }
+  return dbName.includes('fixture') || dbName.includes('test');
+}
+
+/** Hosted Vercel previews and non-fixture DBs share real data — never persist auto-assign there. */
 export function canPersistAutoAgentAssignment(env: AutoSuggestEnv = process.env as AutoSuggestEnv): boolean {
-  if (env.VERCEL_ENV === 'preview') return false;
-  return env.ALLOW_AGENT_AUTO_ASSIGN === 'true';
+  if (env.VERCEL_ENV === 'preview' || env.VERCEL_ENV === 'production' || env.NODE_ENV === 'production') {
+    return false;
+  }
+  if (env.AGENT_AUTO_ASSIGN_FIXTURE_MODE !== 'true') return false;
+  if (env.ALLOW_AGENT_AUTO_ASSIGN !== 'true') return false;
+  return isIsolatedFixtureDatabase(env.MONGODB_URI);
 }
 
 export function isValidAutoSuggestion(result: AgentRecommendationResponse): AgentRecommendation | null {
