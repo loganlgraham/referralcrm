@@ -48,7 +48,7 @@ async function waitForApp(child: ChildProcess, timeoutMs = 120_000): Promise<voi
     }
     try {
       const response = await fetch(`${baseUrl}/login`);
-      if (response.ok) return;
+      if (response.status < 500) return;
     } catch {
       // Server is still starting.
     }

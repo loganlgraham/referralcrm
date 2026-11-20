@@ -32,6 +32,7 @@ async function main(): Promise<void> {
   const databaseName = `referrio-fub-fixture-${suffix}`;
   const fixtureRunId = `paired-fub-${suffix}`;
   const mongoUri = memory.getUri(databaseName);
+  const port = String(4100 + Math.floor(Math.random() * 1000));
 
   const worker = spawn(
     'pnpm',
@@ -42,6 +43,7 @@ async function main(): Promise<void> {
         ...process.env,
         MONGODB_URI: mongoUri,
         FUB_FIXTURE_RUN_ID: fixtureRunId,
+        PAIRED_FUB_FIXTURE_PORT: process.env.PAIRED_FUB_FIXTURE_PORT ?? port,
       },
       stdio: 'inherit',
     },

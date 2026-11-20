@@ -111,11 +111,10 @@ async function main(): Promise<void> {
   const { buildAgentRecommendations } = await import('../src/lib/server/agent-recommendations');
   const { POST: inboundPost } = await import('../src/app/api/inbound-email/route');
 
-  if (!canPersistAutoAgentAssignment()) {
-    throw new Error('Fixture requires ALLOW_AGENT_AUTO_ASSIGN=true and VERCEL_ENV !== preview');
-  }
-
   await connectMongo();
+  if (!canPersistAutoAgentAssignment()) {
+    throw new Error('Fixture requires ALLOW_AGENT_AUTO_ASSIGN=true, VERCEL_ENV !== preview, and a verified isolated Mongo target');
+  }
   await Promise.all([Referral.deleteMany({}), Agent.deleteMany({}), Payment.deleteMany({})]);
 
   const strong = await Agent.create({
