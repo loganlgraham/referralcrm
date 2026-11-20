@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { buttonClasses } from '@/components/ui/button';
 import { metaPillClasses, railCardClasses, railTitleClasses, railTextButtonClasses } from '@/components/referrals/referral-rail';
-import { AGENT_RECOMMENDATION_POLICY, type AgentRecommendation, type EvidenceStrength } from '@/lib/recommendations/agent-policy';
+import { AGENT_RECOMMENDATION_POLICY, DRAFT_WORKLOAD_STAGE_WEIGHTS, type AgentRecommendation, type EvidenceStrength } from '@/lib/recommendations/agent-policy';
 import type { AgentRecommendationResponse, RecommendationFubState } from '@/lib/recommendations/agent-recommendation-response';
 
 const REFRESH_DELAY_MS = 250;
@@ -271,6 +271,15 @@ function unknownLossLabel(count: number): string {
   return `${count} ${count === 1 ? 'loss' : 'losses'} with no reason recorded`;
 }
 
+function workloadBreakdown(entry: AgentRecommendation): string {
+  const workload = entry.factors.workload;
+  const stages = Object.entries(DRAFT_WORKLOAD_STAGE_WEIGHTS).map(([stage, weight]) => {
+    const count = workload.stageCounts[stage as keyof typeof DRAFT_WORKLOAD_STAGE_WEIGHTS] ?? 0;
+    return `${stage} ${count} (x${weight})`;
+  });
+  return `${entry.name}: ${stages.join(', ')}; Under Contract ${workload.underContract} (separate); weighted load ${workload.weightedActive}.`;
+}
+
 function comparisonScope(body: AgentRecommendationResponse, windowStart: string): string {
   const pool = body.inputs.bucket === 'AHA_OOS' ? 'out-of-state' : 'AHA';
   const area = body.inputs.zips.length === 0
@@ -329,7 +338,13 @@ function CalculationDetails({ body, shown }: { body: AgentRecommendationResponse
         {shown.some((entry) => entry.unknownLossReasons > 0) ? (
           <p className="break-words text-xs">{`Losses with no reason recorded, not counted: ${shown.filter((entry) => entry.unknownLossReasons > 0).map((entry) => `${entry.name} ${entry.unknownLossReasons}`).join(', ')}.`}</p>
         ) : null}
-        <p className="break-words">{`Group averages: close rate ${percent(body.baselines.overall)} (also the comparison point for MC and ZIP results), contract conversion ${percent(body.baselines.contract)} where enough contract outcomes exist${body.baselines.usedAfc > 0 ? `, financed with AFC ${percent(body.baselines.usedAfc)}` : ''}. Typical workload: ${body.workloadMedian ?? 0} active.`}</p>
+        <p className="break-words">{`Group averages: close rate ${percent(body.baselines.overall)} (also the comparison point for MC and ZIP results), contract conversion ${percent(body.baselines.contract)} where enough contract outcomes exist${body.baselines.usedAfc > 0 ? `, financed with AFC ${percent(body.baselines.usedAfc)}` : ''}. Typical weighted workload: ${body.workloadMedian ?? 0}.`}</p>
+        <div className="grid gap-1 text-xs">
+          <p className="font-semibold text-foreground-muted">Draft workload weights: New Lead 1, Paired 2, In Communication 3, Active Lead 4. Under Contract is shown separately until its capacity weight is defined.</p>
+          {shown.filter((entry) => entry.factors.workload.known).map((entry) => (
+            <p key={`workload-${entry.agentId}`} className="break-words">{workloadBreakdown(entry)}</p>
+          ))}
+        </div>
         <p className="break-words">{fubSentence(body.fub.state, body.fub.adjustedAgents)}</p>
         <ul className="list-disc space-y-1 pl-5">
           <li>Close rates count finished referrals only: closed versus lost or terminated. Active referrals and projected closings are left out.</li>

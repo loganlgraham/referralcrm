@@ -300,12 +300,51 @@ describe('scoring', () => {
     expect(measuredActiveCounts({ eligibleIds, activeReferrals: rows, complete: false })).toEqual(new Map());
     expect(measuredActiveCounts({ eligibleIds, activeReferrals: rows.slice(0, 1), complete: false })).toEqual(new Map());
     const completeEmpty = measuredActiveCounts({ eligibleIds, activeReferrals: [], complete: true });
-    expect(completeEmpty.get('a')).toBe(0);
-    expect(completeEmpty.get('b')).toBe(0);
+    expect(completeEmpty.get('a')).toMatchObject({ active: 0, weightedActive: 0, underContract: 0 });
+    expect(completeEmpty.get('b')).toMatchObject({ active: 0, weightedActive: 0, underContract: 0 });
     expect(completeEmpty.size).toBe(2);
     const complete = measuredActiveCounts({ eligibleIds, activeReferrals: rows, complete: true });
-    expect(complete.get('a')).toBe(1);
-    expect(complete.get('b')).toBe(1);
+    expect(complete.get('a')).toMatchObject({ active: 1, weightedActive: 4, underContract: 0 });
+    expect(complete.get('b')).toMatchObject({ active: 1, weightedActive: 2, underContract: 0 });
+  });
+
+  it('uses draft weighted stages for workload and keeps Under Contract separate', () => {
+    const eligibleIds = ['a'];
+    const rows = [
+      { status: 'New Lead', assignedAgentId: 'a', buySideAgentId: null, sellSideAgentId: null },
+      { status: 'Paired', assignedAgentId: 'a', buySideAgentId: null, sellSideAgentId: null },
+      { status: 'In Communication', assignedAgentId: 'a', buySideAgentId: null, sellSideAgentId: null },
+      { status: 'Active Lead', assignedAgentId: 'a', buySideAgentId: null, sellSideAgentId: null },
+      { status: 'Under Contract', assignedAgentId: 'a', buySideAgentId: null, sellSideAgentId: null },
+    ];
+    const workload = measuredActiveCounts({ eligibleIds, activeReferrals: rows, complete: true }).get('a');
+
+    expect(workload).toMatchObject({
+      active: 4,
+      weightedActive: 10,
+      underContract: 1,
+      stageCounts: {
+        'New Lead': 1,
+        Paired: 1,
+        'In Communication': 1,
+        'Active Lead': 1,
+      },
+    });
+  });
+
+  it('keeps active pipeline out of close metrics, outcome penalties, and evidence confidence', () => {
+    const history = [
+      ...worked('a', 6, 3),
+      ...Array.from({ length: 20 }, () => referral({ assignedAgentId: 'a', status: 'Active Lead', lostReason: null })),
+    ];
+    const result = rank(history, ['a'], { activeCounts: new Map([['a', 80]]) });
+    const entry = result.ranked[0];
+
+    expect(entry?.factors.overall).toMatchObject({ successes: 3, trials: 6 });
+    expect(entry?.missingOutcomes).toBe(0);
+    expect(entry?.outcomeCompleteness).toBe(1);
+    expect(entry?.evidenceStrength).toBe('Moderate');
+    expect(entry?.adequateHistory).toBe(true);
   });
 
   it('marks the suggestion provisional when every eligible agent has limited history', () => {

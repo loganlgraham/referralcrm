@@ -1,6 +1,7 @@
 import { Types } from 'mongoose';
 import {
   AGENT_RECOMMENDATION_POLICY,
+  DRAFT_WORKLOAD_STAGE_WEIGHTS,
   deriveAgentOutcomes,
   fubAdjustments,
   measuredActiveCounts,
@@ -24,7 +25,7 @@ import { Referral } from '@/models/referral';
 const ZIP = /^\d{5}$/;
 const MAX_ZIPS = 10;
 const RETURNED_AGENTS = 25;
-const ACTIVE_STATUS_VALUES = ['Paired', 'In Communication', 'Active Lead', 'Showing Homes', 'Under Contract'];
+const WORKLOAD_STATUS_VALUES = [...Object.keys(DRAFT_WORKLOAD_STAGE_WEIGHTS), 'Under Contract'];
 
 type IdLike = Types.ObjectId | string | null | undefined;
 
@@ -114,7 +115,7 @@ export async function buildAgentRecommendations(input: {
 
   const [creditedReferralIds, activeLoad] = await Promise.all([
     Payment.distinct('referralId', { agentId: { $in: eligibleIds } }) as Promise<Types.ObjectId[]>,
-    Referral.find({ deletedAt: null, _id: { $ne: currentId }, status: { $in: ACTIVE_STATUS_VALUES }, $or: agentMatch })
+    Referral.find({ deletedAt: null, _id: { $ne: currentId }, status: { $in: WORKLOAD_STATUS_VALUES }, $or: agentMatch })
       .select('assignedAgent buySideAgent sellSideAgent status')
       .lean<{ assignedAgent?: IdLike; buySideAgent?: IdLike; sellSideAgent?: IdLike; status?: string }[]>()
       .then((docs) => ({ complete: true as const, docs }))

@@ -27,7 +27,18 @@ export type AhaBucket = 'AHA' | 'AHA_OOS';
 export type EvidenceStrength = 'Strong' | 'Moderate' | 'Limited';
 
 const CLOSED_PAYMENT_STATUSES = new Set(['closed', 'payment_sent', 'paid']);
-const ACTIVE_STATUSES = new Set(['Paired', 'In Communication', 'Active Lead', 'Showing Homes', 'Under Contract']);
+export const DRAFT_WORKLOAD_STAGE_WEIGHTS = {
+  'New Lead': 1,
+  Paired: 2,
+  'In Communication': 3,
+  'Active Lead': 4,
+} as const;
+export type DraftWorkloadStage = keyof typeof DRAFT_WORKLOAD_STAGE_WEIGHTS;
+export type WorkloadStageCounts = Record<DraftWorkloadStage, number>;
+
+const UNDER_CONTRACT_STAGE = 'Under Contract';
+const WORKLOAD_STATUSES = new Set([...Object.keys(DRAFT_WORKLOAD_STAGE_WEIGHTS), UNDER_CONTRACT_STAGE]);
+const WORKLOAD_STAGES = Object.keys(DRAFT_WORKLOAD_STAGE_WEIGHTS) as DraftWorkloadStage[];
 
 export type HistoryPayment = {
   agentId: string | null;
@@ -182,7 +193,7 @@ function resolveUnclosed(
 }
 
 export function isActiveReferralStatus(status: string | null): boolean {
-  return status !== null && ACTIVE_STATUSES.has(status);
+  return status !== null && WORKLOAD_STATUSES.has(status);
 }
 
 export type ActiveReferralLoadRow = {
@@ -191,6 +202,33 @@ export type ActiveReferralLoadRow = {
   buySideAgentId: string | null;
   sellSideAgentId: string | null;
 };
+
+export type WorkloadMeasurement = {
+  active: number;
+  weightedActive: number;
+  underContract: number;
+  stageCounts: WorkloadStageCounts;
+};
+
+function emptyStageCounts(): WorkloadStageCounts {
+  return {
+    'New Lead': 0,
+    Paired: 0,
+    'In Communication': 0,
+    'Active Lead': 0,
+  };
+}
+
+function emptyWorkload(): WorkloadMeasurement {
+  return { active: 0, weightedActive: 0, underContract: 0, stageCounts: emptyStageCounts() };
+}
+
+function normalizeWorkload(value: number | WorkloadMeasurement | undefined): WorkloadMeasurement {
+  if (typeof value === 'number') {
+    return { ...emptyWorkload(), active: value, weightedActive: value };
+  }
+  return value ?? emptyWorkload();
+}
 
 /**
  * Known active loads require a successful, complete referral read. Failed,
@@ -201,16 +239,31 @@ export function measuredActiveCounts(input: {
   eligibleIds: readonly string[];
   activeReferrals: readonly ActiveReferralLoadRow[] | null;
   complete: boolean;
-}): Map<string, number> {
+}): Map<string, WorkloadMeasurement> {
   if (!input.complete || input.activeReferrals === null) return new Map();
   const eligible = new Set(input.eligibleIds);
-  const counts = new Map<string, number>(input.eligibleIds.map((id) => [id, 0]));
+  const counts = new Map<string, WorkloadMeasurement>(input.eligibleIds.map((id) => [id, emptyWorkload()]));
   for (const row of input.activeReferrals) {
     if (!isActiveReferralStatus(row.status)) continue;
     const agents = new Set(
       [row.assignedAgentId, row.buySideAgentId, row.sellSideAgentId].filter((id): id is string => id !== null && eligible.has(id)),
     );
-    for (const id of agents) counts.set(id, (counts.get(id) ?? 0) + 1);
+    for (const id of agents) {
+      const current = counts.get(id) ?? emptyWorkload();
+      if (row.status === UNDER_CONTRACT_STAGE) {
+        counts.set(id, { ...current, underContract: current.underContract + 1 });
+        continue;
+      }
+      const stage = row.status as DraftWorkloadStage;
+      const weight = DRAFT_WORKLOAD_STAGE_WEIGHTS[stage];
+      const stageCounts = { ...current.stageCounts, [stage]: current.stageCounts[stage] + 1 };
+      counts.set(id, {
+        active: current.active + 1,
+        weightedActive: current.weightedActive + weight,
+        underContract: current.underContract,
+        stageCounts,
+      });
+    }
   }
   return counts;
 }
@@ -276,6 +329,9 @@ export type RateEvidence = {
 
 export type WorkloadEvidence = {
   active: number;
+  weightedActive: number;
+  underContract: number;
+  stageCounts: WorkloadStageCounts;
   poolMedian: number;
   points: number;
   /** False when active load was never measured; scores the neutral 50 and is not called empty. */
@@ -442,11 +498,11 @@ export function rankAgents(input: {
   candidates: readonly CandidateAgent[];
   outcomes: readonly AgentOutcome[];
   /**
-   * Measured active-referral counts. Only agents present in the map have a
+   * Measured draft workload. Only agents present in the map have a
    * known workload; missing entries score the neutral 50 and are not treated
    * as a confirmed empty load.
    */
-  activeCounts: ReadonlyMap<string, number>;
+  activeCounts: ReadonlyMap<string, number | WorkloadMeasurement>;
   mcId: string | null;
   zips: readonly string[];
   nearbyZips?: readonly string[];
@@ -465,9 +521,7 @@ export function rankAgents(input: {
     const answers = rows.flatMap((row) => row.afcAnswers);
     const afc = answers.filter((answer): answer is boolean => answer !== null);
     const unknownLossReasons = rows.filter((row) => row.excludedBecause === 'unknown_loss_reason').length;
-    const missingOutcomes = rows.filter(
-      (row) => row.outcome === 'active' || row.excludedBecause === 'unknown_loss_reason' || row.excludedBecause === 'closed_without_record',
-    ).length;
+    const missingOutcomes = rows.filter((row) => row.excludedBecause === 'unknown_loss_reason' || row.excludedBecause === 'closed_without_record').length;
     const contract = {
       successes: contractRows.filter((row) => row.contract === 'contracted').length,
       trials: contractRows.length,
@@ -500,13 +554,13 @@ export function rankAgents(input: {
   };
   const knownLoads = input.candidates
     .filter((agent) => input.activeCounts.has(agent.id))
-    .map((agent) => input.activeCounts.get(agent.id) ?? 0);
+    .map((agent) => normalizeWorkload(input.activeCounts.get(agent.id)).weightedActive);
   const workloadMedian = median(knownLoads);
   const weights = AGENT_RECOMMENDATION_POLICY.weights;
 
   const scored = tallies.map((t) => {
     const known = input.activeCounts.has(t.agent.id);
-    const active = known ? (input.activeCounts.get(t.agent.id) ?? 0) : 0;
+    const workload = known ? normalizeWorkload(input.activeCounts.get(t.agent.id)) : emptyWorkload();
     const factors = {
       mc: rate(t.mc, baselines.mc, input.mcId !== null),
       overall: rate(t.overall, baselines.overall, true),
@@ -514,9 +568,12 @@ export function rankAgents(input: {
       zip: rate(t.zip, baselines.zip, target.size > 0),
       usedAfc: rate(t.usedAfc, baselines.usedAfc, true),
       workload: {
-        active,
+        active: workload.active,
+        weightedActive: workload.weightedActive,
+        underContract: workload.underContract,
+        stageCounts: workload.stageCounts,
         poolMedian: workloadMedian,
-        points: known ? workloadPoints(active, workloadMedian) : 50,
+        points: known ? workloadPoints(workload.weightedActive, workloadMedian) : 50,
         known,
       },
     };

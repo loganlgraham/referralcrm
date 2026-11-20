@@ -15,7 +15,22 @@ function rec(id: string, name: string, rank: number): AgentRecommendation {
     adequateHistory: rank === 1,
     evidenceStrength: rank === 1 ? 'Strong' : 'Limited',
     coverage: 'not_listed',
-    factors: { mc: rate, overall: rate, contract: rate, zip: rate, usedAfc: rate, workload: { active: 2, poolMedian: 2, points: 50, known: true } },
+    factors: {
+      mc: rate,
+      overall: rate,
+      contract: rate,
+      zip: rate,
+      usedAfc: rate,
+      workload: {
+        active: 2,
+        weightedActive: 6,
+        underContract: rank === 1 ? 1 : 0,
+        stageCounts: { 'New Lead': 0, Paired: 1, 'In Communication': 0, 'Active Lead': 1 },
+        poolMedian: 2,
+        points: 50,
+        known: true,
+      },
+    },
     excludedOutcomes: rank === 1 ? 3 : 0,
     unknownLossReasons: rank === 1 ? 3 : 0,
     afcUnknown: 0,
@@ -82,6 +97,8 @@ describe('agent recommendation panel', () => {
     expect(screen.getByText('Contract known')).toBeInTheDocument();
     expect(screen.getByText(/Close \(finished only\): closed out of finished referrals since 11\/19\/2024/)).toBeInTheDocument();
     expect(screen.getByText(/Contract known: conversion is ranked only when there are documented contracts and documented failures to reach contract/)).toBeInTheDocument();
+    expect(screen.getByText(/Draft workload weights: New Lead 1, Paired 2, In Communication 3, Active Lead 4/)).toBeInTheDocument();
+    expect(screen.getByText(/Ana: New Lead 0 \(x1\), Paired 1 \(x2\), In Communication 0 \(x3\), Active Lead 1 \(x4\); Under Contract 1 \(separate\); weighted load 6/)).toBeInTheDocument();
   });
 
   it('describes the 15-mile out-of-state scope', async () => {
