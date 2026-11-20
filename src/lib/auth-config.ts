@@ -175,7 +175,7 @@ if (!authSecret) {
 // pool instead of opening a second one (halves per-instance connections + monitoring).
 // Lazy: do not open Mongo at module load; the adapter awaits this on first use.
 const adapterClientPromise = lazyThenable(() =>
-  connectMongo().then((m) => m.connection.getClient() as MongoClient)
+  connectMongo().then((m) => m.connection.getClient() as unknown as MongoClient)
 );
 
 export async function persistUserLastLoginAt(input: { id?: string | null; email?: string | null }) {

@@ -24,3 +24,7 @@ tsconfig.tsbuildinfo
 
 .vercel
 .tmp/
+
+# Fee breakdown PDFs live in the private MongoDB document store.
+/AHA Commission Wiring Instructions.pdf
+/AHA W9 2026.pdf
