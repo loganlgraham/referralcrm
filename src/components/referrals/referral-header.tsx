@@ -751,6 +751,8 @@ export function ReferralHeader({
   const latestBuyDealStatusLabel = latestBuyDealStatus ?? 'No deals yet';
   const latestSellDealStatusLabel = latestSellDealStatus ?? 'No deals yet';
   const showSplitStatus = isBothClientType && viewerRole === 'admin';
+  const pairedFubEnabled =
+    viewerRole === 'admin' && referral.org === 'AHA' && ahaBucket === 'AHA';
 
   const statusCardMeta = (
     <p className="text-[13px] text-foreground-subtle">
@@ -815,6 +817,7 @@ export function ReferralHeader({
                         showPreApproval={false}
                         onStatusChanged={(next, payload) => handleStatusChanged(next, payload, 'buy')}
                         onUnderContractIntentChange={onUnderContractIntentChange}
+                        pairedFubEnabled={pairedFubEnabled}
                       />
                     </div>
                     <div className="space-y-2">
@@ -888,6 +891,7 @@ export function ReferralHeader({
                   showPreApproval={false}
                   onStatusChanged={handleStatusChanged}
                   onUnderContractIntentChange={onUnderContractIntentChange}
+                  pairedFubEnabled={pairedFubEnabled}
                 />
               )}
             </div>

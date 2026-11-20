@@ -29,6 +29,19 @@ jest.mock('@/models/referral', () => ({
   },
 }));
 
+jest.mock('@/lib/server/fixture-safety', () => {
+  const actual = jest.requireActual('@/lib/server/fixture-safety');
+  return {
+    ...actual,
+    currentFixtureConnectionIdentity: jest.fn(() => ({
+      host: '127.0.0.1',
+      port: 41237,
+      database: 'referralcrm-agent-auto-suggest-fixture',
+      readyState: 1,
+    })),
+  };
+});
+
 import { buildAgentRecommendations } from '@/lib/server/agent-recommendations';
 import { Referral } from '@/models/referral';
 
@@ -94,58 +107,75 @@ function ready(overrides: Partial<AgentRecommendationResponse> = {}): AgentRecom
 }
 
 describe('canPersistAutoAgentAssignment', () => {
+  const fixtureConnection = {
+    host: '127.0.0.1',
+    port: 41237,
+    database: 'referralcrm-agent-auto-suggest-fixture',
+    readyState: 1,
+  };
+  const fixtureEnv = {
+    AGENT_AUTO_ASSIGN_FIXTURE_MODE: 'true',
+    ALLOW_AGENT_AUTO_ASSIGN: 'true',
+    FIXTURE_MONGODB_HOST: '127.0.0.1',
+    FIXTURE_MONGODB_PORT: '41237',
+    FIXTURE_MONGODB_DATABASE: 'referralcrm-agent-auto-suggest-fixture',
+  };
+
   it('fails closed on hosted Vercel preview even when the allow flag is set', () => {
     expect(canPersistAutoAgentAssignment({
-      AGENT_AUTO_ASSIGN_FIXTURE_MODE: 'true',
-      ALLOW_AGENT_AUTO_ASSIGN: 'true',
-      MONGODB_URI: 'mongodb://127.0.0.1:27017/referralcrm-agent-auto-suggest-fixture',
+      ...fixtureEnv,
       VERCEL_ENV: 'preview',
-    })).toBe(false);
+    }, fixtureConnection)).toBe(false);
   });
 
   it('fails closed in production even when all assignment flags are set', () => {
     expect(canPersistAutoAgentAssignment({
-      AGENT_AUTO_ASSIGN_FIXTURE_MODE: 'true',
-      ALLOW_AGENT_AUTO_ASSIGN: 'true',
-      MONGODB_URI: 'mongodb://127.0.0.1:27017/referralcrm-agent-auto-suggest-fixture',
+      ...fixtureEnv,
       VERCEL_ENV: 'production',
-    })).toBe(false);
+    }, fixtureConnection)).toBe(false);
   });
 
   it('requires explicit fixture mode, not just ALLOW_AGENT_AUTO_ASSIGN', () => {
     expect(canPersistAutoAgentAssignment({
       ALLOW_AGENT_AUTO_ASSIGN: 'true',
-      MONGODB_URI: 'mongodb://127.0.0.1:27017/referralcrm-agent-auto-suggest-fixture',
+      FIXTURE_MONGODB_HOST: '127.0.0.1',
+      FIXTURE_MONGODB_PORT: '41237',
+      FIXTURE_MONGODB_DATABASE: 'referralcrm-agent-auto-suggest-fixture',
       VERCEL_ENV: 'development',
-    })).toBe(false);
+    }, fixtureConnection)).toBe(false);
   });
 
   it('fails closed for local sessions connected to the shared production database', () => {
     expect(canPersistAutoAgentAssignment({
-      AGENT_AUTO_ASSIGN_FIXTURE_MODE: 'true',
-      ALLOW_AGENT_AUTO_ASSIGN: 'true',
-      MONGODB_URI: 'mongodb+srv://user:pass@cluster.example.mongodb.net/referralcrm?retryWrites=true&w=majority',
+      ...fixtureEnv,
+      FIXTURE_MONGODB_HOST: 'cluster.example.mongodb.net',
+      FIXTURE_MONGODB_DATABASE: 'referralcrm',
       VERCEL_ENV: 'development',
+    }, {
+      host: 'cluster.example.mongodb.net',
+      port: 27017,
+      database: 'referralcrm',
+      readyState: 1,
     })).toBe(false);
   });
 
   it('fails closed for local databases that are not clearly isolated fixtures', () => {
     expect(canPersistAutoAgentAssignment({
-      AGENT_AUTO_ASSIGN_FIXTURE_MODE: 'true',
-      ALLOW_AGENT_AUTO_ASSIGN: 'true',
-      MONGODB_URI: 'mongodb://127.0.0.1:27017/referralcrm',
+      ...fixtureEnv,
+      FIXTURE_MONGODB_DATABASE: 'referralcrm',
       VERCEL_ENV: 'development',
+    }, {
+      ...fixtureConnection,
+      database: 'referralcrm',
     })).toBe(false);
   });
 
   it('allows only explicit fixture mode on a verified isolated database', () => {
     expect(canPersistAutoAgentAssignment({
-      AGENT_AUTO_ASSIGN_FIXTURE_MODE: 'true',
-      ALLOW_AGENT_AUTO_ASSIGN: 'true',
-      MONGODB_URI: 'mongodb://127.0.0.1:27017/referralcrm-agent-auto-suggest-fixture',
+      ...fixtureEnv,
       VERCEL_ENV: 'development',
-    })).toBe(true);
-    expect(canPersistAutoAgentAssignment({})).toBe(false);
+    }, fixtureConnection)).toBe(true);
+    expect(canPersistAutoAgentAssignment({}, fixtureConnection)).toBe(false);
   });
 });
 
@@ -161,14 +191,18 @@ describe('isValidAutoSuggestion', () => {
 describe('applyIntakeAgentSuggestion', () => {
   const originalFixture = process.env.AGENT_AUTO_ASSIGN_FIXTURE_MODE;
   const originalAllow = process.env.ALLOW_AGENT_AUTO_ASSIGN;
-  const originalMongoUri = process.env.MONGODB_URI;
+  const originalFixtureHost = process.env.FIXTURE_MONGODB_HOST;
+  const originalFixturePort = process.env.FIXTURE_MONGODB_PORT;
+  const originalFixtureDatabase = process.env.FIXTURE_MONGODB_DATABASE;
   const originalVercel = process.env.VERCEL_ENV;
 
   beforeEach(() => {
     jest.clearAllMocks();
     process.env.AGENT_AUTO_ASSIGN_FIXTURE_MODE = 'true';
     process.env.ALLOW_AGENT_AUTO_ASSIGN = 'true';
-    process.env.MONGODB_URI = 'mongodb://127.0.0.1:27017/referralcrm-agent-auto-suggest-fixture';
+    process.env.FIXTURE_MONGODB_HOST = '127.0.0.1';
+    process.env.FIXTURE_MONGODB_PORT = '41237';
+    process.env.FIXTURE_MONGODB_DATABASE = 'referralcrm-agent-auto-suggest-fixture';
     delete process.env.VERCEL_ENV;
     referralFindById.mockReturnValue({
       select: () => ({
@@ -194,8 +228,12 @@ describe('applyIntakeAgentSuggestion', () => {
     else process.env.AGENT_AUTO_ASSIGN_FIXTURE_MODE = originalFixture;
     if (originalAllow === undefined) delete process.env.ALLOW_AGENT_AUTO_ASSIGN;
     else process.env.ALLOW_AGENT_AUTO_ASSIGN = originalAllow;
-    if (originalMongoUri === undefined) delete process.env.MONGODB_URI;
-    else process.env.MONGODB_URI = originalMongoUri;
+    if (originalFixtureHost === undefined) delete process.env.FIXTURE_MONGODB_HOST;
+    else process.env.FIXTURE_MONGODB_HOST = originalFixtureHost;
+    if (originalFixturePort === undefined) delete process.env.FIXTURE_MONGODB_PORT;
+    else process.env.FIXTURE_MONGODB_PORT = originalFixturePort;
+    if (originalFixtureDatabase === undefined) delete process.env.FIXTURE_MONGODB_DATABASE;
+    else process.env.FIXTURE_MONGODB_DATABASE = originalFixtureDatabase;
     if (originalVercel === undefined) delete process.env.VERCEL_ENV;
     else process.env.VERCEL_ENV = originalVercel;
   });

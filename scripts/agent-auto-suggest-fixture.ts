@@ -97,6 +97,10 @@ async function startIsolatedMongo(): Promise<{ uri: string; stop?: () => Promise
 async function main(): Promise<void> {
   const isolated = await startIsolatedMongo();
   process.env.MONGODB_URI = isolated.uri;
+  const parsedMongo = new URL(isolated.uri);
+  process.env.FIXTURE_MONGODB_HOST = parsedMongo.hostname;
+  process.env.FIXTURE_MONGODB_PORT = parsedMongo.port;
+  process.env.FIXTURE_MONGODB_DATABASE = parsedMongo.pathname.replace(/^\//u, '');
 
   const { connectMongo } = await import('../src/lib/mongoose');
   const { Referral } = await import('../src/models/referral');
