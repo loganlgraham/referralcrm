@@ -100,6 +100,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     referral.sellStatus = referral.status;
   }
   referral.assignedAgent = referral.buySideAgent ?? referral.sellSideAgent ?? null;
+  referral.agentSelectionSource = 'manual';
   referral.status = deriveReferralStatusFromSides(
     referral.buyStatus,
     referral.sellStatus,

@@ -875,6 +875,9 @@ export function DealCard({
             : typeof confirmedUsedAfc === 'boolean'
               ? confirmedUsedAfc
               : (afcMap[deal._id] ?? Boolean(deal.usedAfc));
+        if (deal.side !== 'sell' && typeof confirmedUsedAfc === 'boolean') {
+          payload.usedAfcConfirmedAtClosing = true;
+        }
         payload.sendAgentNpsEmail = sendAgentNpsEmail;
         if (closingDateIso) {
           payload.closingDate = closingDateIso;

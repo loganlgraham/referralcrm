@@ -13,6 +13,7 @@ import { calculateReferralFeeDue } from '@/utils/referral';
 import { maybeNotifyAdminsOnUpdateRequestResponse } from '@/lib/server/update-request-response';
 import { generateAndReconcileAdminTasks } from '@/lib/server/admin-task-reconciler';
 import { normalizePhoneNumber } from '@/utils/phone-utils';
+import { refreshAgentSuggestion } from '@/lib/server/agent-auto-suggest';
 
 interface RouteContext {
   params: { id: string };
@@ -358,6 +359,16 @@ export async function PATCH(request: NextRequest, context: RouteContext): Promis
     referral.preApprovalAmountCents = preApprovalAmountCents;
     referral.estPurchasePriceCents = preApprovalAmountCents;
     await referral.save();
+  }
+
+  const zipChanged =
+    'lookingInZip' in updatePayload ||
+    'lookingInZips' in updatePayload ||
+    changedDetailFields.includes('lookingInZip');
+  if (zipChanged && existing.org === 'AHA') {
+    await refreshAgentSuggestion(existing._id.toString()).catch((error) => {
+      console.error('[Agent Auto-Suggest] Failed to refresh after ZIP change:', error);
+    });
   }
 
   if (changedDetailFields.length > 0) {

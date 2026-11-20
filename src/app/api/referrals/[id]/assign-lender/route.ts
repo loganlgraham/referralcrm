@@ -22,6 +22,7 @@ import {
   pickPrimarySideForReferral,
 } from '@/lib/server/referral-sides';
 import { formatPhoneNumber } from '@/utils/formatters';
+import { refreshAgentSuggestion } from '@/lib/server/agent-auto-suggest';
 
 interface Params {
   params: { id: string };
@@ -146,6 +147,12 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   }
 
   await referral.save();
+
+  if (isNewAssignment && referral.org === 'AHA') {
+    await refreshAgentSuggestion(referral._id.toString()).catch((error) => {
+      console.error('[Agent Auto-Suggest] Failed to refresh after MC change:', error);
+    });
+  }
 
   const previousLenderDoc = previousLender
     ? await LenderMC.findById(previousLender)

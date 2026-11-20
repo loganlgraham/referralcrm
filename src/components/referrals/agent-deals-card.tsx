@@ -22,6 +22,7 @@ import type { LostReason } from '@/constants/referrals';
 export interface DealStageExtras {
   closingDate?: string;
   usedAfc?: boolean;
+  usedAfcConfirmedAtClosing?: boolean;
   sendClosedEmails?: boolean;
   sendAgentNpsEmail?: boolean;
   terminatedReason?: TerminatedReason;
@@ -226,6 +227,9 @@ function DealRow({
           : typeof confirmation.usedAfc === 'boolean'
             ? confirmation.usedAfc
             : Boolean(deal.usedAfc);
+      if (deal.side !== 'sell' && typeof confirmation.usedAfc === 'boolean') {
+        extras.usedAfcConfirmedAtClosing = true;
+      }
     }
 
     if (next === 'terminated') {

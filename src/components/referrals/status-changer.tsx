@@ -23,6 +23,12 @@ import {
   collectUnderContractDeal,
   submitUnderContractDeal
 } from '@/components/referrals/deal-details-toast';
+import {
+  confirmPairedFubSend,
+  fubSendOutcomeMessage,
+  type FubSendUiStatus,
+} from '@/components/referrals/paired-fub-confirmation-toast';
+import type { MockFubApprovalPreview } from '@/lib/server/mock-fub-send';
 
 interface Props {
   referralId: string;
@@ -59,6 +65,7 @@ interface Props {
   onStatusChanged?: (status: ReferralStatus, payload?: Record<string, unknown>) => void;
   onPreApprovalSaved?: (details: { preApprovalAmountCents: number; referralFeeDueCents: number }) => void;
   onUnderContractIntentChange?: (isPreparing: boolean) => void;
+  pairedFubEnabled?: boolean;
 }
 
 /** Fields the prompts collect on top of the status itself. */
@@ -93,6 +100,7 @@ export function StatusChanger({
   onStatusChanged,
   onPreApprovalSaved,
   onUnderContractIntentChange,
+  pairedFubEnabled = false,
 }: Props) {
   const router = useRouter();
   const normalizedStatus = useMemo(() => normalizeReferralStatus(status) ?? status, [status]);
@@ -129,8 +137,9 @@ export function StatusChanger({
   const submitStatus = async (
     nextStatus: ReferralStatus,
     previousStatus: ReferralStatus,
-    extra: StatusSubmitExtras = {}
-  ) => {
+    extra: StatusSubmitExtras = {},
+    showSuccessToast = true,
+  ): Promise<boolean> => {
     const { terminatedReason, lostReason, ...passthrough } = extra;
     setLoading(true);
     try {
@@ -165,18 +174,166 @@ export function StatusChanger({
       router.refresh();
 
       onStatusChanged?.(resolvedStatus, { ...body, previousStatus });
-      toast.success('Referral status updated');
+      if (showSuccessToast) {
+        toast.success('Referral status updated');
+      }
+      return true;
     } catch (error) {
       console.error(error);
       setCurrentStatus(previousStatus);
       toast.error(error instanceof Error ? error.message : 'Unable to update status');
+      return false;
     } finally {
       setLoading(false);
     }
   };
 
+  function showMockFubOutcome(
+    status: FubSendUiStatus,
+    recovered: boolean,
+    toastId: string | number,
+    approvalKey: string,
+  ): void {
+    const outcome = fubSendOutcomeMessage(status, recovered);
+    if (outcome.kind === 'success') {
+      toast.success(outcome.message, { id: toastId });
+    } else if (outcome.kind === 'info') {
+      toast.info(outcome.message, {
+        id: toastId,
+        action:
+          status === 'running' || status === 'pending'
+            ? {
+                label: 'Check status',
+                onClick: () => {
+                  void recoverMockFubOutcome(
+                    approvalKey,
+                    toast.loading('Checking mock FUB status…'),
+                    'The mock FUB status is still unavailable.',
+                  );
+                },
+              }
+            : undefined,
+      });
+    } else {
+      toast.error(outcome.message, {
+        id: toastId,
+        action:
+          status === 'partial_failure'
+            ? {
+                label: 'Retry safe steps',
+                onClick: () => {
+                  void submitMockFubApproval(approvalKey, true);
+                },
+              }
+            : undefined,
+      });
+    }
+  }
+
+  async function recoverMockFubOutcome(
+    approvalKey: string,
+    toastId: string | number,
+    fallbackMessage: string,
+  ): Promise<void> {
+    const previewResponse = await fetch(
+      `/api/referrals/${referralId}/fub-send`,
+      { cache: 'no-store' },
+    ).catch(() => null);
+    const preview = previewResponse?.ok
+      ? ((await previewResponse.json().catch(() => null)) as MockFubApprovalPreview | null)
+      : null;
+    if (preview?.attemptStatus) {
+      showMockFubOutcome(
+        preview.attemptStatus,
+        false,
+        toastId,
+        approvalKey,
+      );
+      return;
+    }
+    toast.error(`Paired saved. ${fallbackMessage}`, { id: toastId });
+  }
+
+  async function submitMockFubApproval(
+    approvalKey: string,
+    isRetry = false,
+  ): Promise<void> {
+    const toastId = toast.loading(
+      isRetry ? 'Retrying safe mock FUB steps…' : 'Sending approved mock FUB steps…',
+    );
+    try {
+      const response = await fetch(`/api/referrals/${referralId}/fub-send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approvalKey }),
+      });
+      const body = (await response.json().catch(() => null)) as {
+        status?: FubSendUiStatus;
+        recovered?: boolean;
+        error?: string;
+      } | null;
+      if (!response.ok || !body?.status) {
+        await recoverMockFubOutcome(
+          approvalKey,
+          toastId,
+          body?.error ?? 'The mock FUB send could not start.',
+        );
+        return;
+      }
+      showMockFubOutcome(
+        body.status,
+        Boolean(body.recovered),
+        toastId,
+        approvalKey,
+      );
+    } catch (error) {
+      await recoverMockFubOutcome(
+        approvalKey,
+        toastId,
+        error instanceof Error ? error.message : 'The mock FUB send could not start.',
+      );
+    }
+  }
+
   /** Statuses needing more information collect it first instead of writing straight through. */
   const selectStatus = async (nextStatus: ReferralStatus) => {
+    if (nextStatus === 'Paired' && pairedFubEnabled) {
+      setPrompting(true);
+      let preview: MockFubApprovalPreview | null = null;
+      try {
+        const response = await fetch(`/api/referrals/${referralId}/fub-send`, {
+          cache: 'no-store',
+        });
+        if (response.ok) {
+          preview = (await response.json()) as MockFubApprovalPreview;
+        }
+      } catch {
+        preview = null;
+      }
+
+      if (!preview) {
+        setPrompting(false);
+        toast.info('The mock FUB fixture is unavailable. Moving to Paired without sending.');
+        setCurrentStatus('Paired');
+        await submitStatus('Paired', persistedStatus);
+        return;
+      }
+
+      const choice = await confirmPairedFubSend(preview);
+      setPrompting(false);
+      if (choice === 'cancel') return;
+
+      setCurrentStatus('Paired');
+      const pairedSaved = await submitStatus('Paired', persistedStatus, {}, false);
+      if (!pairedSaved) return;
+      if (choice === 'paired_only') {
+        toast.success('Referral moved to Paired. Nothing was sent to FUB.');
+        return;
+      }
+      await submitMockFubApproval(preview.approvalKey);
+      return;
+    }
+
     // Inline mode reveals the deal form under the control instead, so only the
     // toast surfaces collect the deal before moving the status.
     if (nextStatus === 'Under Contract' && promptMode === 'toast') {

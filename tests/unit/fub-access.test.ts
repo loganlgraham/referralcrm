@@ -346,7 +346,10 @@ describe('Follow Up Boss access', () => {
     const route = readFileSync('src/app/api/admin/fub-access/route.ts', 'utf8');
     const intelligence = readFileSync('src/app/api/referrals/[id]/intelligence/route.ts', 'utf8');
     const server = readFileSync('src/lib/server/fub-access.ts', 'utf8');
-    for (const source of [route, intelligence, server]) {
+    const viewer = readFileSync('src/lib/server/intelligence-viewer.ts', 'utf8');
+    const recommendationRoute = readFileSync('src/app/api/referrals/[id]/agent-recommendations/route.ts', 'utf8');
+    const recommendations = readFileSync('src/lib/server/agent-recommendations.ts', 'utf8');
+    for (const source of [route, intelligence, server, viewer, recommendationRoute, recommendations]) {
       expect(source.includes('api.followupboss.com')).toBe(false);
       expect(source.includes('api.openai.com')).toBe(false);
     }
@@ -354,6 +357,8 @@ describe('Follow Up Boss access', () => {
     expect(route.includes('isOwner')).toBe(false);
     expect(server.includes('VERIFIED_FUB_ACCOUNT_ID')).toBe(true);
     expect(server.includes('clearIntelligenceCache')).toBe(true);
-    expect(intelligence.includes('storedRole')).toBe(true);
+    expect(viewer.includes('storedRole')).toBe(true);
+    expect(intelligence.includes('authorizeFubViewer')).toBe(true);
+    expect(recommendationRoute.includes('authorizeFubViewer')).toBe(true);
   });
 });

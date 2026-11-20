@@ -132,7 +132,7 @@ export async function fetchCustomerIntelligence(input: {
   }
 }
 
-function abortAfter(ms: number): AbortSignal {
+export function abortAfter(ms: number): AbortSignal {
   if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
     try {
       return AbortSignal.timeout(ms);
@@ -143,7 +143,7 @@ function abortAfter(ms: number): AbortSignal {
   return new AbortController().signal;
 }
 
-async function resolveProtectionToken(override: string | null | undefined): Promise<string | null> {
+export async function resolveProtectionToken(override: string | null | undefined): Promise<string | null> {
   if (override !== undefined) return override || null;
   try {
     const token = await getVercelOidcToken();

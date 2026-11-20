@@ -6,6 +6,7 @@ export type PanelActivity =
   | { status: 'not_requested' }
   | { status: 'not_found' }
   | { status: 'unavailable' }
+  | { status: 'not_configured' }
   | { status: 'no_activity'; coverageDetail: string | null }
   | {
       status: 'ready';
@@ -51,6 +52,9 @@ export function panelFromRead(input: {
   agentsDiffer: boolean;
 }): PanelResponse {
   const link = input.personId ? { personId: input.personId, participantKey: input.participantKey } : null;
+  if (input.remote?.state === 'unavailable' && input.remote.reason === 'not_configured') {
+    return { officialScoring: false, access: 'allowed', link, activity: { status: 'not_configured' } };
+  }
   if (!link) {
     return {
       officialScoring: false,

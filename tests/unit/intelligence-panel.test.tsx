@@ -72,6 +72,21 @@ describe('intelligence panel', () => {
     expect(screen.queryByText('This is not no activity.')).not.toBeInTheDocument();
   });
 
+  it('keeps a saved link visible when Follow Up Boss is not configured', async () => {
+    global.fetch = jest.fn(async () => jsonResponse({
+      officialScoring: false,
+      access: 'allowed',
+      link: { personId: 38620, participantKey: 'borrower' },
+      activity: { status: 'not_configured' },
+    })) as typeof fetch;
+
+    render(<IntelligencePanel referralId="ref-1" />);
+    expect(await screen.findByText('Linked to FUB contact 38620')).toBeInTheDocument();
+    expect(screen.getByText("Follow Up Boss isn't set up here, so activity can't be checked. Saved links are unchanged.")).toBeInTheDocument();
+    expect(screen.queryByText("This customer isn't linked.")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Follow Up Boss person id')).not.toBeInTheDocument();
+  });
+
   it('removes a link without creating another mapping', async () => {
     const bodies: unknown[] = [];
     global.fetch = jest.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {

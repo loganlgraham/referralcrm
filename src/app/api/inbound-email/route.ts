@@ -26,6 +26,7 @@ import {
   verifyResendWebhookSignature
 } from '@/lib/server/resend-webhook-signature';
 import { getReferralNotificationRecipients } from '@/lib/server/cc-recipients';
+import { applyIntakeAgentSuggestion, canPersistAutoAgentAssignment } from '@/lib/server/agent-auto-suggest';
 
 interface NormalizedAttachment {
   filename: string;
@@ -1082,6 +1083,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
 
     await Promise.allSettled(activityPromises);
+
+    if (canPersistAutoAgentAssignment()) {
+      await applyIntakeAgentSuggestion(referral._id.toString()).catch((error) => {
+        console.error('[Agent Auto-Suggest] Failed after inbound create:', error);
+      });
+    }
 
     await generateAndReconcileAdminTasks({
       referralId: referral._id.toString(),

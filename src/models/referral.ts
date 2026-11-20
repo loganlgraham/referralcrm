@@ -214,6 +214,25 @@ const referralSchema = new Schema(
       enum: ['AHA', 'AHA_OOS'],
       default: null,
     },
+    agentSelectionSource: {
+      type: String,
+      enum: ['auto', 'manual'],
+      default: null,
+    },
+    agentSuggestion: {
+      agentId: { type: Schema.Types.ObjectId, ref: 'Agent', default: null },
+      agentName: { type: String, default: null },
+      policyVersion: { type: String, default: null },
+      provisional: { type: Boolean, default: false },
+      reasons: { type: [String], default: [] },
+      status: {
+        type: String,
+        enum: ['applied', 'none', 'skipped'],
+        default: null,
+      },
+      skippedReason: { type: String, default: null },
+      updatedAt: { type: Date, default: null },
+    },
     origin: {
       type: String,
       enum: ['agent', 'mc', 'admin'],
@@ -405,6 +424,17 @@ export interface ReferralDocument {
   lender?: Types.ObjectId;
   org: 'AFC' | 'AHA';
   ahaBucket?: 'AHA' | 'AHA_OOS' | null;
+  agentSelectionSource?: 'auto' | 'manual' | null;
+  agentSuggestion?: {
+    agentId?: Types.ObjectId | null;
+    agentName?: string | null;
+    policyVersion?: string | null;
+    provisional?: boolean;
+    reasons?: string[];
+    status?: 'applied' | 'none' | 'skipped' | null;
+    skippedReason?: string | null;
+    updatedAt?: Date | null;
+  } | null;
   origin?: 'agent' | 'mc' | 'admin';
   timeline?: 'asap' | '1-3_months' | '3-6_months' | '6-12_months' | '12+_months' | 'not_specified';
   autoUpdateRemindersEnabled?: boolean;
