@@ -125,9 +125,8 @@ function verifiedDealZip(payment: HistoryPayment): string | null {
   return ZIP.test(zip) ? zip : null;
 }
 
-function evidenceZips(referral: HistoryReferral, deals: DealFacts | undefined): string[] {
-  const dealZips = deals?.propertyZips ?? [];
-  return Array.from(new Set([...referral.zips, ...dealZips]));
+function evidenceZips(deals: DealFacts | undefined): string[] {
+  return Array.from(new Set(deals?.propertyZips ?? []));
 }
 
 /**
@@ -165,7 +164,7 @@ export function deriveAgentOutcomes(referrals: readonly HistoryReferral[], now: 
     }
     for (const agentId of new Set([...current, ...facts.keys()])) {
       const deals = facts.get(agentId);
-      const base = { referralId: referral.id, agentId, lenderId: referral.lenderId, zips: evidenceZips(referral, deals) };
+      const base = { referralId: referral.id, agentId, lenderId: referral.lenderId, zips: evidenceZips(deals) };
       if (deals && deals.closed.length > 0) {
         outcomes.push({
           ...base,

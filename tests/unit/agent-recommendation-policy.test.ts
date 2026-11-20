@@ -392,12 +392,12 @@ describe('scoring', () => {
 
   it('uses clear denominators for close, contract, MC, ZIP, and AFC', () => {
     const history = [
-      closed({ usedAfcAtClosing: true }),
-      { ...closed({ usedAfcAtClosing: false }), lenderId: OTHER_MC, zips: ['80202'] },
-      closed({ side: 'sell', usedAfcAtClosing: false }),
-      closed({ usedAfcAtClosing: null }),
+      closed({ usedAfcAtClosing: true, propertyPostalCode: '80014' }),
+      { ...closed({ usedAfcAtClosing: false, propertyPostalCode: '80202' }), lenderId: OTHER_MC, zips: ['80202'] },
+      closed({ side: 'sell', usedAfcAtClosing: false, propertyPostalCode: '80014' }),
+      closed({ usedAfcAtClosing: null, propertyPostalCode: '80014' }),
       referral(),
-      referral({ status: 'Terminated', lostReason: null, payments: [deal({ status: 'terminated' })] }),
+      referral({ status: 'Terminated', lostReason: null, payments: [deal({ status: 'terminated', propertyPostalCode: '80014' })] }),
       referral({ status: 'Active Lead', lostReason: null }),
       referral({ lostReason: 'not_qualified' }),
       referral({ lostReason: null }),
@@ -406,7 +406,7 @@ describe('scoring', () => {
     expect(entry?.factors.overall).toMatchObject({ successes: 4, trials: 6 });
     expect(entry?.factors.contract).toMatchObject({ successes: 5, trials: 6 });
     expect(entry?.factors.mc).toMatchObject({ successes: 3, trials: 5 });
-    expect(entry?.factors.zip).toMatchObject({ successes: 3, trials: 5 });
+    expect(entry?.factors.zip).toMatchObject({ successes: 3, trials: 4 });
     expect(entry?.factors.usedAfc).toMatchObject({ successes: 1, trials: 2 });
     expect(entry?.afcUnknown).toBe(1);
     expect(entry?.unknownLossReasons).toBe(1);
@@ -441,6 +441,16 @@ describe('scoring', () => {
     expect(b?.factors.zip).toMatchObject({ successes: 1, trials: 1 });
     expect(a?.factors.overall).toMatchObject({ successes: 2, trials: 3 });
     expect(b?.factors.overall).toMatchObject({ successes: 1, trials: 2 });
+  });
+
+  it('does not treat a referral search ZIP as historical deal ZIP evidence', () => {
+    const history = [
+      { ...closed({ agentId: 'a', propertyPostalCode: null }), zips: ['80107'] },
+    ];
+
+    const entry = rank(history, ['a'], { mcId: null, zips: ['80107'] }).ranked[0];
+
+    expect(entry?.factors.zip).toMatchObject({ successes: 0, trials: 0, points: 50 });
   });
 
   it('labels Leah-shaped outcome samples without calling them all referrals', () => {
