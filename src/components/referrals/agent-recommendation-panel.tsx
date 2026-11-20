@@ -17,6 +17,8 @@ export function AgentRecommendationPanel({
   zips,
   selectionSource = null,
   canPersistAssignment = false,
+  embedded = false,
+  assignedAgentName = null,
   onAssigned,
 }: {
   referralId: string;
@@ -24,6 +26,8 @@ export function AgentRecommendationPanel({
   zips: readonly string[];
   selectionSource?: 'auto' | 'manual' | null;
   canPersistAssignment?: boolean;
+  embedded?: boolean;
+  assignedAgentName?: string | null;
   onAssigned?: (agent: { id: string; name: string }) => void;
 }) {
   const [load, setLoad] = useState<LoadState>({ status: 'loading' });
@@ -92,11 +96,23 @@ export function AgentRecommendationPanel({
   const top = ranked[0] ?? null;
   const alternatives = ranked.slice(1, 3);
   const appliedAuto = localSource === 'auto';
+  const panelClasses = embedded
+    ? 'min-w-0 max-w-full rounded-xl border border-border bg-surface-subtle p-3'
+    : `${railCardClasses} min-w-0 max-w-full`;
+  const HeadingTag = embedded ? 'h3' : 'h2';
+
+  const useAgent = (entry: AgentRecommendation) => {
+    if (canPersistAssignment) {
+      void persistAssignment(entry.agentId);
+      return;
+    }
+    setOverride(entry.agentId);
+  };
 
   return (
-    <section className={`${railCardClasses} min-w-0 max-w-full`} aria-labelledby="agent-recommendation-title" aria-busy={load.status === 'loading'}>
+    <section className={panelClasses} aria-labelledby="agent-recommendation-title" aria-busy={load.status === 'loading'}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="agent-recommendation-title" className={railTitleClasses}>Suggested agent</h2>
+        <HeadingTag id="agent-recommendation-title" className={railTitleClasses}>Suggested agent</HeadingTag>
         <span className={metaPillClasses}>Preview</span>
       </div>
       <p className="mt-0.5 text-[13px] text-foreground-subtle">
@@ -127,14 +143,34 @@ export function AgentRecommendationPanel({
       {top ? (
         <div className="mt-4 grid min-w-0 gap-3 text-sm">
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="break-words text-base font-semibold text-foreground">{top.name}</p>
-              <EvidenceBadge strength={top.evidenceStrength} />
-              {appliedAuto ? <span className={metaPillClasses}>Auto-suggested</span> : null}
+            <div className="grid min-w-0 gap-2">
+              <div className="grid gap-1">
+                <p className="text-eyebrow text-foreground-subtle">Assigned</p>
+                <p className="break-words text-sm font-semibold text-foreground">{assignedAgentName ?? 'Not assigned yet'}</p>
+              </div>
+              <div className="grid gap-1">
+                <p className="text-eyebrow text-foreground-subtle">Suggested</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="break-words text-base font-semibold text-foreground">{top.name}</p>
+                  <EvidenceBadge strength={top.evidenceStrength} />
+                  {appliedAuto ? <span className={metaPillClasses}>Auto-suggested</span> : null}
+                </div>
+              </div>
+              <button
+                className={buttonClasses({ variant: 'secondary', size: 'sm' })}
+                type="button"
+                disabled={assigning}
+                onClick={() => useAgent(top)}
+              >
+                {`Use ${top.name}`}
+              </button>
             </div>
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-foreground-muted">
-              {top.reasons.map((reason) => <li key={reason} className="break-words">{reason}</li>)}
-            </ul>
+            <details className="mt-2">
+              <summary className="cursor-pointer text-xs font-semibold text-foreground-muted">Why this suggestion</summary>
+              <ul className="mt-1 list-disc space-y-1 pl-5 text-foreground-muted">
+                {top.reasons.map((reason) => <li key={reason} className="break-words">{reason}</li>)}
+              </ul>
+            </details>
             {top.unknownLossReasons > 0 ? (
               <p className="mt-1 text-xs text-foreground-subtle">{`${unknownLossLabel(top.unknownLossReasons)} not counted.`}</p>
             ) : null}
@@ -148,6 +184,9 @@ export function AgentRecommendationPanel({
                   <li key={entry.agentId} className="flex min-w-0 flex-wrap items-center gap-2">
                     <span className="break-words">{entry.name}</span>
                     <EvidenceBadge strength={entry.evidenceStrength} />
+                    <button className={`${railTextButtonClasses} ml-auto`} type="button" disabled={assigning} onClick={() => useAgent(entry)}>
+                      {`Use ${entry.name}`}
+                    </button>
                   </li>
                 ))}
               </ul>

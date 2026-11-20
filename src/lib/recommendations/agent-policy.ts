@@ -27,6 +27,7 @@ export type AhaBucket = 'AHA' | 'AHA_OOS';
 export type EvidenceStrength = 'Strong' | 'Moderate' | 'Limited';
 
 const CLOSED_PAYMENT_STATUSES = new Set(['closed', 'payment_sent', 'paid']);
+const ZIP = /^\d{5}$/u;
 export const DRAFT_WORKLOAD_STAGE_WEIGHTS = {
   'New Lead': 1,
   Paired: 2,
@@ -46,6 +47,7 @@ export type HistoryPayment = {
   status: string | null;
   agentAttribution: string | null;
   usedAssignedAgent: boolean | null;
+  propertyPostalCode: string | null;
   /** Answer recorded on the closing form. null = defaulted or not verifiable. */
   usedAfcAtClosing: boolean | null;
 };
@@ -116,7 +118,17 @@ function statusForAgent(referral: HistoryReferral, agentId: string): string | nu
   return referral.status;
 }
 
-type DealFacts = { closed: HistoryPayment[]; contracted: boolean; terminated: boolean };
+type DealFacts = { closed: HistoryPayment[]; contracted: boolean; terminated: boolean; propertyZips: string[] };
+
+function verifiedDealZip(payment: HistoryPayment): string | null {
+  const zip = payment.propertyPostalCode?.trim() ?? '';
+  return ZIP.test(zip) ? zip : null;
+}
+
+function evidenceZips(referral: HistoryReferral, deals: DealFacts | undefined): string[] {
+  const dealZips = deals?.propertyZips ?? [];
+  return Array.from(new Set([...referral.zips, ...dealZips]));
+}
 
 /**
  * One outcome per referral and agent who worked it. Agents who were reassigned
@@ -143,15 +155,17 @@ export function deriveAgentOutcomes(referrals: readonly HistoryReferral[], now: 
       }
       const agentId = creditedAgent(payment, referral);
       if (!agentId) continue;
-      const entry = facts.get(agentId) ?? { closed: [], contracted: false, terminated: false };
+      const entry = facts.get(agentId) ?? { closed: [], contracted: false, terminated: false, propertyZips: [] };
+      const propertyZip = verifiedDealZip(payment);
       entry.contracted = true;
       if (closed) entry.closed.push(payment);
       if (payment.status === 'terminated') entry.terminated = true;
+      if (propertyZip) entry.propertyZips.push(propertyZip);
       facts.set(agentId, entry);
     }
     for (const agentId of new Set([...current, ...facts.keys()])) {
-      const base = { referralId: referral.id, agentId, lenderId: referral.lenderId, zips: referral.zips };
       const deals = facts.get(agentId);
+      const base = { referralId: referral.id, agentId, lenderId: referral.lenderId, zips: evidenceZips(referral, deals) };
       if (deals && deals.closed.length > 0) {
         outcomes.push({
           ...base,

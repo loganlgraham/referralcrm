@@ -148,8 +148,8 @@ export async function buildAgentRecommendations(input: {
     }[]>();
   const paymentDocs = historyDocs.length
     ? await Payment.find({ referralId: { $in: historyDocs.map((doc) => doc._id) } })
-        .select('referralId agentId side status agentAttribution usedAssignedAgent usedAfcAtClosing')
-        .lean<{ referralId: Types.ObjectId; agentId?: IdLike; side?: 'buy' | 'sell'; status?: string; agentAttribution?: string | null; usedAssignedAgent?: boolean; usedAfcAtClosing?: boolean | null }[]>()
+        .select('referralId agentId side status agentAttribution usedAssignedAgent propertyPostalCode usedAfcAtClosing')
+        .lean<{ referralId: Types.ObjectId; agentId?: IdLike; side?: 'buy' | 'sell'; status?: string; agentAttribution?: string | null; usedAssignedAgent?: boolean; propertyPostalCode?: string | null; usedAfcAtClosing?: boolean | null }[]>()
     : [];
   const paymentsByReferral = new Map<string, HistoryReferral['payments']>();
   for (const payment of paymentDocs) {
@@ -162,6 +162,7 @@ export async function buildAgentRecommendations(input: {
         status: payment.status ?? null,
         agentAttribution: payment.agentAttribution ?? null,
         usedAssignedAgent: typeof payment.usedAssignedAgent === 'boolean' ? payment.usedAssignedAgent : null,
+        propertyPostalCode: typeof payment.propertyPostalCode === 'string' ? payment.propertyPostalCode : null,
         usedAfcAtClosing: typeof payment.usedAfcAtClosing === 'boolean' ? payment.usedAfcAtClosing : null,
       },
     ]);

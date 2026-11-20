@@ -921,26 +921,18 @@ export function ReferralHeader({
             pendingMcHelper={pendingMcHelper}
             showAgentCcField={showAgentCcField}
             showMcCcField={showMcCcField}
+            agentRecommendationSlot={showAgentRecommendation ? (
+              <AgentRecommendationPanel
+                key={ahaBucket}
+                referralId={String(referral._id)}
+                mcId={effectiveMcContact?.id ?? null}
+                zips={recommendationZips}
+                selectionSource={referral.agentSelectionSource ?? null}
+                assignedAgentName={effectiveBuySideContact?.name ?? null}
+                embedded
+              />
+            ) : null}
           />
-
-          {showAgentRecommendation ? (
-            <AgentRecommendationPanel
-              key={ahaBucket}
-              referralId={String(referral._id)}
-              mcId={effectiveMcContact?.id ?? null}
-              zips={recommendationZips}
-              selectionSource={referral.agentSelectionSource ?? null}
-              canPersistAssignment={viewerRole === 'admin' || viewerRole === 'manager'}
-              onAssigned={(agent) => {
-                onBuySideAgentContactChange?.({
-                  id: agent.id,
-                  name: agent.name,
-                  email: null,
-                  phone: null,
-                });
-              }}
-            />
-          ) : null}
 
           {railSlot}
 

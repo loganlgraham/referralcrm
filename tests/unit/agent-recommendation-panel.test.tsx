@@ -79,14 +79,20 @@ describe('agent recommendation panel', () => {
 
   it('shows one suggestion, three reasons, two alternatives, and no assign or send action', async () => {
     global.fetch = jest.fn(() => respond(body(['Ana', 'Ben', 'Cy', 'Dee']))) as typeof fetch;
-    render(<AgentRecommendationPanel referralId="r1" mcId="mc" zips={['80014']} />);
+    render(<AgentRecommendationPanel referralId="r1" mcId="mc" zips={['80014']} assignedAgentName="Weston" embedded />);
     await flush();
+    expect(screen.getByText('Assigned')).toBeInTheDocument();
+    expect(screen.getByText('Weston')).toBeInTheDocument();
+    expect(screen.getByText('Suggested')).toBeInTheDocument();
     expect((await screen.findAllByText('Ana')).length).toBeGreaterThan(0);
+    expect(screen.getByRole('button', { name: 'Use Ana' })).toBeInTheDocument();
+    expect(screen.getByText('Why this suggestion')).toBeInTheDocument();
     expect(screen.getAllByText(/Ana reason/)).toHaveLength(3);
     expect(screen.queryAllByText(/Ben reason/)).toHaveLength(0);
     const alternatives = screen.getByText('Alternatives').parentElement as HTMLElement;
     expect(alternatives).toHaveTextContent('Ben');
     expect(alternatives).toHaveTextContent('Cy');
+    expect(screen.getByRole('button', { name: 'Use Ben' })).toBeInTheDocument();
     expect(screen.queryByText('Dee')).not.toBeInTheDocument();
     expect(screen.getByText('Strong evidence')).toBeInTheDocument();
     expect(screen.getByText(/does not assign anyone on hosted previews/i)).toBeInTheDocument();

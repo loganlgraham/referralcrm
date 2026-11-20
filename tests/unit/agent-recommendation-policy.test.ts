@@ -45,7 +45,7 @@ function referral(overrides: Partial<HistoryReferral> = {}): HistoryReferral {
 }
 
 function deal(overrides: Partial<HistoryPayment> = {}): HistoryPayment {
-  return { agentId: null, side: 'buy', status: 'paid', agentAttribution: null, usedAssignedAgent: true, usedAfcAtClosing: null, ...overrides };
+  return { agentId: null, side: 'buy', status: 'paid', agentAttribution: null, usedAssignedAgent: true, propertyPostalCode: null, usedAfcAtClosing: null, ...overrides };
 }
 
 const closed = (overrides: Partial<HistoryPayment> = {}) => referral({ status: 'Closed', lostReason: null, payments: [deal(overrides)] });
@@ -411,6 +411,36 @@ describe('scoring', () => {
     expect(entry?.afcUnknown).toBe(1);
     expect(entry?.unknownLossReasons).toBe(1);
     expect(entry?.excludedOutcomes).toBe(2);
+  });
+
+  it('uses verified deal ZIPs for historical ZIP evidence without penalizing unknown ZIPs', () => {
+    const history = [
+      { ...closed({ agentId: 'a', propertyPostalCode: '80107' }), zips: ['80014'] },
+      referral({
+        assignedAgentId: 'a',
+        zips: [],
+        status: 'Terminated',
+        lostReason: null,
+        payments: [deal({ status: 'terminated', agentId: 'a', propertyPostalCode: '80107' })],
+      }),
+      { ...closed({ agentId: 'a', propertyPostalCode: null }), zips: [] },
+      { ...closed({ agentId: 'b', propertyPostalCode: '80107' }), zips: [] },
+      referral({
+        assignedAgentId: 'b',
+        zips: [],
+        status: 'Terminated',
+        lostReason: null,
+        payments: [deal({ status: 'terminated', agentId: 'b', propertyPostalCode: null })],
+      }),
+    ];
+    const result = rank(history, ['a', 'b'], { mcId: null, zips: ['80107'] });
+    const a = result.ranked.find((entry) => entry.agentId === 'a');
+    const b = result.ranked.find((entry) => entry.agentId === 'b');
+
+    expect(a?.factors.zip).toMatchObject({ successes: 1, trials: 2 });
+    expect(b?.factors.zip).toMatchObject({ successes: 1, trials: 1 });
+    expect(a?.factors.overall).toMatchObject({ successes: 2, trials: 3 });
+    expect(b?.factors.overall).toMatchObject({ successes: 1, trials: 2 });
   });
 
   it('labels Leah-shaped outcome samples without calling them all referrals', () => {
