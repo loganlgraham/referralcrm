@@ -10,7 +10,7 @@ import {
   renderInboundConfirmationEmail,
   renderNewReferralNotificationEmail,
 } from '@/lib/email-templates/referral-ops';
-import { buildReferralLink } from '@/lib/referral-links';
+import { buildReferralLink, getReferralAppBaseUrl } from '@/lib/referral-links';
 import { logReferralActivity } from '@/lib/server/activities';
 import { generateAndReconcileAdminTasks } from '@/lib/server/admin-task-reconciler';
 import { extractInboundEmailFieldsWithAI } from '@/lib/server/inbound-email-ai-parser';
@@ -926,7 +926,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     email.attachments.map(async (attachment, index) => {
       const original = attachment.id ? {
         name: attachment.filename,
-        url: `/api/referrals/${intake.referralId}/intake-attachments/${encodeURIComponent(attachment.id)}`,
+        url: `${getReferralAppBaseUrl()}/api/referrals/${intake.referralId}/intake-attachments/${encodeURIComponent(attachment.id)}`,
       } : null;
       if (!attachment.content) return original;
       try {

@@ -1,36 +1,15 @@
-import { Types } from 'mongoose';
-import { getCurrentSession } from '@/lib/auth';
-import { connectMongo } from '@/lib/mongoose';
-import { canViewReferral, type ReferralAccess } from '@/lib/rbac';
-import { Referral } from '@/models/referral';
+import { getAuthorizedIntakeMessage } from '@/lib/server/referral-intake-files';
 
 export async function GET(
   _request: Request,
   { params }: { params: { id: string; attachmentId: string } },
 ) {
-  const session = await getCurrentSession();
-  if (!session?.user) return new Response(null, { status: 401 });
-  if (
-    !Types.ObjectId.isValid(params.id) ||
-    !/^[\w-]{1,128}$/.test(params.attachmentId)
-  )
-    return new Response(null, { status: 404 });
-  await connectMongo();
-  const referral = await Referral.findOne({ _id: params.id, deletedAt: null })
-    .select(
-      'org assignedAgent buySideAgent sellSideAgent lender inboundEmail.messageId',
-    )
-    .populate('assignedAgent buySideAgent sellSideAgent lender', 'userId')
-    .lean<ReferralAccess & { inboundEmail?: { messageId: string } }>();
-  if (
-    !referral ||
-    !canViewReferral(session, referral) ||
-    !referral.inboundEmail?.messageId
-  )
-    return new Response(null, { status: 404 });
+  if (!/^[\w-]{1,128}$/.test(params.attachmentId)) return new Response(null, { status: 404 });
+  const messageId = await getAuthorizedIntakeMessage(params.id);
+  if (!messageId) return new Response(null, { status: 404 });
   const base =
     'https://api.resend.com/emails/receiving/' +
-    encodeURIComponent(referral.inboundEmail.messageId);
+    encodeURIComponent(messageId);
   const metadata = await fetch(
     base + '/attachments/' + encodeURIComponent(params.attachmentId),
     {
