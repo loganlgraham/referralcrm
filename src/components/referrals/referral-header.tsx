@@ -27,7 +27,7 @@ import { SLAWidget } from '@/components/referrals/sla-widget';
 import type { Contact } from '@/components/referrals/contact-assignment';
 import { AdminTasksCard } from '@/components/referrals/admin-tasks-card';
 import { AdminDetailHeader } from '@/components/referrals/admin-referral-detail';
-import { referralWorkflowRoute } from '@/lib/referral-routing';
+import { needsInitialAgentSuggestion, referralWorkflowRoute } from '@/lib/referral-routing';
 import { TeamCard } from '@/components/referrals/team-card';
 import { FubAgentMapping } from '@/components/referrals/fub-agent-mapping';
 import { AgentRecommendationPanel } from '@/components/referrals/agent-recommendation-panel';
@@ -428,7 +428,7 @@ export function ReferralHeader({
   const workflowRoute = referralWorkflowRoute(referral);
   const workflowAgent = referral.clientType === 'Seller' ? effectiveSellSideContact : effectiveBuySideContact;
   const showAgentRecommendation =
-    (viewerRole === 'admin' || viewerRole === 'manager') && Boolean(workflowRoute);
+    (viewerRole === 'admin' || viewerRole === 'manager') && (Boolean(workflowRoute) || needsInitialAgentSuggestion(referral));
 
   const propertyLabel = useMemo(() => {
     if (effectivePropertyAddress && effectivePropertyAddress.trim().length > 0) {
@@ -929,17 +929,18 @@ export function ReferralHeader({
             showMcCcField={showMcCcField}
             agentRecommendationSlot={showAgentRecommendation ? (
               <AgentRecommendationPanel
-                key={workflowRoute}
+                key={String(referral._id)}
                 referralId={String(referral._id)}
                 mcId={effectiveMcContact?.id ?? null}
                 zips={recommendationZips}
-                selectionSource={referral.agentSelectionSource ?? null}
+                reviewIntakeSuggestion={referral.agentSelectionSource === 'auto' && status === 'New Lead'}
+                assignedAgentId={workflowAgent?.id ?? null}
                 side={referral.clientType === 'Seller' ? 'sell' : 'buy'}
                 assignedAgentName={workflowAgent?.name ?? null}
                 canPersistAssignment={viewerRole === 'admin' && canAssignBuyAgent}
                 onAssigned={contact => {
                   const update = referral.clientType === 'Seller' ? onSellSideAgentContactChange : onBuySideAgentContactChange;
-                  update?.({ ...contact, ahaDesignation: workflowRoute });
+                  update?.(contact);
                 }}
                 embedded
               />

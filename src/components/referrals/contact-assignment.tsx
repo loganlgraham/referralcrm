@@ -128,9 +128,6 @@ export function ContactAssignment({
   const [selected, setSelected] = useState(contact?.id ?? '');
   const [submitting, setSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [suggesting, setSuggesting] = useState(false);
-  const [suggestionReason, setSuggestionReason] = useState<string | null>(null);
-  const [suggestedAgentIds, setSuggestedAgentIds] = useState<string[]>([]);
 
   const apiUrl = open && canAssign ? `${directoryForType[type]}?all=true&minimal=true` : null;
   const { data: response } = useSWR<PaginatedResponse<AssignmentOption>>(apiUrl, fetcher);
@@ -149,8 +146,6 @@ export function ContactAssignment({
     setCurrentContact(contact);
     setSelected(contact?.id ?? '');
     setSearchTerm('');
-    setSuggestionReason(null);
-    setSuggestedAgentIds([]);
   }, [contact]);
 
   const formattedContact = useMemo(() => {
@@ -187,36 +182,6 @@ export function ContactAssignment({
     () => filteredOptions.find((option) => option._id === selected) ?? options.find((option) => option._id === selected),
     [filteredOptions, options, selected]
   );
-
-  const handleSuggest = async () => {
-    if (type !== 'agent') return;
-    setSuggesting(true);
-    setSuggestionReason(null);
-    try {
-      const params = new URLSearchParams();
-      suggestedAgentIds.forEach((id) => params.append('exclude', id));
-      const response = await fetch(
-        `/api/referrals/${referralId}/suggest-agent${params.toString() ? `?${params.toString()}` : ''}`
-      );
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        const message = typeof payload?.error === 'string' ? payload.error : 'Unable to suggest an agent right now.';
-        throw new Error(message);
-      }
-
-      const suggestion = (await response.json()) as { agentId: string; reason?: string; name?: string };
-      setSelected(suggestion.agentId);
-      setSuggestionReason(suggestion.reason ?? null);
-      setSuggestedAgentIds((previous) => [...previous, suggestion.agentId]);
-      setSearchTerm('');
-      toast.success(`Suggested ${suggestion.name ?? 'agent'} selected`);
-    } catch (error) {
-      console.error(error);
-      toast.error(error instanceof Error ? error.message : 'Unable to suggest an agent right now.');
-    } finally {
-      setSuggesting(false);
-    }
-  };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -377,27 +342,6 @@ export function ContactAssignment({
             <p className="rounded-lg border border-warning/30 bg-warning-soft px-2 py-1.5 text-xs text-warning">
               This {title.toLowerCase()} is marked inactive. You can still assign them, but verify this is intentional.
             </p>
-          )}
-          {type === 'agent' && (
-            <div className="flex flex-col gap-2 rounded-lg border border-dashed border-border p-3 text-xs text-foreground-muted">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <p className="font-medium text-foreground-muted">Need a recommendation?</p>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleSuggest}
-                  loading={suggesting}
-                >
-                  {suggesting ? 'Thinking…' : 'Suggest agent'}
-                </Button>
-              </div>
-              {suggestionReason && (
-                <p className="rounded-lg bg-surface-subtle p-2 text-xs text-foreground-muted">
-                  <span className="font-semibold text-foreground-muted">Why:</span> {suggestionReason}
-                </p>
-              )}
-            </div>
           )}
           <Button type="submit" size="sm" className="w-full" disabled={!selected} loading={submitting}>
             {submitting ? 'Saving…' : 'Save'}

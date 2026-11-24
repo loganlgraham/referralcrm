@@ -1,5 +1,4 @@
 import { Metadata } from 'next';
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getReferralById, getAdjacentReferralIds } from '@/lib/server/referrals';
 import { getCurrentSession } from '@/lib/auth';
@@ -72,10 +71,6 @@ export default async function ReferralDetailPage({ params, searchParams }: Refer
   }
 
   return (
-    <>
-    {isAdminLike && referral.inboundEmail?.messageId ? (
-      <Link prefetch={false} className="text-sm underline" href={`/referrals/${params.id}/intake-files`}>View intake email attachments</Link>
-    ) : null}
     <ReferralDetailClient
       referral={referral}
       viewerRole={viewerRole}
@@ -85,6 +80,5 @@ export default async function ReferralDetailPage({ params, searchParams }: Refer
       nextReferralId={nextReferralId}
       listParams={listParams}
     />
-    </>
   );
 }
