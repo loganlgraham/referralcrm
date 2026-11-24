@@ -333,7 +333,6 @@ function duplicateKey(error: unknown): boolean {
 export async function canViewFubDashboard(userId: string): Promise<boolean> {
   const user = await readStoredFields(userId);
   if (!user || user.role !== 'admin' || storedAccountStatus(user) !== 'active') return false;
-  if (process.env.REFERRIO_FUB_ACCOUNT_ID !== VERIFIED_FUB_ACCOUNT_ID) return false;
   if (await readOwnerUserId() === userId) return true;
   return await readAccessState(VERIFIED_FUB_ORGANIZATION, userId, 'dashboard') === 'granted';
 }

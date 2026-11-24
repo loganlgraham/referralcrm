@@ -38,3 +38,11 @@ test('task drilldown shows the dated evidence and its limits', () => {
   expect(screen.getByText(/Missing task details are not counted as overdue/)).toBeInTheDocument();
   expect(screen.getByText(/date only/)).toBeInTheDocument();
 });
+
+test('explains an unconfigured preview without fetching or displaying cached evidence', () => {
+  jest.clearAllMocks();
+  render(<FubDashboard userId="owner" configured={false} />);
+  expect(screen.getByText('FUB data connection is not ready')).toBeInTheDocument();
+  expect(screen.queryByText('Jordan Avery')).not.toBeInTheDocument();
+  expect(fetcher).not.toHaveBeenCalled();
+});

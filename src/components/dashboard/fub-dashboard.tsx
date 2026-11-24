@@ -23,10 +23,10 @@ const time = (value: string, dateOnly = false) => {
   }).format(date);
 };
 
-export function FubDashboard({ userId }: { userId: string }) {
+export function FubDashboard({ userId, configured = true }: { userId: string; configured?: boolean }) {
   const [days, setDays] = useState<7 | 30 | 90>(30);
   const { data, error, isLoading, mutate } = useSWR<SopDashboard>(
-    [`/api/dashboard/fub?days=${days}`, userId],
+    configured ? [`/api/dashboard/fub?days=${days}`, userId] : null,
     ([url]: [string, string]) => fetcher(url),
     { refreshInterval: 60_000, shouldRetryOnError: false },
   );
@@ -57,7 +57,15 @@ export function FubDashboard({ userId }: { userId: string }) {
           </select>
         </label>
       </div>
-      {error ? (
+      {!configured ? (
+        <div role="status" className="rounded-card border border-border bg-surface p-5">
+          <h3 className="font-semibold">FUB data connection is not ready</h3>
+          <p className="mt-2 text-sm text-foreground-muted">
+            You have access to this dashboard, but this environment has not been connected
+            to the FUB evidence service yet. Live SOP numbers and evidence are unavailable.
+          </p>
+        </div>
+      ) : error ? (
         <div
           role="alert"
           className="rounded-card border border-border bg-surface p-5"

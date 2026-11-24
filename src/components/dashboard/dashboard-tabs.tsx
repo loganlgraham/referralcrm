@@ -3746,7 +3746,7 @@ export function DashboardTabs() {
   // chips; the dashboard fetch waits for it to avoid loading the default first.
   const [networksLoaded, setNetworksLoaded] = useState(false);
   const { data: session } = useSession();
-  const { data: fubAccess, error: fubAccessError } = useSWR<{ allowed: boolean }>(session?.user?.role === 'admin' ? ['/api/dashboard/fub?access=1', session.user.id] : null, ([url]: [string, string]) => fetcher(url), { refreshInterval: 30_000, shouldRetryOnError: false });
+  const { data: fubAccess, error: fubAccessError } = useSWR<{ allowed: boolean; configured?: boolean }>(session?.user?.role === 'admin' ? ['/api/dashboard/fub?access=1', session.user.id] : null, ([url]: [string, string]) => fetcher(url), { refreshInterval: 30_000, shouldRetryOnError: false });
   const canViewFub = session?.user?.role === 'admin' && fubAccess?.allowed === true && !fubAccessError;
 
   useEffect(() => {
@@ -3921,7 +3921,7 @@ export function DashboardTabs() {
         </div>
       ) : null}
 
-      {activeTab === 'fub' ? (canViewFub ? <FubDashboard key={session?.user?.id} userId={session?.user?.id ?? ''} /> : null) : error ? (<div role="alert" className="rounded-card border border-danger/30 bg-danger-soft p-4 text-danger">Unable to load dashboard analytics. Please try again later.</div>) : !isRangeReady ? (
+      {activeTab === 'fub' ? (canViewFub ? <FubDashboard key={session?.user?.id} userId={session?.user?.id ?? ''} configured={fubAccess?.configured === true} /> : null) : error ? (<div role="alert" className="rounded-card border border-danger/30 bg-danger-soft p-4 text-danger">Unable to load dashboard analytics. Please try again later.</div>) : !isRangeReady ? (
         <div className="rounded-card border border-warning/30 bg-warning-soft p-4 text-sm text-warning shadow-card">
           Select a start and end date to load dashboard metrics.
         </div>

@@ -45,3 +45,11 @@ test('only the owner can create a separate dashboard grant', async () => {
   expect(FubDashboardAccess.create).toHaveBeenCalledTimes(1);
   expect(IntelligenceAccess.create).not.toHaveBeenCalled();
 });
+
+test('missing connection settings do not hide the dashboard from authorized users', async () => {
+  delete process.env.REFERRIO_FUB_ACCOUNT_ID;
+  expect(await canViewFubDashboard(OWNER)).toBe(true);
+  expect(await canViewFubDashboard(ADMIN)).toBe(false);
+  grant = { revokedAt: null };
+  expect(await canViewFubDashboard(ADMIN)).toBe(true);
+});

@@ -13,6 +13,9 @@ jest.mock('@/lib/intelligence/sop-remote', () => ({ fetchSopDashboard: jest.fn()
 const request = (query = '') => new NextRequest(`https://referrio.app/api/dashboard/fub${query}`);
 beforeEach(() => {
   jest.clearAllMocks();
+  process.env.REFERRIO_FUB_ACCOUNT_ID = '1846967076';
+  process.env.REFERRIO_INTELLIGENCE_URL = 'https://fub-intelligence-agent.vercel.app/api/integration/referrio/customer';
+  process.env.REFERRIO_INTEGRATION_SECRET = 'test-only-secret';
   (getCurrentSession as jest.Mock).mockResolvedValue({ user: { id: 'test-admin' } });
   (canViewFubDashboard as jest.Mock).mockResolvedValue(false);
   (fetchSopDashboard as jest.Mock).mockResolvedValue(fubDashboardFixture);
@@ -37,4 +40,13 @@ test('validates the range and returns only private evidence for an authorized us
   expect(response.status).toBe(200);
   expect(response.headers.get('cache-control')).toContain('no-store');
   expect(await response.json()).toEqual(fubDashboardFixture);
+});
+
+test('separates missing connection settings from permission and never fetches unconfigured evidence', async () => {
+  (canViewFubDashboard as jest.Mock).mockResolvedValue(true);
+  delete process.env.REFERRIO_FUB_ACCOUNT_ID;
+  const access = await GET(request('?access=1'));
+  expect(await access.json()).toEqual({ allowed: true, configured: false });
+  expect((await GET(request())).status).toBe(503);
+  expect(fetchSopDashboard).not.toHaveBeenCalled();
 });
