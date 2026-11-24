@@ -6,6 +6,7 @@ import {
   MONGO_POOL_OPTIONS,
   raceWithTimeout,
   shouldCloseBeforeConnect,
+  summarizeMongoConnectError,
 } from '@/lib/mongo-connection';
 
 const resolvedMongoUri =
@@ -122,7 +123,7 @@ function invalidateCache(reason: string): void {
     return;
   }
   cached.conn = null;
-  cached.promise = null;
+  // Lifecycle events must not release an in-flight recovery owned by another request.
   cached.lastSuccessfulOpAt = 0;
 }
 
@@ -146,7 +147,7 @@ function attachLifecycleListeners(connection: mongoose.Connection): void {
     }
   });
   connection.on('error', (error: unknown) => {
-    console.error('[mongo] connection error', error instanceof Error ? error.message : String(error));
+    console.error('[mongo] connection error', summarizeMongoConnectError(error));
   });
 }
 
@@ -164,8 +165,9 @@ async function closeExistingClient(): Promise<void> {
   } catch (error) {
     console.warn(
       '[mongo] closing previous client failed',
-      error instanceof Error ? error.message : String(error)
+      summarizeMongoConnectError(error)
     );
+    throw error;
   } finally {
     closingIntentionally = false;
   }
@@ -203,36 +205,11 @@ async function resetMongooseConnection(): Promise<void> {
 async function waitForConnected(connection: mongoose.Connection, timeoutMs: number): Promise<void> {
   if (connection.readyState === mongoose.ConnectionStates.connected) return;
 
-  const timeout = sleep(timeoutMs).then(() => {
-    throw new Error(
-      `MongoDB connection timed out, state: ${connection.readyState} (expected: ${mongoose.ConnectionStates.connected})`
-    );
-  });
-
-  const asPromise = (connection as any).asPromise?.bind(connection) as (() => Promise<any>) | undefined;
-  if (asPromise) {
-    await Promise.race([asPromise(), timeout]);
-  } else {
-    await Promise.race([
-      new Promise<void>((resolve, reject) => {
-        const onConnected = () => {
-          cleanup();
-          resolve();
-        };
-        const onError = (err: unknown) => {
-          cleanup();
-          reject(err);
-        };
-        const cleanup = () => {
-          connection.off('connected', onConnected);
-          connection.off('error', onError);
-        };
-        connection.on('connected', onConnected);
-        connection.on('error', onError);
-      }),
-      timeout,
-    ]);
-  }
+  await raceWithTimeout(
+    connection.asPromise(),
+    timeoutMs,
+    `MongoDB connection timed out, state: ${connection.readyState}`
+  );
 }
 
 /**
@@ -254,7 +231,7 @@ async function retryConnection(
     const delay = INITIAL_RETRY_DELAY * Math.pow(2, attempt - 1);
     console.warn(
       `Mongoose connection attempt ${attempt} failed, retrying in ${delay}ms...`,
-      error instanceof Error ? error.message : String(error)
+      summarizeMongoConnectError(error)
     );
 
     await sleep(delay);
@@ -279,29 +256,48 @@ export async function connectMongo(): Promise<typeof mongoose> {
 }
 
 async function connectMongoUnchecked(): Promise<typeof mongoose> {
-  if (cached?.conn && isConnectionHealthy()) {
-    if (isCachedConnectionFresh(cached.lastSuccessfulOpAt)) {
-      cached.lastSuccessfulOpAt = Date.now();
-      await registerModels();
-      return cached.conn;
-    }
-
-    const pingOk = await pingWithTimeout(cached.conn.connection);
-    if (pingOk) {
-      cached.lastSuccessfulOpAt = Date.now();
-      await registerModels();
-      return cached.conn;
-    }
-
-    console.warn('Mongoose connection failed ping, reconnecting...');
-    await resetMongooseConnection();
-  } else if (cached?.conn && !isConnectionHealthy()) {
-    console.warn('Mongoose connection is stale, reconnecting...');
-    await resetMongooseConnection();
+  // Own the entire health-check/recovery sequence, not just mongoose.connect().
+  // Publish the promise before any ping/disconnect can yield to another request.
+  const cache = cached!;
+  if (!cache.promise) {
+    const operation = Promise.resolve().then(ensureMongoConnection);
+    const shared = operation.finally(() => {
+      if (cache.promise === shared) cache.promise = null;
+    });
+    cache.promise = shared;
   }
+  return cache.promise;
+}
 
-  // Create new connection with retry logic
-  if (!cached?.promise) {
+async function ensureMongoConnection(): Promise<typeof mongoose> {
+  const cache = cached!;
+  try {
+    if (cache.conn) {
+      const existing = cache.conn;
+      if (isConnectionHealthy() && isCachedConnectionFresh(cache.lastSuccessfulOpAt)) {
+        cache.lastSuccessfulOpAt = Date.now();
+        await registerModels();
+        return existing;
+      }
+
+      // Allow the driver's existing client to recover a transient disconnect first.
+      // Concurrent callers share this one probe rather than flooding the pool.
+      const pingOk = await pingWithTimeout(existing.connection);
+      if (pingOk && cache.conn === existing && isConnectionHealthy()) {
+        cache.lastSuccessfulOpAt = Date.now();
+        await registerModels();
+        return existing;
+      }
+      // A probe can time out waiting behind real queries in a busy pool. Closing
+      // a client the driver still considers connected would abort those queries.
+      if (cache.conn === existing && isConnectionHealthy()) {
+        await registerModels();
+        return existing;
+      }
+      console.warn('[mongo] health check failed, reconnecting shared client');
+      await resetMongooseConnection();
+    }
+
     const needsTLS = requiresTLS(MONGODB_URI);
     
     const connectionOptions: Parameters<typeof mongoose.connect>[1] = {
@@ -340,128 +336,32 @@ async function connectMongoUnchecked(): Promise<typeof mongoose> {
       }
     }
 
-    cached!.promise = retryConnection(async () => {
+    const conn = await retryConnection(async () => {
+      await closeExistingClient();
       try {
-        await closeExistingClient();
-        const conn = await mongoose.connect(MONGODB_URI, connectionOptions);
-
-        // Ensure the underlying connection is actually ready.
-        await waitForConnected(conn.connection, connectionOptions.serverSelectionTimeoutMS ?? 10000);
-
-        attachLifecycleListeners(conn.connection);
-
-        // Let Fluid Compute drain pooled connections when the instance suspends,
-        // so idle connections don't accumulate against the Atlas connection cap.
+        const connected = await mongoose.connect(MONGODB_URI, connectionOptions);
+        await waitForConnected(connected.connection, connectionOptions.serverSelectionTimeoutMS ?? 10000);
+        attachLifecycleListeners(connected.connection);
         if (process.env.VERCEL) {
-          attachDatabasePool(conn.connection.getClient());
+          attachDatabasePool(connected.connection.getClient());
         }
-
-        if (cached) {
-          cached.lastSuccessfulOpAt = Date.now();
-        }
-
-        return conn;
+        return connected;
       } catch (error) {
-        // Keep cached.promise set during retries so concurrent callers await this attempt
-        // instead of starting a parallel client; the outer .catch clears it on final failure.
         await closeExistingClient();
-        cached!.conn = null;
-        cached!.lastSuccessfulOpAt = 0;
-        
-        // Enhance error messages for SSL/TLS issues
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        const isSSLError = errorMessage.includes('SSL') || 
-                          errorMessage.includes('TLS') || 
-                          errorMessage.includes('tlsv1') ||
-                          errorMessage.includes('certificate') ||
-                          errorMessage.includes('alert number');
-        
-        if (isSSLError) {
-          const enhancedError = new Error(
-            `MongoDB SSL/TLS connection error: ${errorMessage}. ` +
-            (ALLOW_INSECURE_TLS 
-              ? 'Invalid certificates are allowed but connection still failed. This may indicate a server-side issue or network problem.' 
-              : 'This error typically indicates certificate validation failure. ' +
-                'If using self-signed certificates or troubleshooting, set MONGODB_ALLOW_INVALID_CERTS=true. ' +
-                'Otherwise, check your MongoDB server certificate status and network connectivity.')
-          );
-          enhancedError.cause = error;
-          console.error('MongoDB SSL/TLS connection error:', {
-            message: errorMessage,
-            allowInsecureTLS: ALLOW_INSECURE_TLS,
-            connectionString: MONGODB_URI.replace(/\/\/[^:]+:[^@]+@/, '//***:***@'), // Mask credentials
-            isSRV: MONGODB_URI.startsWith('mongodb+srv://'),
-            originalError: error,
-          });
-          throw enhancedError;
-        }
-        
-        console.error('MongoDB connection error:', error);
         throw error;
       }
-    }).catch((error) => {
-      // Clear cache on final failure after all retries
-      cached!.promise = null;
-      cached!.conn = null;
-      cached!.lastSuccessfulOpAt = 0;
-      
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      const isSSLError = errorMessage.includes('SSL') || 
-                        errorMessage.includes('TLS') || 
-                        errorMessage.includes('tlsv1') ||
-                        errorMessage.includes('certificate') ||
-                        errorMessage.includes('alert number');
-      
-      if (isSSLError) {
-        console.error('MongoDB SSL/TLS connection failed after retries:', {
-          message: errorMessage,
-          allowInsecureTLS: ALLOW_INSECURE_TLS,
-          connectionString: MONGODB_URI.replace(/\/\/[^:]+:[^@]+@/, '//***:***@'), // Mask credentials
-          isSRV: MONGODB_URI.startsWith('mongodb+srv://'),
-          suggestion: ALLOW_INSECURE_TLS 
-            ? 'Connection failed even with certificate validation disabled. Check MongoDB server status and network connectivity.'
-            : 'Consider setting MONGODB_ALLOW_INVALID_CERTS=true as a temporary workaround, then investigate certificate issues.',
-          originalError: error,
-        });
-      } else {
-        console.error('MongoDB connection failed after retries:', error);
-      }
-      throw error;
     });
-  }
 
-  try {
-    cached!.conn = await cached!.promise;
-    cached!.lastSuccessfulOpAt = Date.now();
+    cache.conn = conn;
+    cache.lastSuccessfulOpAt = Date.now();
     await registerModels();
-    return cached!.conn;
+    return conn;
   } catch (error) {
-    // Clear cache on error to allow retry
-    cached!.promise = null;
-    cached!.conn = null;
-    cached!.lastSuccessfulOpAt = 0;
-    
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    const isSSLError = errorMessage.includes('SSL') || 
-                      errorMessage.includes('TLS') || 
-                      errorMessage.includes('tlsv1') ||
-                      errorMessage.includes('certificate') ||
-                      errorMessage.includes('alert number');
-    
-    if (isSSLError) {
-      console.error('MongoDB SSL/TLS connection failed:', {
-        message: errorMessage,
-        allowInsecureTLS: ALLOW_INSECURE_TLS,
-        connectionString: MONGODB_URI.replace(/\/\/[^:]+:[^@]+@/, '//***:***@'), // Mask credentials
-        isSRV: MONGODB_URI.startsWith('mongodb+srv://'),
-        suggestion: ALLOW_INSECURE_TLS 
-          ? 'Connection failed even with certificate validation disabled. Check MongoDB server status.'
-          : 'Set MONGODB_ALLOW_INVALID_CERTS=true if using self-signed certificates.',
-        originalError: error,
-      });
-    } else {
-      console.error('MongoDB connection failed:', error);
-    }
+    // Only the owning operation clears the cache. Waiting callers never clear a
+    // newer attempt after a failed shared promise settles.
+    cache.conn = null;
+    cache.lastSuccessfulOpAt = 0;
+    console.error('[mongo] connection failed after recovery', summarizeMongoConnectError(error));
     throw error;
   }
 }
