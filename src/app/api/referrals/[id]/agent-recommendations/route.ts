@@ -1,3 +1,4 @@
+import { referralWorkflowRoute, type RoutingSource } from '@/lib/referral-routing';
 import { NextRequest, NextResponse } from 'next/server';
 import { Types } from 'mongoose';
 import { getCurrentSession } from '@/lib/auth';
@@ -33,10 +34,12 @@ export async function GET(request: NextRequest, context: RouteContext): Promise<
   try {
     await connectMongo();
     const referral = await Referral.findById(context.params.id)
-      .select('org ahaBucket lookingInZip lookingInZips lender assignedAgent buySideAgent sellSideAgent deletedAt')
-      .lean<(RecommendationReferral & { deletedAt?: Date | null; assignedAgent?: Types.ObjectId }) | null>();
+      .select('org origin clientType inboundEmail ahaBucket lookingInZip lookingInZips lender assignedAgent buySideAgent sellSideAgent deletedAt')
+      .populate('assignedAgent buySideAgent sellSideAgent', 'ahaDesignation')
+      .lean<(RoutingSource & RecommendationReferral & { deletedAt?: Date | null; assignedAgent?: Types.ObjectId }) | null>();
     if (!referral || referral.deletedAt) return json(emptyRecommendationResponse('unavailable', version), 404);
-    const organization = referral.org === 'AHA' || referral.org === 'AFC' ? referral.org : 'AFC';
+    const bucket = referralWorkflowRoute(referral);
+    const organization = bucket ? 'AHA' : 'AFC';
     const canView = canViewReferral(session, { org: organization, assignedAgent: referral.assignedAgent ?? undefined });
     const viewer = await authorizeFubViewer({
       session,
@@ -50,7 +53,7 @@ export async function GET(request: NextRequest, context: RouteContext): Promise<
     const fubPermitted = viewer.access.ok && process.env.REFERRIO_FUB_ACCOUNT_ID === VERIFIED_FUB_ACCOUNT_ID;
     const params = request.nextUrl.searchParams;
     const body = await buildAgentRecommendations({
-      referral,
+      referral: { ...referral, org: organization, ahaBucket: bucket },
       mcOverride: parseMcParam(params.get('mcId')),
       zipOverride: parseZipParam(params.get('zips')),
       fubPermitted,

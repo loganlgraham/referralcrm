@@ -41,7 +41,7 @@ export async function getAdminTaskSummary(network: TaskNetworkParam): Promise<Ad
       .select('referralId dueAt dueAtOverride snoozedUntil status')
       .lean<AdminTaskLean[]>(),
     Referral.find({ deletedAt: null })
-      .select('_id status assignedAgent buySideAgent sellSideAgent ahaBucket org')
+      .select('_id status assignedAgent buySideAgent sellSideAgent ahaBucket org origin inboundEmail.channel inboundEmail.routeHint inboundEmail.messageId')
       .lean<SummaryReferral[]>(),
   ]);
 
@@ -62,7 +62,7 @@ export async function getAdminTaskSummary(network: TaskNetworkParam): Promise<Ad
   const extraReferrals = missingIds.length === 0
     ? []
     : await Referral.find({ _id: { $in: missingIds.map((id) => new Types.ObjectId(id)) } })
-      .select('_id status assignedAgent buySideAgent sellSideAgent ahaBucket org')
+      .select('_id status assignedAgent buySideAgent sellSideAgent ahaBucket org origin inboundEmail.channel inboundEmail.routeHint inboundEmail.messageId')
       .lean<SummaryReferral[]>();
 
   const designationByReferral = network === 'all'

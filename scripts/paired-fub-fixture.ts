@@ -112,6 +112,7 @@ async function createReferral(input: {
     loanFileNumber: `PAIR-FUB-${input.suffix}`,
     org: 'AHA',
     ahaBucket: input.bucket ?? 'AHA',
+    inboundEmail: { messageId: `fixture-${input.suffix}`, channel: input.bucket ?? 'AHA' },
     assignedAgent: input.assignedAgentId,
     buySideAgent: input.assignedAgentId,
     agentSelectionSource: input.selectionSource ?? 'manual',

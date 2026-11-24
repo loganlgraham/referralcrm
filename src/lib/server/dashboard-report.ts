@@ -298,10 +298,9 @@ async function buildNetworkBreakdown(range: {
   }
 
   const referrals = await Referral.find(referralMatch)
-    .select('lender ahaBucket org assignedAgent buySideAgent sellSideAgent')
+    .select('lender ahaBucket org origin inboundEmail.channel inboundEmail.routeHint inboundEmail.messageId assignedAgent buySideAgent sellSideAgent')
     .lean<ReferralLite[]>();
 
-  // C-13: use shared getReferralDesignation (agent slots, then ahaBucket/org).
   const agentIds = Array.from(
     new Set(
       referrals
@@ -333,7 +332,6 @@ async function buildNetworkBreakdown(range: {
       buckets.Unpaired += 1;
       continue;
     }
-    // Shared helper: agent designation first, then ahaBucket/org fallback.
     const designation = sharedGetReferralDesignation(referral, designationMap);
     if (designation === 'AHA_OOS') {
       buckets['AHA OOS'] += 1;

@@ -11,6 +11,8 @@ import { Agent } from '@/models/agent';
 
 export interface ReferralNetworkSource {
   _id: unknown;
+  inboundEmail?: ReferralAgentSlots['inboundEmail'];
+  origin?: string | null;
   assignedAgent?: unknown;
   buySideAgent?: unknown;
   sellSideAgent?: unknown;
@@ -35,6 +37,8 @@ function toReferralAgentSlots(referral: ReferralNetworkSource): ReferralAgentSlo
     assignedAgent: toAgentSlot(referralAgentSlotId(referral.assignedAgent)),
     buySideAgent: toAgentSlot(referralAgentSlotId(referral.buySideAgent)),
     sellSideAgent: toAgentSlot(referralAgentSlotId(referral.sellSideAgent)),
+    inboundEmail: referral.inboundEmail,
+    origin: referral.origin,
     ahaBucket: referral.ahaBucket,
     org: referral.org,
   };

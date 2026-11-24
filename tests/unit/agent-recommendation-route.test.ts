@@ -17,7 +17,7 @@ jest.mock('@/lib/server/agent-recommendations', () => {
 jest.mock('@/models/referral', () => ({
   Referral: {
     findById: jest.fn(() => ({
-      select: () => ({ lean: async () => ({ _id: '6afe0df9ac60a148a3db2650', org: 'AHA', ahaBucket: 'AHA', lookingInZip: '80014', deletedAt: null }) }),
+      select: () => ({ populate: () => ({ lean: async () => ({ _id: '6afe0df9ac60a148a3db2650', org: 'AFC', buySideAgent: { ahaDesignation: 'AHA' }, lookingInZip: '80014', deletedAt: null }) }) }),
     })),
   },
 }));
@@ -62,7 +62,7 @@ describe('agent recommendation route', () => {
     viewer.mockResolvedValue({ access: { ok: false, status: 403, reason: 'unmapped' }, userId: 'u1', role: 'admin' });
     const response = await GET(request('?mcId=none&zips=80014,bad'), { params: { id: REFERRAL_ID } });
     expect(response.status).toBe(200);
-    expect(build).toHaveBeenCalledWith(expect.objectContaining({ fubPermitted: false, mcOverride: null, zipOverride: ['80014'] }));
+    expect(build).toHaveBeenCalledWith(expect.objectContaining({ referral: expect.objectContaining({ org: 'AHA', ahaBucket: 'AHA' }), fubPermitted: false, mcOverride: null, zipOverride: ['80014'] }));
   });
 
   it('allows stored activity only for a granted viewer on the verified account', async () => {

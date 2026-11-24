@@ -46,6 +46,7 @@ import {
   collectUnderContractDeal,
   submitUnderContractDeal,
 } from '@/components/referrals/deal-details-toast';
+import type { PairedHandoff } from '@/lib/fub/paired-handoff';
 import { StatusPill } from '@/components/ui/status-pill';
 import { AgentOriginMarker } from '@/components/referrals/agent-origin-marker';
 import { Button } from '@/components/ui/button';
@@ -137,6 +138,7 @@ interface StatusSelectProps {
 }
 
 type StatusUpdateResponse = {
+  pairedHandoff?: PairedHandoff;
   status?: ReferralStatus | null;
   currentStatus?: ReferralStatus | null;
   deal?: {
@@ -344,7 +346,8 @@ function StatusSelect({
       } else {
         applyResolvedStatus(nextStatus);
       }
-      toast.success('Referral status updated');
+      if (payload?.pairedHandoff && !payload.pairedHandoff.sent) toast.warning(payload.pairedHandoff.message);
+      else toast.success(payload?.pairedHandoff?.message ?? 'Referral status updated');
       router.refresh();
     } catch (error) {
       console.error(error);

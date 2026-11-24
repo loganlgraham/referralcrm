@@ -2,6 +2,7 @@ import { Session } from 'next-auth';
 import { connectMongo } from '@/lib/mongoose';
 import { Referral, ReferralDocument } from '@/models/referral';
 import { LenderMC } from '@/models/lender';
+import { canUseMockFubFixture } from '@/lib/server/fixture-safety';
 import { Agent } from '@/models/agent';
 import { Payment } from '@/models/payment';
 import { AdminTask, getEffectiveDueDate, type AdminTaskLean } from '@/models/admin-task';
@@ -310,8 +311,7 @@ async function buildReferralFilterQuery(
 
   const selectedNetworks = new Set(parseNetworkList(ahaBucket));
   if (selectedNetworks.size > 0) {
-    // Match getReferralDesignation: agent designation wins; otherwise fall back to
-    // ahaBucket/org for AHA / AHA_OOS New Leads that have no designated agent yet.
+    // Mailbox routing takes precedence for imports. Manual referrals follow their designated agent.
     const designatedAgents = await Agent.find({
       ahaDesignation: { $in: ['AHA', 'AHA_OOS', 'AGIT'] }
     })
@@ -348,11 +348,20 @@ async function buildReferralFilterQuery(
       );
     }
 
-    if (orConditions.length > 0) {
-      appendOrConditions(orConditions);
-    } else {
-      query._id = new Types.ObjectId('000000000000000000000000');
+    const intakeRoutes = [...selectedNetworks].filter(network => network === 'AHA' || network === 'AHA_OOS');
+    const validRoutes = ['AHA', 'AHA_OOS'];
+    const mailboxHints = intakeRoutes.map(network => network === 'AHA' ? 'aha' : 'ahaoos');
+    const selectedConditions: Record<string, unknown>[] = [
+      { 'inboundEmail.channel': { $in: intakeRoutes } },
+      { 'inboundEmail.channel': { $nin: validRoutes }, 'inboundEmail.routeHint': { $in: mailboxHints } },
+      { 'inboundEmail.channel': { $nin: validRoutes }, 'inboundEmail.routeHint': { $nin: ['aha', 'ahaoos'] },
+        'inboundEmail.messageId': { $type: 'string' }, ahaBucket: { $in: intakeRoutes } },
+    ];
+    for (const condition of orConditions) {
+      const legacyBucket = 'ahaBucket' in condition || 'org' in condition;
+      selectedConditions.push({ ...condition, inboundEmail: null, ...(legacyBucket ? { origin: null } : {}) });
     }
+    appendOrConditions(selectedConditions);
   }
 
   const searchTerm = search?.trim();
@@ -1061,6 +1070,7 @@ export async function getReferralById(id: string) {
     ...referral,
     _id: referral._id.toString(),
     loanFileNumber: displayLoanFileNumber(referral.loanFileNumber),
+    fixtureFubApproval: process.env.FUB_MOCK_FIXTURE_MODE === 'true' && canUseMockFubFixture(),
     createdAt: referral.createdAt.toISOString(),
     referralDate: referral.referralDate ? referral.referralDate.toISOString() : null,
     assignedAgent: referral.assignedAgent

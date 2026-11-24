@@ -1,3 +1,4 @@
+import { sendOnPair } from '@/lib/server/mock-fub-send';
 import { getCurrentSession } from '@/lib/auth';
 import { connectMongo } from '@/lib/mongoose';
 import { Referral } from '@/models/referral';
@@ -7,6 +8,8 @@ import { logReferralActivity } from '@/lib/server/activities';
 import { createAdminNotifications } from '@/lib/server/notifications';
 
 let postHandler: typeof import('@/app/api/referrals/[id]/status/route').POST;
+
+jest.mock('@/lib/server/mock-fub-send', () => ({ sendOnPair: jest.fn() }));
 
 jest.mock('next/server', () => {
   class MockNextResponse {
@@ -559,6 +562,34 @@ describe('Referral status route table-driven deal status sync', () => {
     expect(response.status).toBe(200);
     expect(referralDoc.lostReason).toBeNull();
     expect(referralDoc.lostReasonSource).toBeNull();
+  });
+
+  it.each(['referral_table', 'referral_detail'])('sends a manual AHA assignment after saving Paired from %s', async source => {
+    const doc = makeReferralDoc();
+    const agentId = 'cccccccccccccccccccccccc';
+    Object.assign(doc, { org: 'AFC', clientType: 'Buyer', buySideAgent: { _id: agentId, ahaDesignation: 'AHA' } });
+    const session = { user: { id: 'admin-1', role: 'admin' } };
+    mockedGetCurrentSession.mockResolvedValueOnce(session as any);
+    mockedReferralFindById.mockReturnValue(doc);
+    mockPaymentFindOneChain(null);
+    (sendOnPair as jest.Mock).mockImplementationOnce(async () => {
+      expect(doc.save).toHaveBeenCalled();
+      return { sent: true, message: 'Paired and sent to Follow Up Boss.' };
+    });
+    const response: any = await postHandler(makeRequest({ status: 'Paired', source }), { params: { id: 'ref-1' } });
+    expect(response.body).toMatchObject({ status: 'Paired', pairedHandoff: { sent: true } });
+    expect(sendOnPair).toHaveBeenCalledWith('ref-1', session, agentId);
+  });
+
+  it('keeps an OOS import on its mailbox path when the assigned agent is local', async () => {
+    const doc = makeReferralDoc();
+    Object.assign(doc, { org: 'AHA', clientType: 'Buyer', inboundEmail: { channel: 'AHA_OOS' } });
+    mockedGetCurrentSession.mockResolvedValueOnce({ user: { id: 'admin-1', role: 'admin' } } as any);
+    mockedReferralFindById.mockReturnValue(doc);
+    mockPaymentFindOneChain(null);
+    const response: any = await postHandler(makeRequest({ status: 'Paired' }), { params: { id: 'ref-1' } });
+    expect(response.body.status).toBe('Paired');
+    expect(sendOnPair).not.toHaveBeenCalled();
   });
 
   it('does not notify admins when an admin persists a referral status change', async () => {

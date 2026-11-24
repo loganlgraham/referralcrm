@@ -3,11 +3,18 @@
  */
 
 import { canUseMockFubFixture } from '@/lib/server/fixture-safety';
-import { readMockFubApprovalPreview } from '@/lib/server/mock-fub-send';
+import { liveFubEnabled } from '@/lib/server/live-fub-handoff';
+import { authorizeFubViewer } from '@/lib/server/intelligence-viewer';
+import { runMockFubApproval } from '@/lib/fub/mock-fub-orchestrator';
+import { readMockFubApprovalPreview, sendOnPair } from '@/lib/server/mock-fub-send';
 import { IntelligenceAgentLink, IntelligenceLink } from '@/models/intelligence-link';
-import { MockFubSendAttempt } from '@/models/mock-fub';
+import { MockFubSendAttempt, FubSendAttempt } from '@/models/mock-fub';
 import { Referral } from '@/models/referral';
 import { User } from '@/models/user';
+
+jest.mock('@/lib/server/live-fub-handoff', () => ({ liveFubEnabled: jest.fn(), createLiveFubClient: jest.fn() }));
+jest.mock('@/lib/server/intelligence-viewer', () => ({ authorizeFubViewer: jest.fn() }));
+jest.mock('@/lib/fub/mock-fub-orchestrator', () => ({ ...jest.requireActual('@/lib/fub/mock-fub-orchestrator'), runMockFubApproval: jest.fn() }));
 
 jest.mock('@/lib/server/fixture-safety', () => ({
   canUseMockFubFixture: jest.fn(),
@@ -28,6 +35,7 @@ jest.mock('@/models/intelligence-link', () => ({
 
 jest.mock('@/models/mock-fub', () => ({
   MockFubSendAttempt: { findOne: jest.fn() },
+  FubSendAttempt: { findOne: jest.fn() },
 }));
 
 const gateMock = canUseMockFubFixture as jest.MockedFunction<
@@ -69,6 +77,7 @@ function linksChain(value: unknown[]) {
 describe('mock FUB approval preview service', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (liveFubEnabled as jest.Mock).mockReturnValue(false);
     gateMock.mockReturnValue(true);
     userFind.mockReturnValue(
       leanChain({ role: 'admin', active: true, disabled: false }),
@@ -76,8 +85,8 @@ describe('mock FUB approval preview service', () => {
     referralFind.mockReturnValue(
       referralChain({
         _id: 'aaaaaaaaaaaaaaaaaaaaaaaa',
-        org: 'AHA',
-        ahaBucket: 'AHA',
+        org: 'AFC',
+        ahaBucket: null,
         status: 'New Lead',
         borrower: {
           firstName: 'Taylor',
@@ -89,6 +98,7 @@ describe('mock FUB approval preview service', () => {
         buySideAgent: {
           _id: 'cccccccccccccccccccccccc',
           name: 'Manual Agent',
+          ahaDesignation: 'AHA',
         },
         assignedAgent: {
           _id: 'dddddddddddddddddddddddd',
@@ -132,11 +142,36 @@ describe('mock FUB approval preview service', () => {
     expect(result.preview.approvalKey).toMatch(/^[a-f0-9]{64}$/u);
   });
 
+  it('dispatches a paired manual AHA referral through the verified handoff with the current agent', async () => {
+    const actorId = 'bbbbbbbbbbbbbbbbbbbbbbbb';
+    const agentId = 'cccccccccccccccccccccccc';
+    const session = { user: { id: actorId, role: 'admin' }, expires: '' } as const;
+    (liveFubEnabled as jest.Mock).mockReturnValue(true);
+    (authorizeFubViewer as jest.Mock).mockResolvedValue({ role: 'admin', userId: actorId, access: { ok: true } });
+    (FubSendAttempt.findOne as jest.Mock).mockReturnValue(leanChain(null));
+    customerLinkFind.mockReturnValue(leanChain({ fubPersonId: 42 }));
+    referralFind.mockReturnValue(referralChain({
+      org: 'AFC', origin: 'admin', status: 'Paired', borrower: { name: 'Taylor Client' },
+      buySideAgent: { _id: agentId, name: 'Manual Agent', ahaDesignation: 'AHA' },
+    }));
+    (runMockFubApproval as jest.Mock).mockResolvedValue({ status: 'success', steps: [], personId: 42 });
+    await expect(sendOnPair('aaaaaaaaaaaaaaaaaaaaaaaa', session, agentId)).resolves.toMatchObject({ sent: true });
+    expect(runMockFubApproval).toHaveBeenCalledWith(expect.objectContaining({
+      selectedAgentId: agentId, existingPersonId: 42, fubUserId: 71,
+    }), expect.anything());
+    await expect(sendOnPair('aaaaaaaaaaaaaaaaaaaaaaaa', session, 'different-agent')).resolves.toMatchObject({ sent: false });
+    (authorizeFubViewer as jest.Mock).mockResolvedValue({ role: 'admin', access: { ok: false } });
+    await expect(sendOnPair('aaaaaaaaaaaaaaaaaaaaaaaa', session, agentId)).resolves.toMatchObject({ sent: false });
+    expect(runMockFubApproval).toHaveBeenCalledTimes(1);
+  });
+
   it('blocks AHA OOS before looking up a mapping', async () => {
     referralFind.mockReturnValue(
       referralChain({
         org: 'AHA',
         ahaBucket: 'AHA_OOS',
+        inboundEmail: { channel: 'AHA_OOS' },
+        buySideAgent: { ahaDesignation: 'AHA' },
         borrower: { name: 'OOS Client' },
       }),
     );

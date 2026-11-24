@@ -1,3 +1,4 @@
+import { referralWorkflowRoute, type RoutingSource } from '@/lib/referral-routing';
 import { Types } from 'mongoose';
 
 import {
@@ -88,8 +89,9 @@ export async function applyIntakeAgentSuggestion(referralId: string): Promise<Au
   }
 
   const referral = await Referral.findById(referralId)
-    .select('org ahaBucket lookingInZip lookingInZips lender assignedAgent buySideAgent sellSideAgent agentSelectionSource agentSuggestion createdAt')
-    .lean<{
+    .select('org clientType origin inboundEmail ahaBucket lookingInZip lookingInZips lender assignedAgent buySideAgent sellSideAgent agentSelectionSource agentSuggestion createdAt')
+    .populate('assignedAgent buySideAgent sellSideAgent', 'ahaDesignation')
+    .lean<RoutingSource & {
       _id: Types.ObjectId;
       org?: string | null;
       ahaBucket?: string | null;
@@ -104,10 +106,8 @@ export async function applyIntakeAgentSuggestion(referralId: string): Promise<Au
     } | null>();
 
   if (!referral) return { outcome: 'skipped', reason: 'not_found' };
-  if (referral.org !== 'AHA') return { outcome: 'skipped', reason: 'not_aha' };
-  if (referral.ahaBucket !== 'AHA' && referral.ahaBucket !== 'AHA_OOS') {
-    return { outcome: 'skipped', reason: 'no_bucket' };
-  }
+  const bucket = referralWorkflowRoute(referral);
+  if (!bucket) return { outcome: 'skipped', reason: 'no_bucket' };
   if (hasAssignedAgent(referral)) {
     await Referral.updateOne(
       { _id: referral._id },
@@ -126,8 +126,8 @@ export async function applyIntakeAgentSuggestion(referralId: string): Promise<Au
   const ranked = await buildAgentRecommendations({
     referral: {
       _id: referral._id,
-      org: referral.org,
-      ahaBucket: referral.ahaBucket,
+      org: 'AHA',
+      ahaBucket: bucket,
       lookingInZip: referral.lookingInZip,
       lookingInZips: referral.lookingInZips,
       lender: referral.lender,
@@ -204,8 +204,9 @@ export async function refreshAgentSuggestion(referralId: string): Promise<AutoSu
   }
 
   const referral = await Referral.findById(referralId)
-    .select('org ahaBucket lookingInZip lookingInZips lender assignedAgent buySideAgent agentSelectionSource')
-    .lean<{
+    .select('org clientType origin inboundEmail ahaBucket lookingInZip lookingInZips lender assignedAgent buySideAgent sellSideAgent agentSelectionSource')
+    .populate('assignedAgent buySideAgent sellSideAgent', 'ahaDesignation')
+    .lean<RoutingSource & {
       _id: Types.ObjectId;
       org?: string | null;
       ahaBucket?: string | null;
@@ -218,16 +219,14 @@ export async function refreshAgentSuggestion(referralId: string): Promise<AutoSu
     } | null>();
 
   if (!referral) return { outcome: 'skipped', reason: 'not_found' };
-  if (referral.org !== 'AHA') return { outcome: 'skipped', reason: 'not_aha' };
-  if (referral.ahaBucket !== 'AHA' && referral.ahaBucket !== 'AHA_OOS') {
-    return { outcome: 'skipped', reason: 'no_bucket' };
-  }
+  const bucket = referralWorkflowRoute(referral);
+  if (!bucket) return { outcome: 'skipped', reason: 'no_bucket' };
 
   const ranked = await buildAgentRecommendations({
     referral: {
       _id: referral._id,
-      org: referral.org,
-      ahaBucket: referral.ahaBucket,
+      org: 'AHA',
+      ahaBucket: bucket,
       lookingInZip: referral.lookingInZip,
       lookingInZips: referral.lookingInZips,
       lender: referral.lender,
