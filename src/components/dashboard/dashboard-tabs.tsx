@@ -14,6 +14,7 @@ import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import useSWR from 'swr';
 import { fetcher } from '@/utils/fetcher';
+import { FubDashboard } from '@/components/dashboard/fub-dashboard';
 import { formatCurrency, formatDate, formatNumber } from '@/utils/formatters';
 import { Info, Trash2 } from 'lucide-react';
 import { dashCardClasses } from '@/components/dashboard/dashboard-ui';
@@ -485,7 +486,8 @@ const TAB_OPTIONS = [
   { label: 'Main', value: 'main' },
   { label: 'MC', value: 'mc' },
   { label: 'Agent', value: 'agent' },
-  { label: 'Admin', value: 'admin' }
+  { label: 'Admin', value: 'admin' },
+  { label: 'FUB', value: 'fub' }
 ] as const;
 
 type TabValue = (typeof TAB_OPTIONS)[number]['value'];
@@ -3744,6 +3746,8 @@ export function DashboardTabs() {
   // chips; the dashboard fetch waits for it to avoid loading the default first.
   const [networksLoaded, setNetworksLoaded] = useState(false);
   const { data: session } = useSession();
+  const { data: fubAccess, error: fubAccessError } = useSWR<{ allowed: boolean }>(session?.user?.role === 'admin' ? ['/api/dashboard/fub?access=1', session.user.id] : null, ([url]: [string, string]) => fetcher(url), { refreshInterval: 30_000, shouldRetryOnError: false });
+  const canViewFub = session?.user?.role === 'admin' && fubAccess?.allowed === true && !fubAccessError;
 
   useEffect(() => {
     const stored = loadStoredNetworks();
@@ -3759,7 +3763,7 @@ export function DashboardTabs() {
     timeframe !== 'custom' || (Boolean(customStart) && Boolean(customEnd) && customStart <= customEnd);
 
   const swrKey = useMemo<string | null>(() => {
-    if (!isRangeReady || !networksLoaded) {
+    if (activeTab === 'fub' || !isRangeReady || !networksLoaded) {
       return null;
     }
     const params = new URLSearchParams({ timeframe, network: networkParam });
@@ -3768,7 +3772,7 @@ export function DashboardTabs() {
       params.set('end', customEnd);
     }
     return `/api/dashboard?${params.toString()}`;
-  }, [isRangeReady, networksLoaded, timeframe, networkParam, customStart, customEnd]);
+  }, [activeTab, isRangeReady, networksLoaded, timeframe, networkParam, customStart, customEnd]);
 
   const { data, error, isLoading, mutate } = useSWR<DashboardResponse>(swrKey, fetcher, {
     refreshInterval: 60_000
@@ -3799,6 +3803,7 @@ export function DashboardTabs() {
 
   const visibleTabs = useMemo(() => {
     return TAB_OPTIONS.filter((tab) => {
+      if (tab.value === 'fub') return canViewFub;
       if (tab.value === 'main' || tab.value === 'admin') {
         return canViewGlobal;
       }
@@ -3810,7 +3815,7 @@ export function DashboardTabs() {
       }
       return true;
     });
-  }, [canViewGlobal, role]);
+  }, [canViewFub, canViewGlobal, role]);
 
   useEffect(() => {
     if (visibleTabs.length && !visibleTabs.some((tab) => tab.value === activeTab)) {
@@ -3831,7 +3836,7 @@ export function DashboardTabs() {
   };
 
   const maxSelectableDate = formatDateInput(new Date());
-  const showSkeleton = isRangeReady && (isLoading || !data);
+  const showSkeleton = activeTab !== 'fub' && !error && isRangeReady && (isLoading || !data);
 
   const handlePresetSelect = (preset: TimeframePreset) => {
     setTimeframe(preset);
@@ -3856,20 +3861,13 @@ export function DashboardTabs() {
   // dates instead. "All time" starts at the epoch, which reads as a bug.
   const headerRangeLabel = timeframe === 'all' ? 'All time' : formatDisplayRange(customRange);
 
-  if (error) {
-    return (
-      <div className="rounded-card border border-danger/30 bg-danger-soft p-4 text-danger shadow-card">
-        Unable to load dashboard analytics. Please try again later.
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-5">
       <PageHeader
         eyebrow="Analytics"
         title="Performance dashboards"
-        description={headerRangeLabel}
+        description={activeTab === 'fub' ? 'Team follow-up and supporting evidence' : headerRangeLabel}
       />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -3880,7 +3878,7 @@ export function DashboardTabs() {
           activeTab={activeTab}
           onTabChange={setActiveTab}
         />
-        <div className="flex flex-wrap items-center gap-3">
+        {activeTab !== 'fub' ? <div className="flex flex-wrap items-center gap-3">
           <TimeframeDropdown
             timeframe={timeframe}
             rangeLabel={timeframeLabel}
@@ -3901,7 +3899,7 @@ export function DashboardTabs() {
               onSelectAll={() => updateNetworks([])}
             />
           </div>
-        </div>
+        </div> : null}
       </div>
 
       {showSkeleton ? (
@@ -3923,7 +3921,7 @@ export function DashboardTabs() {
         </div>
       ) : null}
 
-      {!isRangeReady ? (
+      {activeTab === 'fub' ? (canViewFub ? <FubDashboard key={session?.user?.id} userId={session?.user?.id ?? ''} /> : null) : error ? (<div role="alert" className="rounded-card border border-danger/30 bg-danger-soft p-4 text-danger">Unable to load dashboard analytics. Please try again later.</div>) : !isRangeReady ? (
         <div className="rounded-card border border-warning/30 bg-warning-soft p-4 text-sm text-warning shadow-card">
           Select a start and end date to load dashboard metrics.
         </div>
