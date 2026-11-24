@@ -1,6 +1,19 @@
 import { z } from 'zod';
+import type { Day31DecisionRecord } from '@/lib/intelligence/sop-decisions';
 
 const count = z.number().int().nonnegative();
+export const sopAuditSchema = z.object({
+  id: z.string().regex(/^note:\d+$/),
+  kind: z.enum(['day-3', 'day-7', 'day-31']),
+  personId: z.number().int().safe().positive(),
+  customer: z.string().max(500),
+  agentId: z.number().int().safe().positive().nullable(),
+  at: z.string().datetime({ offset: true }),
+  sourceNoteId: z.number().int().safe().positive(),
+  provenance: z.enum(['automation', 'template_match']).optional(),
+}).refine((row) => row.id === `note:${row.sourceNoteId}`, 'Review identity does not match');
+export type SopAudit = z.infer<typeof sopAuditSchema>;
+export type SopAuditKind = SopAudit['kind'];
 const evidence = z.object({
   id: count,
   personId: z.number().int().positive(),
@@ -18,6 +31,18 @@ export const sopDashboardSchema = z.object({
   customers: count,
   knownTasks: count,
   unknownTasks: count,
+  sopAudits: z.array(sopAuditSchema).max(2000).optional(),
+  sopMetrics: z.array(z.object({
+    id: z.enum(['day-3', 'day-7', 'day-31']),
+    label: z.string().max(200),
+    count: count.nullable(),
+    detail: z.string().max(2000),
+  })).max(3).optional(),
+  sopCoverage: z.object({
+    state: z.enum(['pending', 'partial', 'current', 'failed', 'stale']),
+    lastSuccessAt: z.string().nullable(),
+    detail: z.string().max(2000),
+  }).optional(),
   metrics: z
     .array(
       z.object({
@@ -56,3 +81,7 @@ export const sopDashboardSchema = z.object({
     .max(10),
 });
 export type SopDashboard = z.infer<typeof sopDashboardSchema>;
+export type FubDashboardData = SopDashboard & {
+  day31Decisions?: Day31DecisionRecord[];
+  decisionError?: string;
+};

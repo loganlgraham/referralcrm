@@ -5,6 +5,7 @@ import { canViewFubDashboard } from '@/lib/server/fub-access';
 import { VERIFIED_FUB_ACCOUNT_ID } from '@/lib/intelligence/access-control';
 import { trustedIntelligenceUrl } from '@/lib/intelligence/remote';
 import { fetchSopDashboard } from '@/lib/intelligence/sop-remote';
+import { readDay31Decisions } from '@/lib/server/fub-sop-decisions';
 
 export const dynamic = 'force-dynamic';
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -35,6 +36,16 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       { error: 'FUB evidence is temporarily unavailable. Try again shortly.' },
       503,
     );
+  if (data.sopAudits) {
+    if (!(await canViewFubDashboard(session.user.id)))
+      return json({ error: 'Your FUB dashboard access has changed.' }, 403);
+    try {
+      const day31Decisions = await readDay31Decisions(data.sopAudits.filter((review) => review.kind === 'day-31'));
+      return json({ ...data, day31Decisions }, 200);
+    } catch {
+      return json({ ...data, decisionError: 'Day 31 decisions could not be loaded. Try again before recording a review.' }, 200);
+    }
+  }
   return json(data, 200);
 }
 function json(body: unknown, status: number): NextResponse {
