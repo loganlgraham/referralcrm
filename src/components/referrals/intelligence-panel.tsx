@@ -189,21 +189,28 @@ function ActivityBody({
     );
   }
   if (activity.status === 'not_found') return <p className="mt-4 text-sm">This contact isn&apos;t in the stored records.</p>;
-  if (activity.status === 'no_activity') {
-    return (
-      <div className="mt-4 min-w-0 text-sm">
-        <p>No activity is stored for this contact.</p>
-        <CoverageDetail detail={activity.coverageDetail} />
-      </div>
-    );
-  }
-  return <ReadyActivity activity={activity} />;
+  return (
+    <div className="mt-4 grid min-w-0 gap-3 break-words text-sm">
+      <dl>
+        <div className="flex flex-wrap items-baseline gap-x-2">
+          <dt className="font-semibold">FUB stage</dt>
+          <dd>{activity.personStage ?? 'Unavailable'}</dd>
+        </div>
+      </dl>
+      {activity.status === 'no_activity' ? (
+        <>
+          <p>No activity is stored for this contact.</p>
+          <CoverageDetail detail={activity.coverageDetail} />
+        </>
+      ) : <ReadyActivity activity={activity} />}
+    </div>
+  );
 }
 
 function ReadyActivity({ activity }: { activity: Extract<PanelActivity, { status: 'ready' }> }) {
   const latest = activity.latest;
   return (
-    <div className="mt-4 grid min-w-0 gap-3 break-words text-sm">
+    <>
       {banner(activity) ? <p>{banner(activity)}</p> : null}
       <p><span className="font-semibold">Latest communication. </span>{latest ? `${label(latest.channel)} ${latest.direction}, ${latest.displayTime}` : 'No occurrence time is stored.'}</p>
       <p><span className="font-semibold">Follow-up. </span>{activity.followUp?.nextAction ?? 'Current follow-up status is unknown.'}</p>
@@ -221,7 +228,7 @@ function ReadyActivity({ activity }: { activity: Extract<PanelActivity, { status
         ) : <p>No projected closing is stored.</p>}
       </div>
       <CoverageDetail detail={activity.coverageDetail} />
-    </div>
+    </>
   );
 }
 

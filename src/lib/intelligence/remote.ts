@@ -5,6 +5,7 @@ export type RemoteCustomer = {
   state: 'ready' | 'incomplete' | 'no_records';
   officialScoring: false;
   personId: number;
+  personStage: string | null;
   latest: { channel: string; direction: string; occurredAt: string; displayTime: string } | null;
   followUp: { status: string; nextAction: string; detail: string } | null;
   fubAssignedUser: { id: number; name: string } | null;
@@ -117,6 +118,7 @@ export async function fetchCustomerIntelligence(input: {
       state: payload.state,
       officialScoring: false,
       personId: input.personId,
+      personStage: typeof payload.personStage === 'string' ? payload.personStage.trim() || null : null,
       latest: payload.latest ?? null,
       followUp: payload.followUp ?? null,
       fubAssignedUser: payload.fubAssignedUser ?? null,
