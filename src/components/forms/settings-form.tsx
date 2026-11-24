@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { FieldGrid, FieldGroup, FieldLabel, selectFieldClasses } from '@/components/ui/field-group';
 import { Input, Textarea } from '@/components/ui/input';
+import { FubAccessSettings } from '@/components/forms/fub-access-settings';
 import { PageHeader } from '@/components/ui/page-header';
 import { cn } from '@/lib/cn';
 
@@ -444,8 +445,10 @@ export function SettingsForm() {
       <PageHeader
         eyebrow="Administration"
         title="Settings"
-        description="Manage referral fee policies, reports, and data exports."
+        description="Manage referral fees, FUB access, reports, and exports."
       />
+
+      <FubAccessSettings />
 
       <form onSubmit={handleSubmit}>
         <FieldGroup

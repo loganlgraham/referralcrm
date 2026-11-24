@@ -28,6 +28,8 @@ import type { Contact } from '@/components/referrals/contact-assignment';
 import { AdminTasksCard } from '@/components/referrals/admin-tasks-card';
 import { AdminDetailHeader } from '@/components/referrals/admin-referral-detail';
 import { TeamCard } from '@/components/referrals/team-card';
+import { FubAgentMapping } from '@/components/referrals/fub-agent-mapping';
+import { AgentRecommendationPanel } from '@/components/referrals/agent-recommendation-panel';
 import { RailCard, railCardClasses, railTitleClasses } from '@/components/referrals/referral-rail';
 
 type ViewerRole = 'admin' | 'manager' | 'agent' | 'mc' | 'viewer' | string;
@@ -418,6 +420,12 @@ export function ReferralHeader({
     }
     return referral.lookingInZip ?? '';
   }, [referral.lookingInZip, referral.lookingInZips]);
+  const recommendationZips = useMemo(
+    () => locationLabel.split(',').map((zip: string) => zip.trim()).filter((zip: string) => /^\d{5}$/.test(zip)),
+    [locationLabel]
+  );
+  const showAgentRecommendation =
+    (viewerRole === 'admin' || viewerRole === 'manager') && referral.org === 'AHA';
 
   const propertyLabel = useMemo(() => {
     if (effectivePropertyAddress && effectivePropertyAddress.trim().length > 0) {
@@ -744,6 +752,8 @@ export function ReferralHeader({
   const latestBuyDealStatusLabel = latestBuyDealStatus ?? 'No deals yet';
   const latestSellDealStatusLabel = latestSellDealStatus ?? 'No deals yet';
   const showSplitStatus = isBothClientType && viewerRole === 'admin';
+  const pairedFubEnabled =
+    viewerRole === 'admin' && referral.org === 'AHA' && ahaBucket === 'AHA';
 
   const statusCardMeta = (
     <p className="text-[13px] text-foreground-subtle">
@@ -808,6 +818,7 @@ export function ReferralHeader({
                         showPreApproval={false}
                         onStatusChanged={(next, payload) => handleStatusChanged(next, payload, 'buy')}
                         onUnderContractIntentChange={onUnderContractIntentChange}
+                        pairedFubEnabled={pairedFubEnabled}
                       />
                     </div>
                     <div className="space-y-2">
@@ -881,6 +892,7 @@ export function ReferralHeader({
                   showPreApproval={false}
                   onStatusChanged={handleStatusChanged}
                   onUnderContractIntentChange={onUnderContractIntentChange}
+                  pairedFubEnabled={pairedFubEnabled}
                 />
               )}
             </div>
@@ -910,7 +922,31 @@ export function ReferralHeader({
             pendingMcHelper={pendingMcHelper}
             showAgentCcField={showAgentCcField}
             showMcCcField={showMcCcField}
+            agentRecommendationSlot={showAgentRecommendation ? (
+              <AgentRecommendationPanel
+                key={ahaBucket}
+                referralId={String(referral._id)}
+                mcId={effectiveMcContact?.id ?? null}
+                zips={recommendationZips}
+                selectionSource={referral.agentSelectionSource ?? null}
+                assignedAgentName={effectiveBuySideContact?.name ?? null}
+                canPersistAssignment={viewerRole === 'admin' && canAssignBuyAgent}
+                onAssigned={contact => onBuySideAgentContactChange?.(contact)}
+                embedded
+              />
+            ) : null}
           />
+
+          {pairedFubEnabled && effectiveBuySideContact?.id && (
+            <FubAgentMapping key={effectiveBuySideContact.id} referralId={String(referral._id)} agentId={effectiveBuySideContact.id} agentName={effectiveBuySideContact.name || 'selected agent'} />
+          )}
+
+          {viewerRole === 'agent' && status === 'Paired' && (
+            <div className="flex flex-wrap gap-3 text-sm font-semibold">
+              <a className="underline" href={`/api/referrals/${referral._id}/contact-action?action=contact-attempted`}>Log first outreach attempt</a>
+              <a className="underline" href={`/api/referrals/${referral._id}/contact-action?action=contact-made`}>Log successful contact</a>
+            </div>
+          )}
 
           {railSlot}
 

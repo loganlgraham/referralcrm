@@ -16,7 +16,7 @@ export function hasRole(session: Session | null, allowed: Role[] = []): boolean 
   return allowed.includes(session.user.role as Role);
 }
 
-type ReferralAccess = {
+export type ReferralAccess = {
   assignedAgent?: unknown;
   buySideAgent?: unknown;
   sellSideAgent?: unknown;

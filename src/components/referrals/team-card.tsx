@@ -1,5 +1,7 @@
 'use client';
 
+import type { ReactNode } from 'react';
+
 import { ContactAssignment, type Contact } from '@/components/referrals/contact-assignment';
 import { IntroEmailsAction } from '@/components/referrals/intro-emails-action';
 import { useRequestUpdate } from '@/components/referrals/request-update-button';
@@ -24,6 +26,7 @@ interface TeamCardProps {
   pendingMcHelper?: string;
   showAgentCcField: boolean;
   showMcCcField: boolean;
+  agentRecommendationSlot?: ReactNode;
 }
 
 /**
@@ -48,6 +51,7 @@ export function TeamCard({
   pendingMcHelper,
   showAgentCcField,
   showMcCcField,
+  agentRecommendationSlot,
 }: TeamCardProps) {
   const referralId = String(referral._id);
   const isAdmin = viewerRole === 'admin';
@@ -80,6 +84,8 @@ export function TeamCard({
               contact={buySideContact}
               canAssign={canAssignBuyAgent}
               onContactChange={onBuySideAgentContactChange}
+              selectionSource={referral.agentSelectionSource ?? null}
+              suggestion={referral.agentSuggestion ?? null}
             />
             <ContactAssignment
               referralId={referralId}
@@ -100,6 +106,8 @@ export function TeamCard({
             onContactChange={
               primarySide === 'sell' ? onSellSideAgentContactChange : onBuySideAgentContactChange
             }
+            selectionSource={primarySide === 'buy' ? referral.agentSelectionSource ?? null : null}
+            suggestion={primarySide === 'buy' ? referral.agentSuggestion ?? null : null}
           />
         )}
         {showMc ? (
@@ -112,6 +120,7 @@ export function TeamCard({
             pendingHelper={pendingMcHelper}
           />
         ) : null}
+        {agentRecommendationSlot}
         {isAdmin ? (
           <div className="space-y-3">
             <p className="text-eyebrow text-foreground-subtle">Outreach</p>

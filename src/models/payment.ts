@@ -50,6 +50,12 @@ const paymentSchema = new Schema(
     },
     netReferralFeePaidCents: { type: Number, default: null },
     propertyAddress: { type: String, default: null },
+    propertyPostalCode: { type: String, default: null },
+    propertyPostalCodeSource: {
+      type: String,
+      enum: ['manual', 'address_extracted', 'address_verified', null],
+      default: null,
+    },
     agentAttribution: {
       type: String,
       enum: ['AHA', 'AHA_OOS', 'OUTSIDE_AGENT'],
@@ -57,11 +63,14 @@ const paymentSchema = new Schema(
     },
     agentId: { type: Schema.Types.ObjectId, ref: 'Agent', default: null },
     usedAfc: { type: Boolean, default: true },
+    // Answer given on the closing form; null when it was never asked at closing.
+    usedAfcAtClosing: { type: Boolean, default: null },
     usedAssignedAgent: { type: Boolean, default: true },
     underContractDate: { type: Date, default: null },
     invoiceDate: Date,
     paidDate: Date,
     notes: String,
+    feeReminderClosingDate: { type: Date, default: null },
     feeBreakdownEmailSentAt: { type: Date, default: null },
     feeBreakdownEmailSentBy: { type: String, default: null },
     feeBreakdownVerificationStatus: {

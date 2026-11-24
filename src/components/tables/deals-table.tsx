@@ -63,6 +63,8 @@ interface DealRow {
   commissionBasisPoints?: number | null;
   commissionFlatFeeCents?: number | null;
   propertyAddress?: string | null;
+  propertyPostalCode?: string | null;
+  propertyPostalCodeSource?: 'manual' | 'address_extracted' | 'address_verified' | null;
   terminatedReason?: TerminatedReason | null;
   underContractDate?: string | null;
   closingDate?: string | null;
@@ -317,6 +319,10 @@ export function DealsTable() {
 
   const getDealAddress = (deal: DealRow) => {
     const address = (deal.propertyAddress ?? deal.referral?.propertyAddress ?? '').trim();
+    const zip = deal.propertyPostalCode?.trim();
+    if (address && zip) {
+      return `${address} ${zip}`;
+    }
     return address || null;
   };
 

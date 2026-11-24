@@ -14,7 +14,7 @@ import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { dealStatusToDisplay } from '@/lib/format-notification-content';
 import { inferStateFromPostalCode } from '@/utils/location';
-import { calculateBusinessMinutesBetween } from '@/utils/sla-insights';
+import { recordContactTiming } from '@/lib/server/contact-timing';
 import { createAdminNotifications } from '@/lib/server/notifications';
 import { maybeNotifyAdminsOnUpdateRequestResponse } from '@/lib/server/update-request-response';
 import { hasAhaOosAgentAttached } from '@/lib/server/auto-update-reminders';
@@ -26,6 +26,7 @@ import { isTransactionalEmailConfigured, sendTransactionalEmail } from '@/lib/em
 import { renderAgentCloseEmail, renderBorrowerCloseEmail } from '@/lib/email-templates/close-nps';
 import { getReferralAppBaseUrl } from '@/lib/referral-links';
 import { createNPSToken } from '@/lib/server/nps';
+import { normalizeDealPropertyZipInput } from '@/utils/deal-property-zip';
 import {
   deriveReferralStatusFromSides,
   getAgentIdForSide,
@@ -233,6 +234,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   let syncError: StatusSyncError | null = null;
   const sla = (referral.sla ??= {} as any);
   let slaModified = false;
+  let contactPairedAt: Date | null = null;
 
   if (shouldPersistReferralStatus && !isAgentOrigin) {
     if (nextStatus === 'Under Contract') {
@@ -317,14 +319,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
             }
           }
         }
-        if (pairedAt) {
-          const minutes = calculateBusinessMinutesBetween(pairedAt, now);
-          if (minutes != null) {
-            sla.timeToFirstAgentContactHours = Math.round((minutes / 60) * 10) / 10;
-            sla.lastPairedAt = pairedAt;
-            slaModified = true;
-          }
-        }
+        contactPairedAt = pairedAt;
       } else if (nextStatus === 'New Lead' && sla.lastPairedAt) {
         sla.lastPairedAt = null;
         slaModified = true;
@@ -372,7 +367,14 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     if (details) {
       const propertyAddress = details.propertyAddress.trim();
       const propertyCity = details.propertyCity.trim();
-      const propertyPostalCode = details.propertyPostalCode.trim();
+      const normalizedPostalCode = normalizeDealPropertyZipInput(details.propertyPostalCode);
+      if (!normalizedPostalCode.ok || !normalizedPostalCode.zip) {
+        return NextResponse.json(
+          { error: { fieldErrors: { propertyPostalCode: ['Enter a valid property ZIP code.'] } } },
+          { status: 422 }
+        );
+      }
+      const propertyPostalCode = normalizedPostalCode.zip;
       let propertyState = details.propertyState.trim().toUpperCase();
 
       const inferredState = await inferStateFromPostalCode(propertyPostalCode);
@@ -416,6 +418,11 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
             side: underContractSide,
             contractPriceCents: referral.estPurchasePriceCents ?? null,
             usedAfc: underContractUsedAfc,
+            propertyAddress: details ? referral.propertyAddress ?? null : undefined,
+            propertyCity: details ? referral.propertyCity ?? null : undefined,
+            propertyState: details ? referral.propertyState ?? null : undefined,
+            propertyPostalCode: details ? referral.propertyPostalCode ?? null : undefined,
+            propertyPostalCodeSource: details ? 'manual' : undefined,
           },
         }
       );
@@ -437,6 +444,11 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
           usedAfc: underContractUsedAfc,
           underContractDate: new Date(),
           agentId: sideAgentId,
+          propertyAddress: details ? referral.propertyAddress ?? null : null,
+          propertyCity: details ? referral.propertyCity ?? null : null,
+          propertyState: details ? referral.propertyState ?? null : null,
+          propertyPostalCode: details ? referral.propertyPostalCode ?? null : null,
+          propertyPostalCodeSource: details ? 'manual' : null,
         });
         createdDeal = newDeal.toObject();
       }
@@ -453,6 +465,11 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
         usedAfc: underContractUsedAfc,
         underContractDate: new Date(),
         agentId: sideAgentId,
+        propertyAddress: details ? referral.propertyAddress ?? null : null,
+        propertyCity: details ? referral.propertyCity ?? null : null,
+        propertyState: details ? referral.propertyState ?? null : null,
+        propertyPostalCode: details ? referral.propertyPostalCode ?? null : null,
+        propertyPostalCodeSource: details ? 'manual' : null,
       });
       createdDeal = newDeal.toObject();
     }
@@ -685,6 +702,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
           latestAttributedDeal.usedAfc = false;
         } else if (typeof parsed.data.usedAfc === 'boolean') {
           latestAttributedDeal.usedAfc = parsed.data.usedAfc;
+          latestAttributedDeal.usedAfcAtClosing = parsed.data.usedAfc;
         }
       }
       if (mappedDealStatus === 'terminated') {
@@ -817,12 +835,11 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       syncError = await forceLostForUnassignedDeal();
     }
   }
-  if (slaModified) {
-    referral.markModified('sla');
-  }
   if (shouldPersistReferralStatus || slaModified) {
     await referral.save();
   }
+
+  if (contactPairedAt) await recordContactTiming(referral._id, contactPairedAt, now, true);
 
   if (createdDeal) {
     const createdSide = createdDeal.side === 'sell' ? 'sell-side' : 'buy-side';

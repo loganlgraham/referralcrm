@@ -44,6 +44,8 @@ jest.mock('@/models/referral', () => ({
   }
 }));
 
+jest.mock('@/models/inbound-referral-message', () => ({ InboundReferralMessage: { findOneAndUpdate: () => ({ select: () => ({ lean: async () => ({ referralId: 'ref-1' }) }) }) } }));
+
 jest.mock('@/models/lender', () => ({
   LenderMC: {
     find: jest.fn()
@@ -1030,7 +1032,7 @@ describe('POST /api/inbound-email', () => {
     );
   });
 
-  it('returns 400 when phone cannot be normalized to ###-###-####', async () => {
+  it('imports the referral with a blank phone when it cannot be normalized', async () => {
     mockResendInboundFetch(
       [
         'First: Jane',
@@ -1052,11 +1054,8 @@ describe('POST /api/inbound-email', () => {
       makeWebhookRequest(rawBody, signBody(rawBody, process.env.RESEND_INBOUND_SECRET as string))
     );
 
-    expect(response.status).toBe(400);
-    expect(response.body).toEqual({
-      error: 'Inbound email is missing borrower contact details or loan number.'
-    });
-    expect(mockedReferralCreate).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(mockedReferralCreate).toHaveBeenCalledWith(expect.objectContaining({ borrower: expect.objectContaining({ phone: '' }) }));
   });
 
   it('accepts Svix signature headers for inbound webhook delivery', async () => {
@@ -1100,7 +1099,7 @@ describe('POST /api/inbound-email', () => {
     expect(response.body).toEqual({ status: 'created', referralId: 'ref-1' });
   });
 
-  it('returns 400 when deterministic parse fails and AI fallback returns nothing', async () => {
+  it('imports incomplete referrals when extraction finds no fields', async () => {
     mockResendInboundFetch('Missing labeled fields and no parseable details.');
     mockedExtractInboundEmailFieldsWithAI.mockResolvedValue(null);
 
@@ -1113,11 +1112,8 @@ describe('POST /api/inbound-email', () => {
       makeWebhookRequest(rawBody, signBody(rawBody, process.env.RESEND_INBOUND_SECRET as string))
     );
 
-    expect(response.status).toBe(400);
-    expect(response.body).toEqual({
-      error: 'Inbound email is missing borrower contact details or loan number.'
-    });
+    expect(response.status).toBe(200);
+    expect(mockedReferralCreate).toHaveBeenCalledWith(expect.objectContaining({ borrower: expect.objectContaining({ phone: '' }) }));
     expect(mockedExtractInboundEmailFieldsWithAI).toHaveBeenCalledTimes(1);
-    expect(mockedReferralCreate).not.toHaveBeenCalled();
   });
 });

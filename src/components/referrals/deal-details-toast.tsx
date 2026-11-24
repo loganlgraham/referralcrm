@@ -25,6 +25,7 @@ export type DealDetailsPayload = {
   propertyAddress: string;
   propertyCity: string;
   propertyState: string;
+  propertyPostalCode: string | null;
   closingDate: string | null;
   underContractDate: string | null;
   usedAfc: boolean;
@@ -111,6 +112,8 @@ const isoToDateInput = (value?: string | null): string => {
   return `${parsed.getFullYear()}-${month}-${day}`;
 };
 
+const sanitizeZipInput = (value: string) => value.replace(/[^\d-]/g, '').slice(0, 10);
+
 const COMMISSION_MODES = [
   { value: '%' as const, label: '%' },
   { value: '$' as const, label: '$' }
@@ -155,7 +158,7 @@ function DealDetailsForm({
   const [propertyAddress, setPropertyAddress] = useState(initialDeal?.propertyAddress ?? '');
   const [propertyCity, setPropertyCity] = useState(initialDeal?.propertyCity ?? '');
   const [propertyState, setPropertyState] = useState(initialDeal?.propertyState ?? '');
-  const [propertyPostalCode, setPropertyPostalCode] = useState('');
+  const [propertyPostalCode, setPropertyPostalCode] = useState(initialDeal?.propertyPostalCode ?? '');
   const [closingDate, setClosingDate] = useState(() => isoToDateInput(initialDeal?.closingDate));
   const [underContractDate, setUnderContractDate] = useState(() =>
     isoToDateInput(initialDeal?.underContractDate)
@@ -219,8 +222,7 @@ function DealDetailsForm({
       toast.error('Property state must be a 2-letter code.');
       return;
     }
-    // ZIP lives on the referral, not the deal, so it is only collected when creating.
-    if (!isEdit && !/^\d{5}(?:-\d{4})?$/.test(propertyPostalCode.trim())) {
+    if (propertyPostalCode.trim() && !/^\d{5}(?:-\d{4})?$/.test(propertyPostalCode.trim())) {
       toast.error('Enter a valid property ZIP code.');
       return;
     }
@@ -303,6 +305,7 @@ function DealDetailsForm({
       propertyAddress: propertyAddress.trim(),
       propertyCity: propertyCity.trim(),
       propertyState: propertyState.trim().toUpperCase(),
+      propertyPostalCode: propertyPostalCode.trim() || null,
       closingDate: closingDate ? dateStringToLocalISO(closingDate) : null,
       underContractDate: resolvedUnderContractDate,
       usedAfc: side === 'sell' ? false : usedAfc,
@@ -471,15 +474,14 @@ function DealDetailsForm({
           }
         />
       </PromptToastField>
-      {isEdit ? null : (
-        <PromptToastField label="Property ZIP">
-          <input
-            className={cn(inputFieldClasses, 'text-numeric')}
-            value={propertyPostalCode}
-            onChange={(event) => setPropertyPostalCode(event.target.value)}
-          />
-        </PromptToastField>
-      )}
+      <PromptToastField label="Property ZIP">
+        <input
+          className={cn(inputFieldClasses, 'text-numeric')}
+          inputMode="numeric"
+          value={propertyPostalCode}
+          onChange={(event) => setPropertyPostalCode(sanitizeZipInput(event.target.value))}
+        />
+      </PromptToastField>
       <PromptToastField label="Deal side">
         <select
           className={selectFieldClasses}

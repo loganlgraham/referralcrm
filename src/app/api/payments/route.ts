@@ -99,6 +99,8 @@ type PaymentWithReferral = {
   usedAssignedAgent?: boolean | null;
   netReferralFeePaidCents?: number | null;
   propertyAddress?: string | null;
+  propertyPostalCode?: string | null;
+  propertyPostalCodeSource?: 'manual' | 'address_extracted' | 'address_verified' | null;
   invoiceDate?: Date | null;
   paidDate?: Date | null;
   createdAt?: Date | null;
@@ -456,6 +458,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       { 'referral.borrower.name': new RegExp(escapedSearch, 'i') },
       { 'referral.loanFileNumber': new RegExp(escapedSearch, 'i') },
       { propertyAddress: new RegExp(escapedSearch, 'i') },
+      { propertyPostalCode: new RegExp(escapedSearch, 'i') },
       { 'referral.propertyAddress': new RegExp(escapedSearch, 'i') }
     ];
 
@@ -463,6 +466,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       searchConditions.push(
         { 'referral.loanFileNumber': new RegExp(normalizedDigits) },
         { propertyAddress: new RegExp(normalizedDigits) },
+        { propertyPostalCode: new RegExp(normalizedDigits) },
         { 'referral.propertyAddress': new RegExp(normalizedDigits) }
       );
     }
@@ -774,6 +778,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       propertyState: payment.propertyState ?? null,
       netReferralFeePaidCents: payment.netReferralFeePaidCents ?? null,
       propertyAddress: payment.propertyAddress ?? null,
+      propertyPostalCode: payment.propertyPostalCode ?? null,
+      propertyPostalCodeSource: payment.propertyPostalCodeSource ?? null,
       terminatedReason: payment.terminatedReason ?? null,
       underContractDate: payment.underContractDate ? payment.underContractDate.toISOString() : null,
       closingDate: payment.closingDate ? payment.closingDate.toISOString() : null,
@@ -996,6 +1002,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     agentId: parsed.data.agentId ?? defaultAgentId,
     propertyCity: parsed.data.propertyCity ?? null,
     propertyState: parsed.data.propertyState ?? null,
+    propertyPostalCode: parsed.data.propertyPostalCode ?? null,
+    propertyPostalCodeSource: parsed.data.propertyPostalCode ? 'manual' : null,
   });
   if (referralForCreate) {
     let referralUpdated = false;
@@ -1010,6 +1018,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
     if (parsed.data.propertyState !== undefined) {
       referralForCreate.propertyState = parsed.data.propertyState ?? '';
+      referralUpdated = true;
+    }
+    if (parsed.data.propertyPostalCode !== undefined) {
+      referralForCreate.propertyPostalCode = parsed.data.propertyPostalCode ?? '';
       referralUpdated = true;
     }
 
@@ -1318,6 +1330,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   delete updatePayload.referralId;
   delete updatePayload.nextReferralStatus;
   delete updatePayload.lostReason;
+  delete updatePayload.propertyPostalCodeSource;
   updatePayload.contractPriceCents = nextContractPriceCents ?? null;
   updatePayload.commissionBasisPoints = nextCommissionBasisPoints ?? null;
   updatePayload.commissionFlatFeeCents = isAgentOrigin ? null : nextCommissionFlatFeeCents ?? null;
@@ -1348,6 +1361,10 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
   }
   if (Object.prototype.hasOwnProperty.call(parsed.data, 'propertyState')) {
     updatePayload.propertyState = parsed.data.propertyState ?? null;
+  }
+  if (Object.prototype.hasOwnProperty.call(parsed.data, 'propertyPostalCode')) {
+    updatePayload.propertyPostalCode = parsed.data.propertyPostalCode ?? null;
+    updatePayload.propertyPostalCodeSource = parsed.data.propertyPostalCode ? 'manual' : null;
   }
 
   // Only auto-set closing date when status is changing TO closed AND no closing date is provided
@@ -1410,6 +1427,16 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     updatePayload.usedAfc = false;
   } else if (Object.prototype.hasOwnProperty.call(parsed.data, 'usedAfc')) {
     updatePayload.usedAfc = Boolean(parsed.data.usedAfc);
+  }
+  delete updatePayload.usedAfcConfirmedAtClosing;
+  if (
+    parsed.data.usedAfcConfirmedAtClosing === true &&
+    parsed.data.status === 'closed' &&
+    !isSellSide(effectiveSide) &&
+    typeof parsed.data.usedAfc === 'boolean' &&
+    updatePayload.usedAfc === parsed.data.usedAfc
+  ) {
+    updatePayload.usedAfcAtClosing = parsed.data.usedAfc;
   }
 
   const payment = await Payment.findByIdAndUpdate(body.id, updatePayload, { new: true });
@@ -1634,6 +1661,9 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     }
     if (parsed.data.propertyState !== undefined) {
       referral.propertyState = parsed.data.propertyState ?? '';
+    }
+    if (parsed.data.propertyPostalCode !== undefined) {
+      referral.propertyPostalCode = parsed.data.propertyPostalCode ?? '';
     }
     referral.referralFeeDueCents = isAgentOrigin ? 0 : nextExpectedAmountCents;
     if (slaChanged) {
@@ -1895,6 +1925,8 @@ export async function PATCH(request: NextRequest): Promise<NextResponse> {
     expectedAmountCents: payment.expectedAmountCents ?? 0,
     receivedAmountCents: payment.receivedAmountCents ?? 0,
     netReferralFeePaidCents: payment.netReferralFeePaidCents ?? 0,
+    propertyPostalCode: payment.propertyPostalCode ?? null,
+    propertyPostalCodeSource: payment.propertyPostalCodeSource ?? null,
     closingDate: payment.closingDate ?? null,
     paidDate: payment.paidDate ?? null,
     referralStatus: referralStatusSnapshot,

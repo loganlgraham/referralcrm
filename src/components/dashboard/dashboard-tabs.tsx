@@ -426,6 +426,9 @@ interface DashboardResponse {
   };
   admin: {
     slaAverages: {
+      timeToFirstAgentAttemptHours: number | null;
+      firstAttemptSampleSize: number;
+      firstAttemptsWithinTwoHours: number;
       timeToFirstAgentContactHours: number;
       timeToAssignmentHours: number;
       daysToContract: number;
@@ -3610,9 +3613,14 @@ function AdminDashboard({ data }: { data: DashboardResponse['admin'] }) {
 
   const cards = [
     {
-      title: 'Avg. time to first agent contact',
-      value: `${data.slaAverages.timeToFirstAgentContactHours.toFixed(1)} hours`,
-      helper: 'Business hours · Goal ≤ 24 hours'
+      title: 'Avg. time to first outreach attempt',
+      value: data.slaAverages.timeToFirstAgentAttemptHours == null ? '—' : `${data.slaAverages.timeToFirstAgentAttemptHours.toFixed(1)} hours`,
+      helper: `${data.slaAverages.firstAttemptsWithinTwoHours} of ${data.slaAverages.firstAttemptSampleSize} recorded attempts within 2 business hours`
+    },
+    {
+      title: 'Avg. time to first successful contact',
+      value: data.firstContactSampleSize ? `${data.slaAverages.timeToFirstAgentContactHours.toFixed(1)} hours` : '—',
+      helper: `${data.firstContactSampleSize} recorded conversations · Business hours`
     },
     {
       title: 'Avg. time to assignment',

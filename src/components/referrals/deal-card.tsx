@@ -54,6 +54,8 @@ export interface DealRecord {
   feeBreakdownEmailSentByUser?: { id: string; name: string | null; email: string | null } | null;
   feeBreakdownVerificationStatus?: FeeBreakdownVerificationStatus | null;
   feeBreakdownVerifiedAt?: string | null;
+  propertyPostalCode?: string | null;
+  propertyPostalCodeSource?: 'manual' | 'address_extracted' | 'address_verified' | null;
 }
 
 export interface DealOverrides {
@@ -189,6 +191,8 @@ const normalizeDeals = (deals: DealRecord[] | null | undefined): DealRecord[] =>
         feeBreakdownEmailSentByUser: deal.feeBreakdownEmailSentByUser ?? null,
         feeBreakdownVerificationStatus: deal.feeBreakdownVerificationStatus ?? null,
         feeBreakdownVerifiedAt: deal.feeBreakdownVerifiedAt ?? null,
+        propertyPostalCode: deal.propertyPostalCode ?? null,
+        propertyPostalCodeSource: deal.propertyPostalCodeSource ?? null,
       };
     })
     .sort((a, b) => {
@@ -327,10 +331,13 @@ export function DealCard({
     overrides?.propertyAddress ||
     referral.propertyAddress ||
     (locationLabel ? `Looking in ${locationLabel}` : 'Pending address');
+  const propertyLabelWithZip = deals[0]?.propertyPostalCode
+    ? `${propertyLabel} ${deals[0].propertyPostalCode}`
+    : propertyLabel;
 
   const summaryBorrower = summary?.borrowerName?.trim() ? summary.borrowerName.trim() : null;
   const summaryStatusLabel = summary?.statusLabel?.trim() ? summary.statusLabel.trim() : null;
-  const summaryAddress = overrides?.propertyAddress ?? summary?.propertyAddress ?? propertyLabel;
+  const summaryAddress = overrides?.propertyAddress ?? summary?.propertyAddress ?? propertyLabelWithZip;
   const summaryContractPriceCents =
     overrides?.contractPriceCents ?? summary?.contractPriceCents ?? null;
   const summaryCommissionBasisPoints =
@@ -875,6 +882,9 @@ export function DealCard({
             : typeof confirmedUsedAfc === 'boolean'
               ? confirmedUsedAfc
               : (afcMap[deal._id] ?? Boolean(deal.usedAfc));
+        if (deal.side !== 'sell' && typeof confirmedUsedAfc === 'boolean') {
+          payload.usedAfcConfirmedAtClosing = true;
+        }
         payload.sendAgentNpsEmail = sendAgentNpsEmail;
         if (closingDateIso) {
           payload.closingDate = closingDateIso;

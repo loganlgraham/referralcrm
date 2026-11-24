@@ -6,7 +6,7 @@ import { Types } from 'mongoose';
 import { connectMongo } from '@/lib/mongoose';
 import { Agent } from '@/models/agent';
 import { Payment } from '@/models/payment';
-import { getAppOrigin } from '@/lib/server/app-origin';
+import { POST as sendFeeBreakdown } from '@/app/api/payments/[id]/send-fee-breakdown/route';
 
 export const runtime = 'nodejs';
 
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
   // in UTC. Without this the bounds drift by ~7h across the DST boundary and
   // can exclude/duplicate payments near midnight MT.
   const zonedNow = utcToZonedTime(now, SLA_TIME_ZONE);
-  const zonedTargetStart = startOfDay(addDays(zonedNow, 7));
+  const zonedTargetStart = startOfDay(zonedNow);
   const zonedTargetEnd = endOfDay(addDays(zonedNow, 7));
   const targetDateStart = zonedTimeToUtc(zonedTargetStart, SLA_TIME_ZONE);
   const targetDateEnd = zonedTimeToUtc(zonedTargetEnd, SLA_TIME_ZONE);
@@ -80,9 +80,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Query for payments that:
-    // 1. Have a closing date 7 days from now
+    // 1. Close today through seven Denver calendar days from now
     // 2. Are not terminated
-    // 3. Have not already been sent a fee breakdown email
+    // 3. Have not received the closing reminder for this closing date
     // 4. Have an agent assigned (excluding AHA-designated agents)
     const agentIdFilter: Record<string, unknown> = {
       $ne: null,
@@ -97,8 +97,8 @@ export async function GET(request: NextRequest) {
         $gte: targetDateStart,
         $lte: targetDateEnd,
       },
-      status: { $ne: 'terminated' },
-      feeBreakdownEmailSentAt: null,
+      status: { $in: ['under_contract', 'past_inspection', 'past_appraisal', 'clear_to_close'] },
+      $expr: { $ne: [{ $ifNull: ['$feeReminderClosingDate', null] }, '$closingDate'] },
       agentId: agentIdFilter,
       contractPriceCents: { $ne: null, $gt: 0 },
       $or: [
@@ -124,14 +124,13 @@ export async function GET(request: NextRequest) {
     }
 
     const results: ReminderResult[] = [];
-    const baseUrl = getAppOrigin(request);
 
     for (let i = 0; i < payments.length; i++) {
       if (i > 0) await delay(SEND_DELAY_MS);
 
       const payment = payments[i];
       const paymentId = (payment._id as Types.ObjectId).toString();
-      const apiUrl = `${baseUrl}/api/payments/${paymentId}/send-fee-breakdown`;
+      const apiUrl = new URL(`/api/payments/${paymentId}/send-fee-breakdown`, request.url);
 
       let lastError = '';
       let succeeded = false;
@@ -146,13 +145,13 @@ export async function GET(request: NextRequest) {
         }
 
         try {
-          const response = await fetch(apiUrl, {
+          const response = await sendFeeBreakdown(new NextRequest(apiUrl, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${cronSecret}`,
             },
-          });
+          }), { params: { id: paymentId } });
 
           if (response.ok) {
             console.log(`[Closing Reminders] Successfully sent fee breakdown for payment ${paymentId}`);
@@ -206,16 +205,16 @@ export async function GET(request: NextRequest) {
     );
 
     return NextResponse.json({
-      success: true,
+      success: failed === 0,
       timestamp: now.toISOString(),
-      targetDate: targetDateStart.toISOString(),
+      windowStart: targetDateStart.toISOString(),
       summary: {
         processed: results.length,
         successful,
         failed,
       },
       results,
-    });
+    }, { status: failed ? 503 : 200 });
   } catch (error) {
     console.error('[Closing Reminders] Cron job error:', error);
     return NextResponse.json(

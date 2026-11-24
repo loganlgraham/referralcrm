@@ -7,7 +7,7 @@ import { canManageReferral } from '@/lib/rbac';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { logReferralActivity } from '@/lib/server/activities';
 import { getReferralAppBaseUrl, verifyContactActionToken } from '@/lib/referral-links';
-import { calculateBusinessMinutesBetween } from '@/utils/sla-insights';
+import { recordContactTiming } from '@/lib/server/contact-timing';
 import { createAdminAndMcNotifications } from '@/lib/server/notifications';
 import { maybeNotifyAdminsOnUpdateRequestResponse } from '@/lib/server/update-request-response';
 import { generateAndReconcileAdminTasks } from '@/lib/server/admin-task-reconciler';
@@ -69,7 +69,6 @@ export async function GET(request: NextRequest, { params }: Params): Promise<Nex
     : null;
   const nextStatus = action === 'contact-made' ? 'In Communication' : previousStatus;
   const shouldUpdateStatus = action === 'contact-made' && previousStatus !== 'In Communication';
-  const shouldUpdateCommunicationSla = action === 'contact-made';
   const sla = (referral.sla ??= {} as any);
 
   const pairedAt = (() => {
@@ -119,19 +118,8 @@ export async function GET(request: NextRequest, { params }: Params): Promise<Nex
     referral.statusLastUpdated = now;
   }
 
-  if (pairedAt && shouldUpdateCommunicationSla) {
-    const minutes = calculateBusinessMinutesBetween(pairedAt, now);
-    if (minutes != null) {
-      const timeToContactHours = Math.round((minutes / 60) * 10) / 10;
-      if (sla.timeToFirstAgentContactHours == null || sla.timeToFirstAgentContactHours !== timeToContactHours) {
-        sla.timeToFirstAgentContactHours = timeToContactHours;
-        sla.lastPairedAt = pairedAt;
-        referral.markModified('sla');
-      }
-    }
-  }
-
   await referral.save();
+  if (pairedAt) await recordContactTiming(referral._id, pairedAt, now, action === 'contact-made');
 
   const activityContent =
     action === 'contact-made'
