@@ -54,10 +54,11 @@ export async function POST(
   }
 
   // Check authentication - either session or CRON_SECRET
-  const session = await getCurrentSession();
   const cronSecret = process.env.CRON_SECRET;
   const authHeader = request.headers.get('authorization');
   const isCronRequest = cronSecret && authHeader === `Bearer ${cronSecret}`;
+
+  const session = isCronRequest ? null : await getCurrentSession();
 
   if (!session && !isCronRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -113,7 +114,7 @@ export async function POST(
     const payment = await Payment.findById(paymentId)
       .populate('referralId')
       .populate('agentId', '_id name email ahaDesignation')
-      .lean<PaymentLean & { feeBreakdownEmailSentAt?: Date | null }>();
+      .lean<PaymentLean & { feeBreakdownEmailSentAt?: Date | null; feeReminderClosingDate?: Date | null }>();
 
     if (!payment) {
       return NextResponse.json({ error: 'Payment not found' }, { status: 404 });
@@ -122,7 +123,7 @@ export async function POST(
     // Cron is idempotent: if the payment has already been claimed, short-circuit
     // without calling Resend. Manual admin sends still bypass this so admins can
     // resend at will.
-    if (isCronRequest && payment.feeBreakdownEmailSentAt) {
+    if (isCronRequest && payment.feeReminderClosingDate && payment.feeReminderClosingDate.getTime() === payment.closingDate?.getTime()) {
       return NextResponse.json({
         success: true,
         alreadySent: true,
@@ -168,7 +169,7 @@ export async function POST(
 
     // Get borrower name for subject line
     const borrowerName = referral.borrower?.name || 'Unknown';
-    const isFirstSend = !payment.feeBreakdownEmailSentAt;
+    const isFirstSend = !isCronRequest && !payment.feeBreakdownEmailSentAt;
     const propertyAddress = payment.propertyAddress || referral.propertyAddress || 'Address not available';
 
     const verificationToken = randomBytes(32).toString('hex');
@@ -235,11 +236,10 @@ export async function POST(
     // worker already won; we treat that as already-sent.
     if (isCronRequest) {
       const claim = await Payment.findOneAndUpdate(
-        { _id: paymentId, feeBreakdownEmailSentAt: null },
+        { _id: paymentId, closingDate: payment.closingDate, feeReminderClosingDate: { $ne: payment.closingDate }, status: { $in: ['under_contract', 'past_inspection', 'past_appraisal', 'clear_to_close'] } },
         {
           $set: {
-            feeBreakdownEmailSentAt: claimedAt,
-            feeBreakdownEmailSentBy: actorId,
+            feeReminderClosingDate: payment.closingDate,
           },
         }
       );
@@ -283,6 +283,7 @@ export async function POST(
         html,
         text,
         attachments,
+        context: { referralId: referral._id.toString() },
       });
     } catch (err) {
       sendError = err;
@@ -297,8 +298,8 @@ export async function POST(
       // Roll back the cron claim so the next run can retry this payment.
       if (isCronRequest) {
         await Payment.updateOne(
-          { _id: paymentId, feeBreakdownEmailSentAt: claimedAt },
-          { $set: { feeBreakdownEmailSentAt: null, feeBreakdownEmailSentBy: null } }
+          { _id: paymentId, feeReminderClosingDate: payment.closingDate },
+          { $unset: { feeReminderClosingDate: 1 } }
         ).catch((rollbackErr) => {
           console.error('[Fee Breakdown] Failed to roll back claim after send error:', rollbackErr);
         });
@@ -311,9 +312,8 @@ export async function POST(
 
     // Manual sends commit the timestamp only on delivery success.
     await Payment.findByIdAndUpdate(paymentId, {
-      ...(isCronRequest
-        ? {}
-        : { feeBreakdownEmailSentAt: claimedAt, feeBreakdownEmailSentBy: actorId }),
+      feeBreakdownEmailSentAt: claimedAt,
+      feeBreakdownEmailSentBy: actorId,
       feeBreakdownVerificationStatus: 'pending',
       feeBreakdownVerifiedAt: null,
     });

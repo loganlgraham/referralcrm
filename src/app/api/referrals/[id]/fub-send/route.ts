@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+import { getFubAgentChoices, liveFubEnabled } from '@/lib/server/live-fub-handoff';
+import { authorizeFubViewer } from '@/lib/server/intelligence-viewer';
+import { VERIFIED_FUB_ACCOUNT_ID } from '@/lib/intelligence/access-control';
 import { getCurrentSession } from '@/lib/auth';
 import { sameOriginRequest } from '@/lib/intelligence/panel';
 import { connectMongo } from '@/lib/mongoose';
@@ -38,6 +41,11 @@ async function requireAdmin(): Promise<
       ),
     };
   }
+  if (liveFubEnabled()) {
+    await connectMongo();
+    const viewer = await authorizeFubViewer({ session, organization: 'AHA', accountId: VERIFIED_FUB_ACCOUNT_ID, canViewReferral: true });
+    if (!viewer.access.ok) return { ok: false, response: NextResponse.json({error:'Follow Up Boss access is required.'}, {status:403}) };
+  }
   return { ok: true, actorId: session.user.id };
 }
 
@@ -60,6 +68,13 @@ export async function GET(
       { error: result.message, code: result.code },
       { status: result.status },
     );
+  }
+  if (liveFubEnabled() && request.nextUrl.searchParams.get('agents') === '1') {
+    try {
+      return NextResponse.json({ users: await getFubAgentChoices() });
+    } catch {
+      return NextResponse.json({ error: 'The Follow Up Boss agent directory could not be loaded.' }, {status:503});
+    }
   }
   return NextResponse.json(result.preview);
 }

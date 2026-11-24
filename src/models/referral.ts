@@ -101,6 +101,10 @@ const DealSchema = new Schema({
   closeDate: Date,
 });
 
+function requiresManualIntakeField(this: { inboundEmail?: { messageId?: string } | null }) {
+  return !this.inboundEmail?.messageId;
+}
+
 const referralSchema = new Schema(
   {
     source: { type: String, trim: true, default: '' },
@@ -115,9 +119,9 @@ const referralSchema = new Schema(
     borrower: {
       firstName: { type: String, default: '', trim: true },
       lastName: { type: String, default: '', trim: true },
-      name: { type: String, required: true },
-      email: { type: String, index: true, required: true },
-      phone: { type: String, required: true },
+      name: { type: String, required: requiresManualIntakeField },
+      email: { type: String, index: true, required: requiresManualIntakeField },
+      phone: { type: String, required: requiresManualIntakeField },
       // Normalized 10-digit phone used for indexed duplicate lookup. Kept in
       // sync by the pre-save / pre-findOneAndUpdate hooks below. Legacy docs
       // without this field won't be detected as phone duplicates until they
@@ -128,8 +132,8 @@ const referralSchema = new Schema(
     lookingInZip: {
       type: String,
       index: true,
-      required(this: { isNew: boolean }) {
-        return this.isNew;
+      required(this: { isNew: boolean; inboundEmail?: { messageId?: string } }) {
+        return this.isNew && !this.inboundEmail?.messageId;
       }
     },
     lookingInZips: { type: [String], default: [] },
@@ -147,8 +151,8 @@ const referralSchema = new Schema(
     initialNotes: { type: String, default: '' },
     loanFileNumber: {
       type: String,
-      required(this: { isNew: boolean; origin?: string }) {
-        return this.isNew && this.origin !== 'agent';
+      required(this: { isNew: boolean; origin?: string; inboundEmail?: { messageId?: string } }) {
+        return this.isNew && this.origin !== 'agent' && !this.inboundEmail?.messageId;
       }
     },
     assignedAgent: { type: Schema.Types.ObjectId, ref: 'Agent', index: true },
@@ -195,6 +199,9 @@ const referralSchema = new Schema(
     lender: { type: Schema.Types.ObjectId, ref: 'LenderMC' },
     buyer: { type: Schema.Types.ObjectId, ref: 'Buyer' },
     sla: {
+      firstAgentAttemptAt: Date,
+      firstSuccessfulContactAt: Date,
+      timeToFirstAgentAttemptHours: { type: Number, default: null },
       timeToFirstAgentContactHours: { type: Number, default: null },
       timeToAssignmentHours: { type: Number, default: null },
       daysToContract: { type: Number, default: null },
@@ -259,12 +266,12 @@ const referralSchema = new Schema(
 );
 
 referralSchema.index({ 'borrower.email': 1, createdAt: 1 }, { unique: true });
-referralSchema.index({ loanFileNumber: 1 }, { unique: true });
+referralSchema.index({ loanFileNumber: 1 }, { unique: true, partialFilterExpression: { loanFileNumber: { $type: 'string', $gt: '' } } });
 referralSchema.index(
   { 'inboundEmail.messageId': 1 },
   {
     unique: true,
-    partialFilterExpression: { 'inboundEmail.messageId': { $exists: true, $ne: null } }
+    partialFilterExpression: { 'inboundEmail.messageId': { $type: 'string' } }
   }
 );
 
@@ -395,6 +402,9 @@ export interface ReferralDocument {
   dealSide?: 'buy' | 'sell';
   referralFeeDueCents?: number;
   sla?: {
+    firstAgentAttemptAt?: Date | null;
+    firstSuccessfulContactAt?: Date | null;
+    timeToFirstAgentAttemptHours?: number | null;
     timeToFirstAgentContactHours?: number | null;
     timeToAssignmentHours?: number | null;
     daysToContract?: number | null;

@@ -207,8 +207,8 @@ export function StatusChanger({
                 onClick: () => {
                   void recoverMockFubOutcome(
                     approvalKey,
-                    toast.loading('Checking mock FUB status…'),
-                    'The mock FUB status is still unavailable.',
+                    toast.loading('Checking FUB status…'),
+                    'The FUB status is still unavailable.',
                   );
                 },
               }
@@ -259,7 +259,7 @@ export function StatusChanger({
     isRetry = false,
   ): Promise<void> {
     const toastId = toast.loading(
-      isRetry ? 'Retrying safe mock FUB steps…' : 'Sending approved mock FUB steps…',
+      isRetry ? 'Retrying safe FUB steps…' : 'Sending approved FUB steps…',
     );
     try {
       const response = await fetch(`/api/referrals/${referralId}/fub-send`, {
@@ -270,16 +270,19 @@ export function StatusChanger({
       const body = (await response.json().catch(() => null)) as {
         status?: FubSendUiStatus;
         recovered?: boolean;
+        steps?: Array<{ status: string; errorMessage?: string }>;
         error?: string;
       } | null;
       if (!response.ok || !body?.status) {
         await recoverMockFubOutcome(
           approvalKey,
           toastId,
-          body?.error ?? 'The mock FUB send could not start.',
+          body?.error ?? 'The FUB send could not start.',
         );
         return;
       }
+      const failedStep = body.steps?.find(step => step.status === 'failed' || step.status === 'ambiguous');
+      if (failedStep?.errorMessage) toast.error(failedStep.errorMessage);
       showMockFubOutcome(
         body.status,
         Boolean(body.recovered),
@@ -290,7 +293,7 @@ export function StatusChanger({
       await recoverMockFubOutcome(
         approvalKey,
         toastId,
-        error instanceof Error ? error.message : 'The mock FUB send could not start.',
+        error instanceof Error ? error.message : 'The FUB send could not start.',
       );
     }
   }
@@ -313,18 +316,20 @@ export function StatusChanger({
 
       if (!preview) {
         setPrompting(false);
-        toast.info('The mock FUB fixture is unavailable. Moving to Paired without sending.');
+        if (persistedStatus === 'Paired') { toast.error('Follow Up Boss is unavailable. Try again later.'); return; }
+        toast.info('Follow Up Boss is unavailable. Moving to Paired without sending.');
         setCurrentStatus('Paired');
         await submitStatus('Paired', persistedStatus);
         return;
       }
 
+      if (preview.attemptStatus === 'success') { setPrompting(false); toast.success('This referral was already sent to Follow Up Boss.'); return; }
       const choice = await confirmPairedFubSend(preview);
       setPrompting(false);
       if (choice === 'cancel') return;
 
       setCurrentStatus('Paired');
-      const pairedSaved = await submitStatus('Paired', persistedStatus, {}, false);
+      const pairedSaved = persistedStatus === 'Paired' || await submitStatus('Paired', persistedStatus, {}, false);
       if (!pairedSaved) return;
       if (choice === 'paired_only') {
         toast.success('Referral moved to Paired. Nothing was sent to FUB.');
@@ -401,6 +406,9 @@ export function StatusChanger({
   const bothVisible = showStatusControl && showPreApproval;
   return (
     <div className="space-y-4">
+      {pairedFubEnabled && persistedStatus === 'Paired' && (
+        <button type="button" disabled={loading || prompting} className="text-sm font-semibold underline" onClick={() => void selectStatus('Paired')}>Send to Follow Up Boss</button>
+      )}
       <div className={layout === 'row' && bothVisible ? 'grid gap-4 sm:grid-cols-2' : 'space-y-4'}>
         {showStatusControl && (
           <div className="space-y-1">

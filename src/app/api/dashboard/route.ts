@@ -166,6 +166,7 @@ interface AggregatedPayment {
     sla?: {
       daysToContract?: number | null;
       daysToClose?: number | null;
+      timeToFirstAgentAttemptHours?: number | null;
       timeToFirstAgentContactHours?: number | null;
       timeToAssignmentHours?: number | null;
       contractToCloseMinutes?: number | null;
@@ -226,7 +227,8 @@ interface DashboardReferral {
   sla?: {
     daysToContract?: number | null;
     daysToClose?: number | null;
-    timeToFirstAgentContactHours?: number | null;
+    timeToFirstAgentAttemptHours?: number | null;
+      timeToFirstAgentContactHours?: number | null;
     timeToAssignmentHours?: number | null;
     lastClosedAt?: Date | string | null;
     lastUnderContractAt?: Date | string | null;
@@ -951,6 +953,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       },
       admin: {
         slaAverages: {
+          timeToFirstAgentAttemptHours: null,
+          firstAttemptSampleSize: 0,
+          firstAttemptsWithinTwoHours: 0,
           timeToFirstAgentContactHours: 0,
           timeToAssignmentHours: 0,
           daysToContract: 0,
@@ -4075,6 +4080,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     firstContactRecords.length
   );
 
+  const firstAttempts = slaFields.map(sla => sla.timeToFirstAgentAttemptHours).filter((n): n is number => typeof n === 'number');
   const timeToFirstContactAvg = computeAverage(
     slaFields
       .map((sla) => sla.timeToFirstAgentContactHours ?? null)
@@ -4595,6 +4601,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     },
     admin: {
       slaAverages: {
+        timeToFirstAgentAttemptHours: firstAttempts.length ? computeAverage(firstAttempts) : null,
+        firstAttemptSampleSize: firstAttempts.length,
+        firstAttemptsWithinTwoHours: firstAttempts.filter(hours => hours <= 2).length,
         timeToFirstAgentContactHours: timeToFirstContactAvg,
         timeToAssignmentHours: timeToAssignmentAvg,
         daysToContract: daysToContractAvg,

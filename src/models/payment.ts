@@ -70,6 +70,7 @@ const paymentSchema = new Schema(
     invoiceDate: Date,
     paidDate: Date,
     notes: String,
+    feeReminderClosingDate: { type: Date, default: null },
     feeBreakdownEmailSentAt: { type: Date, default: null },
     feeBreakdownEmailSentBy: { type: String, default: null },
     feeBreakdownVerificationStatus: {

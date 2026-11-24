@@ -1,3 +1,4 @@
+import { createLiveFubClient, liveFubEnabled, readIntakeForHandoff } from '@/lib/server/live-fub-handoff';
 import { createHash } from 'node:crypto';
 
 import { Types } from 'mongoose';
@@ -25,6 +26,7 @@ import {
 } from '@/lib/server/mock-fub-store';
 import { IntelligenceAgentLink, IntelligenceLink } from '@/models/intelligence-link';
 import {
+  FubSendAttempt,
   MockFubSendAttempt,
   type MockFubAttemptStatus,
 } from '@/models/mock-fub';
@@ -85,6 +87,7 @@ type LoadedApproval = {
   existingPersonId: number | null;
   status: string;
   intakeFields: Record<string, string>;
+  inboundMessageId?: string;
 };
 
 function serviceError(
@@ -117,7 +120,7 @@ async function loadApproval(
   referralId: string,
   actorId: string,
 ): Promise<LoadedApproval | MockFubServiceError> {
-  if (!canUseMockFubFixture()) {
+  if (!liveFubEnabled() && !canUseMockFubFixture()) {
     return serviceError(
       503,
       'fixture_unavailable',
@@ -142,8 +145,9 @@ async function loadApproval(
 
   const referral = await Referral.findById(referralId)
     .select(
-      'borrower source loanFileNumber lookingInZip lookingInZips borrowerCurrentAddress loanType stageOnTransfer org ahaBucket assignedAgent buySideAgent agentSelectionSource status deletedAt',
+      'borrower inboundEmail endorser clientType preApprovalAmountCents estPurchasePriceCents propertyAddress propertyCity propertyState propertyPostalCode initialNotes timeline lender source loanFileNumber lookingInZip lookingInZips borrowerCurrentAddress loanType stageOnTransfer org ahaBucket assignedAgent buySideAgent agentSelectionSource status deletedAt',
     )
+    .populate('lender', 'name')
     .populate('assignedAgent', 'name')
     .populate('buySideAgent', 'name')
     .lean<Record<string, any> | null>();
@@ -224,7 +228,20 @@ async function loadApproval(
     existingPersonId:
       typeof customerLink?.fubPersonId === 'number' ? customerLink.fubPersonId : null,
     status: String(referral.status ?? ''),
-    intakeFields: buildFubIntakeFields({
+    inboundMessageId: referral.inboundEmail?.messageId,
+    intakeFields: {
+      ...Object.fromEntries(Object.entries({
+        firstName: borrower.firstName || String(borrower.name || '').split(/\s+/)[0],
+        lastName: borrower.lastName || String(borrower.name || '').split(/\s+/).slice(1).join(' '),
+        borrowerEmail: borrower.email, borrowerPhone: borrower.phone, endorser: referral.endorser,
+        clientType: referral.clientType, timeline: referral.timeline, initialNotes: referral.initialNotes,
+        mortgageConsultant: referral.lender?.name, agent: populatedName(selectedAgent),
+        propertyAddress: referral.propertyAddress, propertyCity: referral.propertyCity, propertyState: referral.propertyState,
+        propertyPostalCode: referral.propertyPostalCode,
+        estimatedPurchasePrice: referral.estPurchasePriceCents != null ? String(referral.estPurchasePriceCents / 100) : null,
+        preApprovalAmount: referral.preApprovalAmountCents != null ? String(referral.preApprovalAmountCents / 100) : null,
+      }).filter((entry): entry is [string,string] => typeof entry[1] === 'string' && entry[1].trim() !== '')),
+      ...buildFubIntakeFields({
       source: referral.source,
       loanFileNumber: referral.loanFileNumber,
       lookingInZip: referral.lookingInZip,
@@ -233,6 +250,7 @@ async function loadApproval(
       loanType: referral.loanType,
       stageOnTransfer: referral.stageOnTransfer,
     }),
+    },
   };
 }
 
@@ -270,8 +288,8 @@ export async function readMockFubApprovalPreview(input: {
   const loaded = await loadApproval(input.referralId, input.actorId);
   if ('ok' in loaded) return loaded;
   const preview = publicPreview(loaded);
-  const attempt = await MockFubSendAttempt.findOne({
-    fixtureRunId: process.env.FUB_FIXTURE_RUN_ID,
+  const attempt = await (liveFubEnabled() ? FubSendAttempt : MockFubSendAttempt).findOne({
+    fixtureRunId: liveFubEnabled() ? 'aha-production' : process.env.FUB_FIXTURE_RUN_ID,
     referralId: new Types.ObjectId(input.referralId),
   })
     .select('status approvalKey')
@@ -284,7 +302,7 @@ export async function readMockFubApprovalPreview(input: {
   if (attempt?._id && attemptStatus === 'running') {
     const now = new Date();
     const reconciled =
-      await createMongooseMockFubAttemptRepository().markStaleRunningAmbiguous(
+      await createMongooseMockFubAttemptRepository(liveFubEnabled()).markStaleRunningAmbiguous(
         String(attempt._id),
         new Date(now.getTime() - 60_000),
         now,
@@ -366,17 +384,22 @@ export async function approveMockFubSend(input: {
       'The selected agent needs a verified FUB user mapping.',
     );
   }
-  const fixtureRunId = process.env.FUB_FIXTURE_RUN_ID as string;
-  const existingAttempt = await MockFubSendAttempt.findOne({
+  const live = liveFubEnabled();
+  const fixtureRunId = live ? 'aha-production' : process.env.FUB_FIXTURE_RUN_ID as string;
+  const existingAttempt = await (live ? FubSendAttempt : MockFubSendAttempt).findOne({
     fixtureRunId,
     referralId: new Types.ObjectId(input.referralId),
   })
-    .select('approvalKey selectedAgentId fubUserId')
+    .select('approvalKey selectedAgentId fubUserId personId')
     .lean<{
       approvalKey?: string;
       selectedAgentId?: unknown;
+      personId?: number;
       fubUserId?: number;
     } | null>();
+  if (existingAttempt?.personId && loaded.existingPersonId && existingAttempt.personId !== loaded.existingPersonId) {
+    return serviceError(409, 'approval_changed', 'The linked customer changed during the handoff. Check the two records before continuing.');
+  }
   const matchesExistingAttempt =
     existingAttempt?.approvalKey === input.approvalKey &&
     String(existingAttempt.selectedAgentId) === loaded.selectedAgentId &&
@@ -400,8 +423,18 @@ export async function approveMockFubSend(input: {
     selectionSource: loaded.selectionSource,
     fields: loaded.intakeFields,
   });
-  const repository = createMongooseMockFubAttemptRepository();
-  const baseClient = createMockFubClient({
+  if (live && loaded.inboundMessageId) {
+    try {
+      const intake = await readIntakeForHandoff(loaded.inboundMessageId);
+      loaded.intakeFields = { ...intake.fields, ...loaded.intakeFields };
+      note.label = 'Original Referrio intake email';
+      note.body = intake.note;
+    } catch {
+      return serviceError(503, 'fixture_unavailable', 'The original intake email could not be retrieved. Retry after it is available.');
+    }
+  }
+  const repository = createMongooseMockFubAttemptRepository(live);
+  const baseClient = live ? createLiveFubClient(loaded.fubUserId) : createMockFubClient({
     fixtureRunId,
     repository: createMongooseMockFubPersonRepository(),
     behavior: fixtureBehavior(loaded.referralId),
@@ -414,7 +447,7 @@ export async function approveMockFubSend(input: {
         referralId: loaded.referralId,
         approvalKey: input.approvalKey,
         actorId: input.actorId,
-        customer: loaded.customer,
+        customer: { ...loaded.customer, firstName: loaded.customer.firstName || loaded.intakeFields.firstName || '', lastName: loaded.customer.lastName || loaded.intakeFields.lastName || '' },
         selectedAgentId: loaded.selectedAgentId,
         selectedAgentName: loaded.selectedAgentName,
         selectionSource: loaded.selectionSource,

@@ -72,11 +72,6 @@ jest.mock('@/lib/server/fee-breakdown-documents', () => ({
   loadFeeBreakdownAttachments: jest.fn(),
 }));
 
-jest.mock('@/lib/email-templates/fee-breakdown', () => ({
-  generateFeeBreakdownEmailHTML: jest.fn(() => ({ html: '<p>Fee</p>', text: 'Fee' })),
-  generateFeeBreakdownSubject: jest.fn(() => 'Referral Fee Breakdown - Jamie Lee'),
-}));
-
 jest.mock('@/lib/referral-links', () => ({
   buildReferralLink: jest.fn(() => 'https://referrio.app/referrals/ref-1'),
   getReferralAppBaseUrl: jest.fn(() => 'https://referrio.app'),
@@ -227,13 +222,15 @@ describe('POST /api/payments/[id]/send-fee-breakdown', () => {
 
     expect(response.status).toBe(200);
     expect(mockedPaymentFindOneAndUpdate).toHaveBeenCalledWith(
-      { _id: paymentId.toString(), feeBreakdownEmailSentAt: null },
+      expect.objectContaining({ _id: paymentId.toString(), feeReminderClosingDate: { $ne: expect.any(Date) } }),
       expect.objectContaining({
         $set: expect.objectContaining({
-          feeBreakdownEmailSentBy: 'cron',
+          feeReminderClosingDate: expect.any(Date),
         }),
       })
     );
+    expect(mockedSendEmail.mock.calls[0][0].subject).toMatch(/American Home Agents Referral Fee/);
+    expect(mockedSendEmail.mock.calls[0][0].text).not.toMatch(/getting .* under contract/i);
     expect(mockedSendEmail.mock.calls[0][0].attachments?.map((attachment) => attachment.filename)).toEqual([
       'AHA Commission Wiring Instructions.pdf',
       'AHA W9 2026.pdf',

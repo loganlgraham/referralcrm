@@ -14,7 +14,7 @@ import { logReferralActivity } from '@/lib/server/activities';
 import { resolveAuditActorId } from '@/lib/server/audit';
 import { dealStatusToDisplay } from '@/lib/format-notification-content';
 import { inferStateFromPostalCode } from '@/utils/location';
-import { calculateBusinessMinutesBetween } from '@/utils/sla-insights';
+import { recordContactTiming } from '@/lib/server/contact-timing';
 import { createAdminNotifications } from '@/lib/server/notifications';
 import { maybeNotifyAdminsOnUpdateRequestResponse } from '@/lib/server/update-request-response';
 import { hasAhaOosAgentAttached } from '@/lib/server/auto-update-reminders';
@@ -234,6 +234,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
   let syncError: StatusSyncError | null = null;
   const sla = (referral.sla ??= {} as any);
   let slaModified = false;
+  let contactPairedAt: Date | null = null;
 
   if (shouldPersistReferralStatus && !isAgentOrigin) {
     if (nextStatus === 'Under Contract') {
@@ -318,14 +319,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
             }
           }
         }
-        if (pairedAt) {
-          const minutes = calculateBusinessMinutesBetween(pairedAt, now);
-          if (minutes != null) {
-            sla.timeToFirstAgentContactHours = Math.round((minutes / 60) * 10) / 10;
-            sla.lastPairedAt = pairedAt;
-            slaModified = true;
-          }
-        }
+        contactPairedAt = pairedAt;
       } else if (nextStatus === 'New Lead' && sla.lastPairedAt) {
         sla.lastPairedAt = null;
         slaModified = true;
@@ -841,12 +835,11 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       syncError = await forceLostForUnassignedDeal();
     }
   }
-  if (slaModified) {
-    referral.markModified('sla');
-  }
   if (shouldPersistReferralStatus || slaModified) {
     await referral.save();
   }
+
+  if (contactPairedAt) await recordContactTiming(referral._id, contactPairedAt, now, true);
 
   if (createdDeal) {
     const createdSide = createdDeal.side === 'sell' ? 'sell-side' : 'buy-side';

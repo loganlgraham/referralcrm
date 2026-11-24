@@ -131,4 +131,5 @@ export type MockFubSendAttemptRecord = {
 
 export const MockFubSendAttempt =
   models.MockFubSendAttempt || model('MockFubSendAttempt', mockFubSendAttemptSchema);
+export const FubSendAttempt = models.FubSendAttempt || model('FubSendAttempt', mockFubSendAttemptSchema.clone());
 export const MockFubPerson = models.MockFubPerson || model('MockFubPerson', mockFubPersonSchema);

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { Types } from 'mongoose';
+import { Types } from 'mongoose';
 
 import { connectMongo } from '@/lib/mongoose';
 import { Referral } from '@/models/referral';
+import { InboundReferralMessage } from '@/models/inbound-referral-message';
 import { uploadEmailAttachment } from '@/lib/server/gcs';
 import { sendTransactionalEmail } from '@/lib/email';
 import {
@@ -29,6 +30,7 @@ import { getReferralNotificationRecipients } from '@/lib/server/cc-recipients';
 import { applyIntakeAgentSuggestion, canPersistAutoAgentAssignment } from '@/lib/server/agent-auto-suggest';
 
 interface NormalizedAttachment {
+  id?: string;
   filename: string;
   content: string;
   contentType?: string;
@@ -40,6 +42,10 @@ interface NormalizedEmail {
   to: string[];
   subject?: string;
   text: string;
+  plainText?: string;
+  html?: string;
+  cc: string[];
+  attachmentNames: string[];
   attachments: NormalizedAttachment[];
   receivedAt?: Date;
 }
@@ -278,7 +284,7 @@ async function hydrateEmailFromResend(
       content = await fetchResendAttachment(emailId, attachmentId, apiKey) ?? undefined;
     }
 
-    if (!content) {
+    if (!content && !attachmentId) {
       continue;
     }
 
@@ -289,8 +295,9 @@ async function hydrateEmailFromResend(
       undefined;
 
     normalizedAttachments.push({
+      id: attachmentId,
       filename,
-      content,
+      content: content || '',
       contentType
     });
   }
@@ -310,6 +317,7 @@ async function hydrateEmailFromResend(
       ...payloadData,
       email: {
         ...email,
+        attachmentNames: attachmentsRaw.map(item => item?.filename || item?.name).filter(Boolean),
         attachments: normalizedAttachments
       }
     }
@@ -384,7 +392,7 @@ function normalizeResendPayload(payload: unknown): NormalizedEmail | null {
       (typeof candidate.data === 'string' && candidate.data) ||
       (typeof candidate.base64 === 'string' && candidate.base64) ||
       (typeof candidate.content_base64 === 'string' && candidate.content_base64);
-    if (!content) {
+    if (!content && !candidate.id) {
       continue;
     }
 
@@ -394,8 +402,9 @@ function normalizeResendPayload(payload: unknown): NormalizedEmail | null {
       undefined;
 
     attachments.push({
+      id: typeof candidate.id === 'string' ? candidate.id : undefined,
       filename,
-      content,
+      content: typeof content === 'string' ? content : '',
       contentType
     });
   }
@@ -414,6 +423,10 @@ function normalizeResendPayload(payload: unknown): NormalizedEmail | null {
     to,
     subject,
     text: textBody ?? '',
+    plainText: [email.text,email.text_body,email.textBody].find((value): value is string => typeof value === 'string' && value.length > 0),
+    html: typeof email.html === 'string' ? email.html : undefined,
+    cc: Array.isArray(email.cc) ? email.cc.map(pickEmailAddress).filter((x): x is string => !!x) : [],
+    attachmentNames: Array.isArray(email.attachmentNames) ? email.attachmentNames.filter((x): x is string => typeof x === 'string') : [],
     attachments,
     receivedAt
   };
@@ -784,7 +797,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const email = await hydrateEmailFromResend(payloadRecord, apiKey);
   if (!email) {
-    return NextResponse.json({ error: 'Inbound email payload is missing required fields.' }, { status: 400 });
+    return NextResponse.json({ error: 'Original email could not be retrieved. Retry delivery.' }, { status: 503 });
   }
 
   const channelInfo = extractRouteHint(email.to) ?? extractSubjectRouteHint(email.subject);
@@ -794,17 +807,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const extractedFields = extractLabeledFields(normalizeInboundTextBreaks(email.text));
   let parsedFields = parseInboundReferralFields(extractedFields);
-  let aiFallbackAttempted = false;
-  let aiFallbackApplied = false;
 
   if (!parsedFields.hasRequiredFields) {
-    aiFallbackAttempted = true;
     const aiFallbackFields = await extractInboundEmailFieldsWithAI({
       text: email.text,
       subject: email.subject,
       from: email.from,
       to: email.to
-    });
+    }).catch(() => null);
 
     if (aiFallbackFields) {
       const mergedFields = {
@@ -812,7 +822,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         ...extractedFields
       };
       parsedFields = parseInboundReferralFields(mergedFields);
-      aiFallbackApplied = true;
     }
   }
 
@@ -833,20 +842,23 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     mcValue,
     loanFileNumber,
     clientType,
-    hasRequiredFields
   } = parsedFields;
-
-  if (!hasRequiredFields) {
-    if (aiFallbackAttempted) {
-      console.warn('Inbound email referral parse failed after AI fallback attempt', {
-        messageId: email.messageId,
-        aiFallbackApplied
-      });
-    }
-    return NextResponse.json({ error: 'Inbound email is missing borrower contact details or loan number.' }, { status: 400 });
-  }
+  const missing = [
+    !borrowerName && 'borrower name',
+    !borrowerEmail.includes('@') && 'borrower email',
+    !borrowerPhone && 'borrower phone',
+    !primaryLookingZip && 'search ZIP',
+    !loanFileNumber && 'loan number',
+  ].filter(Boolean);
+  const borrowerLabel = borrowerName || 'Unnamed referral';
 
   await connectMongo();
+  const intake = await InboundReferralMessage.findOneAndUpdate({ _id: email.messageId }, { $setOnInsert: {
+    referralId: new Types.ObjectId(), text: email.plainText, html: email.html, from: email.from, to: email.to, cc: email.cc,
+    subject: email.subject, receivedAt: email.receivedAt, attachmentNames: email.attachmentNames,
+    fields: Object.entries(extractedFields).map(([label, value]) => ({ label, value })),
+  } }, { upsert: true, new: true }).select('referralId').lean<{ referralId: Types.ObjectId }>();
+  if (!intake) throw new Error('Could not save the intake email.');
 
   const existingReferral = await Referral.findOne({ 'inboundEmail.messageId': email.messageId }).select('_id');
   if (existingReferral) {
@@ -912,9 +924,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const attachmentUploads = await Promise.all(
     email.attachments.map(async (attachment, index) => {
-      if (!attachment.content) {
-        return null;
-      }
+      const original = attachment.id ? {
+        name: attachment.filename,
+        url: `/api/referrals/${intake.referralId}/intake-attachments/${encodeURIComponent(attachment.id)}`,
+      } : null;
+      if (!attachment.content) return original;
       try {
         let base64Content = attachment.content.trim();
         const dataUriIndex = base64Content.indexOf(',');
@@ -925,7 +939,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         const safeName = sanitizeFileName(attachment.filename) || `attachment-${index + 1}`;
         const key = `inbound/${channelInfo.routeHint}/${email.messageId}/${Date.now()}-${safeName}`;
         if (buffer.length === 0) {
-          return null;
+          return original;
         }
         const body = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
         const url = await uploadEmailAttachment({
@@ -935,7 +949,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           messageId: email.messageId
         });
         if (!url) {
-          return null;
+          return original;
         }
         return {
           name: attachment.filename,
@@ -946,7 +960,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           messageId: email.messageId,
           index
         });
-        return null;
+        return original;
       }
     })
   );
@@ -956,7 +970,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const cleanedNotes = notes
     ? await cleanReferralNotes(notes, {
         allowFallbackToOriginal: true
-      })
+      }).catch(() => notes)
     : '';
 
   const notesSections: string[] = [];
@@ -977,15 +991,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     notesSections.push(coborrowerNoteBlock);
   }
   const initialNotes = notesSections.filter(Boolean).join('\n\n');
-  const referralNoteContent = [cleanedNotes, coborrowerNoteBlock].filter(Boolean).join('\n\n');
+  const referralNoteContent = [missing.length ? `Intake received with missing information: ${missing.join(', ')}.` : '', cleanedNotes, coborrowerNoteBlock].filter(Boolean).join('\n\n');
 
   try {
-    const referral = await Referral.create({
+    const referralData = {
+      _id: intake.referralId,
       source,
       endorser,
       clientType,
       borrower: {
-        name: borrowerName,
+        name: borrowerName || '',
         email: borrowerEmail,
         phone: borrowerPhone
       },
@@ -994,7 +1009,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       borrowerCurrentAddress: borrowerAddress,
       stageOnTransfer,
       initialNotes,
-      loanFileNumber,
+      loanFileNumber: loanFileNumber || undefined,
       loanType,
       preApprovalAmountCents: estimatedPriceCents ?? undefined,
       estPurchasePriceCents: estimatedPriceCents ?? undefined,
@@ -1023,9 +1038,25 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         from: email.from,
         subject: email.subject
       }
-    });
+    };
+    let referral;
+    try {
+      referral = await Referral.create(referralData);
+    } catch (error) {
+      const duplicate = error as {code?: number; keyPattern?: Record<string, number>};
+      if (duplicate.code !== 11000 || !duplicate.keyPattern?.loanFileNumber) throw error;
+      const review = 'Verify the supplied loan number. Another referral already uses it.';
+      missing.push('verified loan number');
+      referral = await Referral.create({
+        ...referralData,
+        loanFileNumber: undefined,
+        notes: [...referralData.notes, {authorRole:'system', authorName:'Inbound Email Import', content:review}],
+      });
+    }
 
     const summaryFields = [
+      missing.length ? `Please complete: ${missing.join(', ')}.` : null,
+      attachments.length < email.attachmentNames.length ? 'One or more attachments need to be recovered from the original email.' : null,
       `Deal Type: ${clientType}`,
       `Zip${lookingInZips.length > 1 ? 's' : ''}: ${lookingInZips.join(', ')}`,
       `Stage: ${stageOnTransfer}`,
@@ -1098,13 +1129,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     });
 
     const confirmation = renderInboundConfirmationEmail({
-      borrowerName,
+      borrowerName: borrowerLabel,
       summaryFields,
     });
 
     await sendTransactionalEmail({
       to: [CONFIRMATION_RECIPIENT],
-      subject: `Referral received: ${borrowerName} (${channelInfo.channel})`,
+      subject: `Referral received: ${borrowerLabel} (${channelInfo.channel})`,
       html: confirmation.html,
       text: confirmation.text
     });
@@ -1119,14 +1150,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
         const referralLink = buildReferralLink(referral._id.toString());
         const notification = renderNewReferralNotificationEmail({
-          borrowerLabel: borrowerName,
+          borrowerLabel,
           summaryFields,
           referralLink,
         });
 
         await sendTransactionalEmail({
           to: coordinatorRecipients,
-          subject: `New Referral: ${borrowerName}`,
+          subject: `New Referral: ${borrowerLabel}`,
           html: notification.html,
           text: notification.text,
           context: { referralId: referral._id.toString() }
@@ -1141,7 +1172,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ status: 'created', referralId: referral._id.toString() });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    if (message.includes('duplicate key')) {
+    if (message.includes('duplicate key') && await Referral.exists({ 'inboundEmail.messageId': email.messageId })) {
       return NextResponse.json({ status: 'duplicate' }, { status: 202 });
     }
     console.error('Failed to persist inbound referral', {

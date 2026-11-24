@@ -83,31 +83,31 @@ export function fubSendOutcomeMessage(
     case 'running':
       return {
         kind: 'info',
-        message: 'Paired saved. Mock FUB steps are still pending.',
+        message: 'Paired saved. FUB updates are still pending.',
       };
     case 'success':
       return {
         kind: 'success',
         message: recovered
-          ? 'Paired saved. The mock FUB send recovered and finished.'
-          : 'Paired saved and sent to the mock FUB fixture.',
+          ? 'Paired saved. The FUB send recovered and finished.'
+          : 'Paired saved and sent to Follow Up Boss.',
       };
     case 'partial_failure':
       return {
         kind: 'error',
-        message: 'Paired saved. The mock FUB send is incomplete and can be retried.',
+        message: 'Paired saved. The FUB send is incomplete and can be retried.',
       };
     case 'ambiguous':
       return {
         kind: 'error',
         message:
-          'Paired saved. The mock FUB result is uncertain, so it was not resent.',
+          'Paired saved. The FUB result is uncertain, so it was not resent.',
       };
     default: {
       const exhaustive: never = status;
       return {
         kind: 'error',
-        message: `Unhandled mock FUB status: ${exhaustive}`,
+        message: `Unhandled FUB status: ${exhaustive}`,
       };
     }
   }

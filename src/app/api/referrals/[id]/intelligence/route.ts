@@ -1,3 +1,4 @@
+import { liveFubEnabled, getFubAgentChoices } from '@/lib/server/live-fub-handoff';
 import { NextRequest, NextResponse } from 'next/server';
 import { Types } from 'mongoose';
 import { getCurrentSession } from '@/lib/auth';
@@ -99,10 +100,16 @@ export async function PUT(request: NextRequest, context: RouteContext): Promise<
     if (loaded.status === 401 || loaded.status === 403) return json(deniedPanel(), { status: loaded.status });
     return json({ officialScoring: false, access: 'allowed', saved: false, link: null, activity: { status: 'not_requested' } }, { status: loaded.status });
   }
-  const body = await request.json().catch(() => null) as { participantKey?: unknown; personId?: unknown; agentFubUserId?: unknown } | null;
+  const body = await request.json().catch(() => null) as { participantKey?: unknown; personId?: unknown; agentFubUserId?: unknown; expectedAgentId?: unknown } | null;
   if (!body) return json({ officialScoring: false, access: 'allowed', saved: false, link: null, activity: { status: 'not_requested' } }, { status: 400 });
   const at = new Date().toISOString();
   if (body.agentFubUserId !== undefined) {
+    if (liveFubEnabled() && body.agentFubUserId !== null) {
+      if (body.expectedAgentId !== loaded.agentId) return json({error:'The selected agent changed. Refresh the referral.'}, {status:409});
+      const directory = await getFubAgentChoices().catch(() => null);
+      if (!directory) return json({error:'The Follow Up Boss directory is unavailable.'}, {status:503});
+      if (!directory.some(user => user.id === body.agentFubUserId)) return json({error:'Choose a user from the AHA directory.'}, {status:422});
+    }
     if (!loaded.agentId) return json({ officialScoring: false, access: 'allowed', saved: false, link: null, activity: { status: 'not_requested' } }, { status: 400 });
     const agent = await writeAgentLink({
       organization: loaded.organization,
@@ -151,11 +158,13 @@ async function loadAuthorized(referralId: string): Promise<
   const session = await getCurrentSession();
   if (!Types.ObjectId.isValid(referralId)) return { ok: false, status: 404, reason: 'referral' };
   await connectMongo();
-  const referral = await Referral.findById(referralId).select('org assignedAgent').populate('assignedAgent', 'name').lean<{
+  const referral = await Referral.findById(referralId).select('org assignedAgent buySideAgent deletedAt').populate('assignedAgent', 'name').populate('buySideAgent', 'name').lean<{
     org?: string;
+    deletedAt?: Date;
+    buySideAgent?: { _id?: Types.ObjectId; name?: string } | Types.ObjectId | null;
     assignedAgent?: { _id?: Types.ObjectId; name?: string } | Types.ObjectId | null;
   } | null>();
-  if (!referral) return { ok: false, status: 404, reason: 'referral' };
+  if (!referral || referral.deletedAt) return { ok: false, status: 404, reason: 'referral' };
   const organization = referral.org === 'AHA' || referral.org === 'AFC' ? referral.org : null;
   if (!organization) return { ok: false, status: 503, reason: 'not_configured' };
   // Fall back to the verified AHA account so a missing preview env still finds saved links.
@@ -167,9 +176,8 @@ async function loadAuthorized(referralId: string): Promise<
   });
   const { access, userId } = await authorizeFubViewer({ session, organization, accountId, canViewReferral: canView });
   if (!access.ok) return { ok: false, status: access.status, reason: access.reason };
-  const agent = referral.assignedAgent && typeof referral.assignedAgent === 'object' && 'name' in referral.assignedAgent
-    ? referral.assignedAgent
-    : null;
+  const selectedAgent = referral.buySideAgent ?? referral.assignedAgent;
+  const agent = selectedAgent && typeof selectedAgent === 'object' && 'name' in selectedAgent ? selectedAgent : null;
   const secret = process.env.REFERRIO_INTEGRATION_SECRET ?? '';
   const url = trustedIntelligenceUrl(process.env.REFERRIO_INTELLIGENCE_URL ?? '') ?? '';
   return {

@@ -28,6 +28,7 @@ import type { Contact } from '@/components/referrals/contact-assignment';
 import { AdminTasksCard } from '@/components/referrals/admin-tasks-card';
 import { AdminDetailHeader } from '@/components/referrals/admin-referral-detail';
 import { TeamCard } from '@/components/referrals/team-card';
+import { FubAgentMapping } from '@/components/referrals/fub-agent-mapping';
 import { AgentRecommendationPanel } from '@/components/referrals/agent-recommendation-panel';
 import { RailCard, railCardClasses, railTitleClasses } from '@/components/referrals/referral-rail';
 
@@ -929,10 +930,23 @@ export function ReferralHeader({
                 zips={recommendationZips}
                 selectionSource={referral.agentSelectionSource ?? null}
                 assignedAgentName={effectiveBuySideContact?.name ?? null}
+                canPersistAssignment={viewerRole === 'admin' && canAssignBuyAgent}
+                onAssigned={contact => onBuySideAgentContactChange?.(contact)}
                 embedded
               />
             ) : null}
           />
+
+          {pairedFubEnabled && effectiveBuySideContact?.id && (
+            <FubAgentMapping key={effectiveBuySideContact.id} referralId={String(referral._id)} agentId={effectiveBuySideContact.id} agentName={effectiveBuySideContact.name || 'selected agent'} />
+          )}
+
+          {viewerRole === 'agent' && status === 'Paired' && (
+            <div className="flex flex-wrap gap-3 text-sm font-semibold">
+              <a className="underline" href={`/api/referrals/${referral._id}/contact-action?action=contact-attempted`}>Log first outreach attempt</a>
+              <a className="underline" href={`/api/referrals/${referral._id}/contact-action?action=contact-made`}>Log successful contact</a>
+            </div>
+          )}
 
           {railSlot}
 

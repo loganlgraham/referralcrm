@@ -113,15 +113,20 @@ export function AgentRecommendationPanel({
     <section className={panelClasses} aria-labelledby="agent-recommendation-title" aria-busy={load.status === 'loading'}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <HeadingTag id="agent-recommendation-title" className={railTitleClasses}>Suggested agent</HeadingTag>
-        <span className={metaPillClasses}>Preview</span>
+        <span className={metaPillClasses}>{canPersistAssignment ? 'Pilot' : 'Preview'}</span>
       </div>
       <p className="mt-0.5 text-[13px] text-foreground-subtle">
         {appliedAuto
           ? 'Auto-suggested on intake. Choosing another agent saves a manual override.'
           : canPersistAssignment
-            ? 'Draft suggestion. Choosing another agent assigns them on this referral.'
+            ? 'Review the recommendation and confirm your agent selection.'
             : 'Draft suggestion. It does not assign anyone on hosted previews.'}
       </p>
+      {canPersistAssignment && ranked[0] && !assignedAgentName && (
+        <button type="button" className={railTextButtonClasses} disabled={assigning} onClick={() => void persistAssignment(ranked[0].agentId)}>
+          Assign {ranked[0].name}
+        </button>
+      )}
       {body?.state === 'ready' && body.provisional ? (
         <p className="mt-1 text-xs text-foreground-subtle" role="note">
           Provisional suggestion — every eligible agent has limited history (fewer than {AGENT_RECOMMENDATION_POLICY.minResolvedForEvidence} finished referrals).

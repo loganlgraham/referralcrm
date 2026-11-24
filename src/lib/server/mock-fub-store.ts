@@ -1,3 +1,4 @@
+import { liveFubEnabled } from '@/lib/server/live-fub-handoff';
 import { Types } from 'mongoose';
 
 import type {
@@ -11,6 +12,7 @@ import type {
 import { createMockFubSteps } from '@/lib/fub/mock-fub-journal';
 import { canUseMockFubFixture } from '@/lib/server/fixture-safety';
 import {
+  FubSendAttempt,
   MockFubPerson,
   MockFubSendAttempt,
   type MockFubSendAttemptRecord,
@@ -45,26 +47,32 @@ function normalizeAttempt(doc: Record<string, any>): MockFubSendAttemptRecord {
   } as MockFubSendAttemptRecord;
 }
 
-async function findAttempt(
-  fixtureRunId: string,
-  referralId: string,
-): Promise<MockFubSendAttemptRecord | null> {
-  assertFixtureTarget();
-  const doc = await MockFubSendAttempt.findOne({
-    fixtureRunId,
-    referralId: new Types.ObjectId(referralId),
-  }).lean<Record<string, any> | null>();
-  return doc ? normalizeAttempt(doc) : null;
-}
+export function createMongooseMockFubAttemptRepository(live = false): MockFubAttemptRepository {
+  const attempts = live ? FubSendAttempt : MockFubSendAttempt;
+  function assertTarget() {
+    if (!live) return assertFixtureTarget();
+    if (!liveFubEnabled()) throw new Error('The AHA production handoff is unavailable.');
+  }
+  async function findAttempt(
+    fixtureRunId: string,
+    referralId: string,
+  ): Promise<MockFubSendAttemptRecord | null> {
+    assertTarget();
+    const doc = await attempts.findOne({
+      fixtureRunId,
+      referralId: new Types.ObjectId(referralId),
+    }).lean<Record<string, any> | null>();
+    return doc ? normalizeAttempt(doc) : null;
+  }
 
-export function createMongooseMockFubAttemptRepository(): MockFubAttemptRepository {
   return {
     async getOrCreate(input: MockFubApprovalInput) {
       const existing = await findAttempt(input.fixtureRunId, input.referralId);
       if (existing) return existing;
-      assertFixtureTarget();
+      assertTarget();
       try {
-        const created = await MockFubSendAttempt.create({
+        const created = await attempts.create({
+          ...(live ? { _id: new Types.ObjectId(input.referralId) } : {}),
           fixtureRunId: input.fixtureRunId,
           referralId: new Types.ObjectId(input.referralId),
           approvalKey: input.approvalKey,
@@ -89,8 +97,8 @@ export function createMongooseMockFubAttemptRepository(): MockFubAttemptReposito
     },
 
     async save(attempt) {
-      assertFixtureTarget();
-      const doc = await MockFubSendAttempt.findOneAndUpdate(
+      assertTarget();
+      const doc = await attempts.findOneAndUpdate(
         { _id: attempt._id, fixtureRunId: attempt.fixtureRunId },
         {
           $set: {
@@ -107,8 +115,8 @@ export function createMongooseMockFubAttemptRepository(): MockFubAttemptReposito
     },
 
     async claimStep(attemptId: string, stepName: MockFubStepName, at: Date) {
-      assertFixtureTarget();
-      const doc = await MockFubSendAttempt.findOneAndUpdate(
+      assertTarget();
+      const doc = await attempts.findOneAndUpdate(
         {
           _id: new Types.ObjectId(attemptId),
           'steps': {
@@ -134,8 +142,8 @@ export function createMongooseMockFubAttemptRepository(): MockFubAttemptReposito
     },
 
     async markStaleRunningAmbiguous(attemptId, startedBefore, at) {
-      assertFixtureTarget();
-      const doc = await MockFubSendAttempt.findOneAndUpdate(
+      assertTarget();
+      const doc = await attempts.findOneAndUpdate(
         {
           _id: new Types.ObjectId(attemptId),
           status: 'running',
