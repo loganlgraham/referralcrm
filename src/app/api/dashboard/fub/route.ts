@@ -28,7 +28,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     days,
     url: process.env.REFERRIO_INTELLIGENCE_URL ?? '',
     accountId: process.env.REFERRIO_FUB_ACCOUNT_ID ?? '',
-    secret: process.env.REFERRIO_INTEGRATION_SECRET ?? '',
+    secret: process.env.REFERRIO_SOP_SECRET ?? process.env.REFERRIO_INTEGRATION_SECRET ?? '',
   });
   if (!data)
     return json(
@@ -46,6 +46,6 @@ function json(body: unknown, status: number): NextResponse {
 
 function connectionConfigured(): boolean {
   return process.env.REFERRIO_FUB_ACCOUNT_ID === VERIFIED_FUB_ACCOUNT_ID &&
-    Boolean(process.env.REFERRIO_INTEGRATION_SECRET) &&
+    Boolean(process.env.REFERRIO_SOP_SECRET ?? process.env.REFERRIO_INTEGRATION_SECRET) &&
     trustedIntelligenceUrl(process.env.REFERRIO_INTELLIGENCE_URL ?? '') !== null;
 }

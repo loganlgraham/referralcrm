@@ -13,6 +13,7 @@ jest.mock('@/lib/intelligence/sop-remote', () => ({ fetchSopDashboard: jest.fn()
 const request = (query = '') => new NextRequest(`https://referrio.app/api/dashboard/fub${query}`);
 beforeEach(() => {
   jest.clearAllMocks();
+  delete process.env.REFERRIO_SOP_SECRET;
   process.env.REFERRIO_FUB_ACCOUNT_ID = '1846967076';
   process.env.REFERRIO_INTELLIGENCE_URL = 'https://fub-intelligence-agent.vercel.app/api/integration/referrio/customer';
   process.env.REFERRIO_INTEGRATION_SECRET = 'test-only-secret';
@@ -49,4 +50,12 @@ test('separates missing connection settings from permission and never fetches un
   expect(await access.json()).toEqual({ allowed: true, configured: false });
   expect((await GET(request())).status).toBe(503);
   expect(fetchSopDashboard).not.toHaveBeenCalled();
+});
+
+test('uses a dashboard-only secret without requiring the broader integration credential', async () => {
+  (canViewFubDashboard as jest.Mock).mockResolvedValue(true);
+  delete process.env.REFERRIO_INTEGRATION_SECRET;
+  process.env.REFERRIO_SOP_SECRET = 'dashboard-only';
+  expect((await GET(request())).status).toBe(200);
+  expect(fetchSopDashboard).toHaveBeenCalledWith(expect.objectContaining({ secret: 'dashboard-only' }));
 });
