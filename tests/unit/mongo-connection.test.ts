@@ -8,6 +8,7 @@ import {
   MONGO_STALE_AFTER_MS,
   raceWithTimeout,
   shouldCloseBeforeConnect,
+  summarizeMongoConnectError,
 } from '@/lib/mongo-connection';
 
 const DISCONNECTED = 0;
@@ -15,6 +16,28 @@ const CONNECTED = 1;
 const CONNECTING = 2;
 
 describe('mongo connection helpers', () => {
+  it('preserves nested network diagnostics while omitting MongoDB credentials and the generic allowlist guess', () => {
+    const summary = summarizeMongoConnectError({
+      name: 'MongooseServerSelectionError',
+      message: "Connection failed. One common reason is that you're trying to access the database from an IP that isn't whitelisted. See Atlas.",
+      reason: {
+        type: 'ReplicaSetNoPrimary',
+        servers: new Map([['server', {
+          type: 'Unknown',
+          error: {
+            name: 'MongoNetworkError',
+            code: 'ECONNRESET',
+            message: 'Failed mongodb+srv://user:secret@example.test/db?token=private',
+          },
+        }]]),
+      },
+    });
+    expect(summary.topologyType).toBe('ReplicaSetNoPrimary');
+    expect(summary.servers[0]).toMatchObject({ errorName: 'MongoNetworkError', errorCode: 'ECONNRESET' });
+    expect(JSON.stringify(summary)).not.toMatch(/secret|private|whitelist|user:/);
+    expect(summary.servers[0].errorMessage).toContain('[redacted MongoDB URI]');
+    expect(summarizeMongoConnectError(null)).toMatchObject({ name: 'Error', servers: [] });
+  });
   it('closes a disconnected client that may still be reconnecting in the background', () => {
     expect(shouldCloseBeforeConnect(DISCONNECTED, true)).toBe(true);
   });

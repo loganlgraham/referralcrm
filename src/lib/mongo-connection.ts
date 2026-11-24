@@ -72,3 +72,39 @@ export function lazyThenable<T>(factory: () => Promise<T>): Promise<T> {
     },
   } as Promise<T>;
 }
+
+function errorRecord(value: unknown): Record<string, unknown> {
+  return value !== null && typeof value === 'object' ? value as Record<string, unknown> : {};
+}
+
+function safeErrorText(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  return value
+    .replace(/mongodb(?:\+srv)?:\/\/[^\s"'<>]+/gi, '[redacted MongoDB URI]')
+    .replace(/One common reason is that you're trying to access the database from an IP that isn't whitelisted\.[\s\S]*/i, '')
+    .trim()
+    .slice(0, 240);
+}
+
+/** Preserve the underlying network error without logging credentials or full driver objects. */
+export function summarizeMongoConnectError(error: unknown) {
+  const record = errorRecord(error);
+  const topology = errorRecord(record.reason ?? record.cause);
+  const servers = topology.servers instanceof Map ? [...topology.servers.values()].slice(0, 3) : [];
+  return {
+    name: safeErrorText(record.name) ?? 'Error',
+    message: safeErrorText(record.message),
+    code: typeof record.code === 'number' ? record.code : safeErrorText(record.code),
+    topologyType: safeErrorText(topology.type),
+    servers: servers.map((value: unknown) => {
+      const server = errorRecord(value);
+      const cause = errorRecord(server.error);
+      return {
+        type: safeErrorText(server.type),
+        errorName: safeErrorText(cause.name),
+        errorCode: typeof cause.code === 'number' ? cause.code : safeErrorText(cause.code),
+        errorMessage: safeErrorText(cause.message),
+      };
+    }),
+  };
+}
