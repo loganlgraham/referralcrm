@@ -1,6 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
+import type { Contact } from '@/components/referrals/contact-assignment';
 import { toast } from 'sonner';
 import { buttonClasses } from '@/components/ui/button';
 import { metaPillClasses, railCardClasses, railTitleClasses, railTextButtonClasses } from '@/components/referrals/referral-rail';
@@ -15,7 +17,8 @@ export function AgentRecommendationPanel({
   referralId,
   mcId,
   zips,
-  selectionSource = null,
+  reviewIntakeSuggestion = false,
+  assignedAgentId = null,
   canPersistAssignment = false,
   embedded = false,
   assignedAgentName = null,
@@ -25,28 +28,32 @@ export function AgentRecommendationPanel({
   referralId: string;
   mcId: string | null;
   zips: readonly string[];
-  selectionSource?: 'auto' | 'manual' | null;
+  reviewIntakeSuggestion?: boolean;
+  assignedAgentId?: string | null;
   canPersistAssignment?: boolean;
   embedded?: boolean;
   assignedAgentName?: string | null;
   side?: 'buy' | 'sell';
-  onAssigned?: (agent: { id: string; name: string }) => void;
+  onAssigned?: (agent: Contact) => void;
 }) {
   const [load, setLoad] = useState<LoadState>({ status: 'loading' });
   const [override, setOverride] = useState<string | null>(null);
   const [choosing, setChoosing] = useState(false);
   const [assigning, setAssigning] = useState(false);
-  const [localSource, setLocalSource] = useState<'auto' | 'manual' | null>(selectionSource);
+  const initiallyExpanded = !assignedAgentId || reviewIntakeSuggestion;
+  const [expanded, setExpanded] = useState(initiallyExpanded);
+  const contentId = useId();
+  const toggle = useRef<HTMLButtonElement>(null);
   const generation = useRef(0);
   const zipKey = zips.join(',');
 
   useEffect(() => {
-    setLocalSource(selectionSource);
-  }, [selectionSource]);
+    setExpanded(initiallyExpanded);
+  }, [referralId, assignedAgentId, initiallyExpanded]);
 
   const fetchSuggestions = useCallback(async () => {
     const current = ++generation.current;
-    setLoad((previous) => (previous.status === 'done' ? previous : { status: 'loading' }));
+    setLoad({ status: 'loading' });
     const params = new URLSearchParams({ mcId: mcId ?? 'none', zips: zipKey });
     try {
       const response = await fetch(`/api/referrals/${referralId}/agent-recommendations?${params.toString()}`, { cache: 'no-store' });
@@ -61,9 +68,14 @@ export function AgentRecommendationPanel({
   }, [mcId, referralId, zipKey]);
 
   useEffect(() => {
+    if (!expanded) return;
+    setLoad({ status: 'loading' });
     const timer = setTimeout(() => void fetchSuggestions(), REFRESH_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, [fetchSuggestions]);
+    return () => {
+      clearTimeout(timer);
+      generation.current++;
+    };
+  }, [expanded, fetchSuggestions]);
 
   const persistAssignment = async (agentId: string) => {
     if (!canPersistAssignment || !agentId) return;
@@ -75,11 +87,13 @@ export function AgentRecommendationPanel({
         body: JSON.stringify({ agentId, side }),
       });
       if (!response.ok) throw new Error('Unable to save agent selection');
+      const { agent } = await response.json() as { agent?: Contact | null };
       const ranked = load.status === 'done' && load.body.state === 'ready' ? load.body.recommendations : [];
       const chosen = ranked.find((entry) => entry.agentId === agentId);
-      setLocalSource('manual');
       setOverride(null);
-      onAssigned?.({ id: agentId, name: chosen?.name ?? 'Selected agent' });
+      onAssigned?.(agent ?? { id: agentId, name: chosen?.name, ahaDesignation: load.status === 'done' ? load.body.inputs.bucket : null });
+      setExpanded(false);
+      toggle.current?.focus();
       toast.success(`Assigned ${chosen?.name ?? 'agent'}`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Unable to save agent selection');
@@ -97,7 +111,6 @@ export function AgentRecommendationPanel({
 
   const top = ranked[0] ?? null;
   const alternatives = ranked.slice(1, 3);
-  const appliedAuto = localSource === 'auto';
   const panelClasses = embedded
     ? 'min-w-0 max-w-full rounded-xl border border-border bg-surface-subtle p-3'
     : `${railCardClasses} min-w-0 max-w-full`;
@@ -112,145 +125,162 @@ export function AgentRecommendationPanel({
   };
 
   return (
-    <section className={panelClasses} aria-labelledby="agent-recommendation-title" aria-busy={load.status === 'loading'}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <HeadingTag id="agent-recommendation-title" className={railTitleClasses}>Suggested agent</HeadingTag>
-        <span className={metaPillClasses}>{canPersistAssignment ? 'Pilot' : 'Preview'}</span>
-      </div>
-      <p className="mt-0.5 text-[13px] text-foreground-subtle">
-        {appliedAuto
-          ? 'Auto-suggested on intake. Choosing another agent saves a manual override.'
-          : canPersistAssignment
-            ? 'Review the recommendation and confirm your agent selection.'
-            : 'Draft suggestion. It does not assign anyone on hosted previews.'}
-      </p>
-      {canPersistAssignment && ranked[0] && !assignedAgentName && (
-        <button type="button" className={railTextButtonClasses} disabled={assigning} onClick={() => void persistAssignment(ranked[0].agentId)}>
-          Assign {ranked[0].name}
+    <section className={panelClasses} aria-labelledby={contentId + '-title'}>
+      <HeadingTag id={contentId + '-title'} className={railTitleClasses}>
+        <button
+          ref={toggle}
+          type="button"
+          className="flex w-full items-center justify-between gap-3 rounded-md text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+          aria-expanded={expanded}
+          aria-controls={contentId}
+          onClick={() => setExpanded(!expanded)}
+        >
+          Suggested agent
+          <ChevronDown aria-hidden="true" className={`h-4 w-4 shrink-0 text-foreground-muted transition-transform motion-reduce:transition-none ${expanded ? 'rotate-180' : ''}`} />
         </button>
-      )}
-      {body?.state === 'ready' && body.provisional ? (
-        <p className="mt-1 text-xs text-foreground-subtle" role="note">
-          Provisional suggestion — every eligible agent has limited history (fewer than {AGENT_RECOMMENDATION_POLICY.minResolvedForEvidence} finished referrals).
-        </p>
-      ) : null}
-
-      {load.status === 'loading' ? <p className="mt-4 text-sm">Loading suggestions…</p> : null}
-      {load.status === 'error' || body?.state === 'unavailable' ? (
-        <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
-          <p>Suggestions couldn&apos;t load.</p>
-          <button className={buttonClasses({ variant: 'secondary', size: 'sm' })} type="button" onClick={() => void fetchSuggestions()}>Retry</button>
-        </div>
-      ) : null}
-      {body && body.state !== 'ready' && body.state !== 'unavailable' ? <p className="mt-4 text-sm">{emptyMessage(body.state)}</p> : null}
-      {body?.state === 'ready' && !top ? (
-        <p className="mt-4 text-sm">No eligible agent suggestion for this referral yet.</p>
-      ) : null}
-
-      {top ? (
-        <div className="mt-4 grid min-w-0 gap-3 text-sm">
-          <div className="min-w-0">
-            <div className="grid min-w-0 gap-2">
-              <div className="grid gap-1">
-                <p className="text-eyebrow text-foreground-subtle">Assigned</p>
-                <p className="break-words text-sm font-semibold text-foreground">{assignedAgentName ?? 'Not assigned yet'}</p>
-              </div>
-              <div className="grid gap-1">
-                <p className="text-eyebrow text-foreground-subtle">Suggested</p>
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="break-words text-base font-semibold text-foreground">{top.name}</p>
-                  <EvidenceBadge strength={top.evidenceStrength} />
-                  {appliedAuto ? <span className={metaPillClasses}>Auto-suggested</span> : null}
-                </div>
-              </div>
-              <button
-                className={buttonClasses({ variant: 'secondary', size: 'sm' })}
-                type="button"
-                disabled={assigning}
-                onClick={() => useAgent(top)}
-              >
-                {`Use ${top.name}`}
-              </button>
-            </div>
-            <details className="mt-2">
-              <summary className="cursor-pointer text-xs font-semibold text-foreground-muted">Why this suggestion</summary>
-              <ul className="mt-1 list-disc space-y-1 pl-5 text-foreground-muted">
-                {top.reasons.map((reason) => <li key={reason} className="break-words">{reason}</li>)}
-              </ul>
-            </details>
-            {top.unknownLossReasons > 0 ? (
-              <p className="mt-1 text-xs text-foreground-subtle">{`${unknownLossLabel(top.unknownLossReasons)} not counted.`}</p>
+      </HeadingTag>
+      {!expanded && assignedAgentName && <p className="mt-1 break-words text-xs text-foreground-muted">Assigned to {assignedAgentName}</p>}
+      <div id={contentId} hidden={!expanded} aria-busy={expanded && load.status === 'loading'}>
+        {expanded && (
+          <>
+            {!canPersistAssignment && <p className="mt-1 text-xs text-foreground-muted">Preview only</p>}
+            {body?.state === 'ready' && body.provisional ? (
+              <p className="mt-1 text-xs text-foreground-subtle" role="note">
+                Provisional suggestion — every eligible agent has limited history (fewer than {AGENT_RECOMMENDATION_POLICY.minResolvedForEvidence} finished referrals).
+              </p>
             ) : null}
-          </div>
 
-          {alternatives.length > 0 ? (
-            <div className="min-w-0">
-              <p className="text-eyebrow text-foreground-subtle">Alternatives</p>
-              <ul className="mt-1 grid gap-1">
-                {alternatives.map((entry) => (
-                  <li key={entry.agentId} className="flex min-w-0 flex-wrap items-center gap-2">
-                    <span className="break-words">{entry.name}</span>
-                    <EvidenceBadge strength={entry.evidenceStrength} />
-                    <button className={`${railTextButtonClasses} ml-auto`} type="button" disabled={assigning} onClick={() => useAgent(entry)}>
-                      {`Use ${entry.name}`}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-
-          {overrideAgent && !canPersistAssignment ? (
-            <div className="rounded-md border border-dashed border-border px-3 py-2" role="status">
-              <p className="font-semibold">Preview selection — not assigned.</p>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <span className="break-words">{overrideAgent.name}</span>
-                <EvidenceBadge strength={overrideAgent.evidenceStrength} />
-                <button className={`${railTextButtonClasses} ml-auto`} type="button" onClick={() => setOverride(null)}>Clear</button>
+            {load.status === 'loading' ? <p className="mt-4 text-sm">Loading suggestions…</p> : null}
+            {load.status === 'error' || body?.state === 'unavailable' ? (
+              <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
+                <p>Suggestions couldn&apos;t load.</p>
+                <button className={buttonClasses({ variant: 'secondary', size: 'sm' })} type="button" onClick={() => void fetchSuggestions()}>Retry</button>
               </div>
-            </div>
-          ) : null}
+            ) : null}
+            {body && body.state !== 'ready' && body.state !== 'unavailable' ? <p className="mt-4 text-sm">{emptyMessage(body.state)}</p> : null}
+            {body?.state === 'ready' && !top ? (
+              <p className="mt-4 text-sm">No eligible agent suggestion for this referral yet.</p>
+            ) : null}
 
-          {choosing ? (
-            <label className="grid gap-1">
-              <span>{canPersistAssignment ? 'Choose a different agent' : 'Preview a different agent'}</span>
-              <select
-                className="min-w-0 rounded-md border border-border bg-surface px-3 py-2"
-                value={override ?? ''}
-                disabled={assigning}
-                onChange={(event) => {
-                  const next = event.target.value || null;
-                  if (canPersistAssignment && next) {
-                    void persistAssignment(next);
-                    return;
-                  }
-                  setOverride(next);
-                  setChoosing(false);
-                }}
-              >
-                <option value="">Use the suggestion</option>
-                {ranked.map((entry) => (
-                  <option key={entry.agentId} value={entry.agentId}>{`${entry.rank}. ${entry.name} (${entry.evidenceStrength.toLowerCase()} evidence)`}</option>
+            {top ? (
+              <div className="mt-4 grid min-w-0 gap-3 text-sm">
+                <div className="min-w-0">
+                  <div className="grid min-w-0 gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="break-words text-base font-semibold text-foreground">{top.name}</p>
+                      <EvidenceBadge strength={top.evidenceStrength} />
+                    </div>
+                    <button
+                      className={buttonClasses({ variant: 'secondary', size: 'sm' })}
+                      type="button"
+                      disabled={assigning || (top.agentId === assignedAgentId && !reviewIntakeSuggestion)}
+                      onClick={() => useAgent(top)}
+                    >
+                      {top.agentId === assignedAgentId && !reviewIntakeSuggestion ? 'Currently assigned' : `Use ${top.name}`}
+                    </button>
+                  </div>
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-xs font-semibold text-foreground-muted">Why this suggestion</summary>
+                    <RecommendationReasons entry={top} />
+                  </details>
+                </div>
+
+                {alternatives.length > 0 ? (
+                  <div className="min-w-0">
+                    <p className="text-eyebrow text-foreground-subtle">Alternatives</p>
+                    <ul className="mt-1 divide-y divide-border">
+                      {alternatives.map((entry) => (
+                        <li key={entry.agentId}>
+                          <details className="group">
+                            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-sm py-2 font-medium text-foreground hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary [&::-webkit-details-marker]:hidden">
+                              <span className="min-w-0 break-words">{entry.name}</span>
+                              <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 text-foreground-muted transition-transform group-open:rotate-180 motion-reduce:transition-none" />
+                            </summary>
+                            <div className="pb-3">
+                              <EvidenceBadge strength={entry.evidenceStrength} />
+                              <RecommendationReasons entry={entry} />
+                              {entry.agentId === assignedAgentId && !reviewIntakeSuggestion ? (
+                                <p className="mt-2 text-xs text-foreground-muted">Currently assigned</p>
+                              ) : (
+                                <button className={`${railTextButtonClasses} mt-2`} type="button" disabled={assigning} onClick={() => useAgent(entry)}>
+                                  {canPersistAssignment ? 'Assign this agent' : 'Preview this agent'}
+                                </button>
+                              )}
+                            </div>
+                          </details>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+
+                {overrideAgent && !canPersistAssignment ? (
+                  <div className="rounded-md border border-dashed border-border px-3 py-2" role="status">
+                    <p className="font-semibold">Preview selection — not assigned.</p>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <span className="break-words">{overrideAgent.name}</span>
+                      <EvidenceBadge strength={overrideAgent.evidenceStrength} />
+                      <button className={`${railTextButtonClasses} ml-auto`} type="button" onClick={() => setOverride(null)}>Clear</button>
+                    </div>
+                  </div>
+                ) : null}
+
+                {ranked.length > 3 && (choosing ? (
+                  <label className="grid gap-1">
+                    <span>{canPersistAssignment ? 'Choose a different agent' : 'Preview a different agent'}</span>
+                    <select
+                      className="min-w-0 rounded-md border border-border bg-surface px-3 py-2"
+                      value={overrideAgent && overrideAgent.rank > 3 ? overrideAgent.agentId : ''}
+                      disabled={assigning}
+                      onChange={(event) => {
+                        const next = event.target.value || null;
+                        if (canPersistAssignment && next) {
+                          void persistAssignment(next);
+                          return;
+                        }
+                        setOverride(next);
+                        setChoosing(false);
+                      }}
+                    >
+                      <option value="">Select an agent</option>
+                      {ranked.slice(3).map((entry) => (
+                        <option key={entry.agentId} value={entry.agentId}>{`${entry.rank}. ${entry.name} (${entry.evidenceStrength.toLowerCase()} evidence)`}</option>
+                      ))}
+                    </select>
+                  </label>
+                ) : (
+                  <div>
+                    <button
+                      className={buttonClasses({ variant: 'secondary', size: 'md' })}
+                      type="button"
+                      disabled={assigning}
+                      onClick={() => setChoosing(true)}
+                    >
+                      Choose another agent
+                    </button>
+                  </div>
                 ))}
-              </select>
-            </label>
-          ) : (
-            <div>
-              <button
-                className={buttonClasses({ variant: 'secondary', size: 'md' })}
-                type="button"
-                disabled={assigning}
-                onClick={() => setChoosing(true)}
-              >
-                Choose another agent
-              </button>
-            </div>
-          )}
 
-          <CalculationDetails body={body} shown={[top, ...alternatives, ...(overrideAgent && overrideAgent.rank > 3 ? [overrideAgent] : [])]} />
-        </div>
-      ) : null}
+                <CalculationDetails body={body} shown={[top, ...alternatives, ...(overrideAgent && overrideAgent.rank > 3 ? [overrideAgent] : [])]} />
+              </div>
+            ) : null}
+          </>
+        )}
+      </div>
     </section>
+  );
+}
+
+function RecommendationReasons({ entry }: { entry: AgentRecommendation }) {
+  return (
+    <>
+      <ul className="mt-1 list-disc space-y-1 pl-5 text-foreground-muted">
+        {entry.reasons.map((reason) => <li key={reason} className="break-words">{reason}</li>)}
+      </ul>
+      {entry.unknownLossReasons > 0 && (
+        <p className="mt-1 text-xs text-foreground-subtle">{unknownLossLabel(entry.unknownLossReasons)} not counted.</p>
+      )}
+    </>
   );
 }
 
@@ -261,7 +291,7 @@ function EvidenceBadge({ strength }: { strength: EvidenceStrength }) {
 function emptyMessage(state: Exclude<AgentRecommendationResponse['state'], 'ready' | 'unavailable'>): string {
   switch (state) {
     case 'needs_bucket':
-      return 'Set the agent bucket to see suggestions.';
+      return 'Add a valid search ZIP to see agent suggestions.';
     case 'needs_zip':
       return 'Add a ZIP to see out-of-state suggestions.';
     case 'no_candidates':

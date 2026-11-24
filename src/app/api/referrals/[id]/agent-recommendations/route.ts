@@ -1,4 +1,4 @@
-import { referralWorkflowRoute, type RoutingSource } from '@/lib/referral-routing';
+import { needsInitialAgentSuggestion, referralWorkflowRoute, type RoutingSource } from '@/lib/referral-routing';
 import { NextRequest, NextResponse } from 'next/server';
 import { Types } from 'mongoose';
 import { getCurrentSession } from '@/lib/auth';
@@ -11,6 +11,7 @@ import { emptyRecommendationResponse } from '@/lib/recommendations/agent-recomme
 import { buildAgentRecommendations, parseMcParam, parseZipParam, type RecommendationReferral } from '@/lib/server/agent-recommendations';
 import { authorizeFubViewer } from '@/lib/server/intelligence-viewer';
 import { Referral } from '@/models/referral';
+import { zipToState } from '@/utils/location';
 
 interface RouteContext {
   params: { id: string };
@@ -52,10 +53,18 @@ export async function GET(request: NextRequest, context: RouteContext): Promise<
     }
     const fubPermitted = viewer.access.ok && process.env.REFERRIO_FUB_ACCOUNT_ID === VERIFIED_FUB_ACCOUNT_ID;
     const params = request.nextUrl.searchParams;
+    const zipOverride = parseZipParam(params.get('zips'));
+    let suggestionBucket = bucket;
+    const initialSuggestion = needsInitialAgentSuggestion(referral);
+    if (initialSuggestion) {
+      const primaryZip = zipOverride === null ? referral.lookingInZips?.[0] ?? referral.lookingInZip : zipOverride[0];
+      const state = primaryZip ? zipToState(primaryZip) : null;
+      if (state) suggestionBucket = state === 'CO' ? 'AHA' : 'AHA_OOS';
+    }
     const body = await buildAgentRecommendations({
-      referral: { ...referral, org: organization, ahaBucket: bucket },
+      referral: { ...referral, org: initialSuggestion ? 'AHA' : organization, ahaBucket: suggestionBucket },
       mcOverride: parseMcParam(params.get('mcId')),
-      zipOverride: parseZipParam(params.get('zips')),
+      zipOverride,
       fubPermitted,
     });
     return json(body, 200);

@@ -411,6 +411,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
 
       const nextReferral: ReferralDetail = {
         ...previous,
+        agentSelectionSource: 'manual',
         buySideAgent: nextBuySideAgent,
         assignedAgent: nextBuySideAgent ?? previous.sellSideAgent ?? previous.assignedAgent ?? null,
       };
@@ -436,6 +437,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
 
       const nextReferral: ReferralDetail = {
         ...previous,
+        agentSelectionSource: 'manual',
         sellSideAgent: nextSellSideAgent,
         assignedAgent: previous.buySideAgent ?? nextSellSideAgent ?? previous.assignedAgent ?? null,
       };

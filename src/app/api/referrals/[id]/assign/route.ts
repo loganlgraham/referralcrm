@@ -141,17 +141,17 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   await referral.save();
 
-  type AgentNameLean = { _id: Types.ObjectId; name?: string | null; email?: string | null };
+  type AgentContact = { _id: Types.ObjectId; name?: string; email?: string; phone?: string; ahaDesignation?: string };
 
   const previousAgentPromise = previousAgent
     ? Agent.findById(previousAgent)
         .select('name')
-        .lean<AgentNameLean | null>()
-    : Promise.resolve<AgentNameLean | null>(null);
+        .lean<AgentContact | null>()
+    : Promise.resolve<AgentContact | null>(null);
 
   const nextAgentPromise = Agent.findById(parsed.data.agentId)
-    .select('name')
-    .lean<AgentNameLean | null>();
+    .select('name email phone ahaDesignation')
+    .lean<AgentContact | null>();
 
   const [previousAgentDoc, nextAgentDoc] = await Promise.all([
     previousAgentPromise,
@@ -183,5 +183,8 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
     console.error('[Admin Tasks] Failed to reconcile tasks after agent assign:', error);
   });
 
-  return NextResponse.json({ id: referral._id.toString() });
+  return NextResponse.json({
+    id: referral._id.toString(),
+    agent: nextAgentDoc ? { id: parsed.data.agentId, name: nextAgentDoc.name, email: nextAgentDoc.email, phone: nextAgentDoc.phone, ahaDesignation: nextAgentDoc.ahaDesignation } : null,
+  });
 }

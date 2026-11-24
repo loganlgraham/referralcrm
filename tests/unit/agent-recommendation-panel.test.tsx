@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { AgentRecommendationPanel } from '@/components/referrals/agent-recommendation-panel';
 import type { AgentRecommendation } from '@/lib/recommendations/agent-policy';
 import type { AgentRecommendationResponse } from '@/lib/recommendations/agent-recommendation-response';
@@ -77,25 +77,30 @@ describe('agent recommendation panel', () => {
     });
   }
 
-  it('shows one suggestion, three reasons, two alternatives, and no assign or send action', async () => {
+  it('shows one suggestion, expandable reasons for each alternative without assigning in preview', async () => {
     global.fetch = jest.fn(() => respond(body(['Ana', 'Ben', 'Cy', 'Dee']))) as typeof fetch;
-    render(<AgentRecommendationPanel referralId="r1" mcId="mc" zips={['80014']} assignedAgentName="Weston" embedded />);
+    render(<AgentRecommendationPanel referralId="r1" mcId="mc" zips={['80014']} embedded />);
     await flush();
-    expect(screen.getByText('Assigned')).toBeInTheDocument();
-    expect(screen.getByText('Weston')).toBeInTheDocument();
-    expect(screen.getByText('Suggested')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Suggested agent' })).toHaveAttribute('aria-expanded', 'true');
     expect((await screen.findAllByText('Ana')).length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'Use Ana' })).toBeInTheDocument();
     expect(screen.getByText('Why this suggestion')).toBeInTheDocument();
     expect(screen.getAllByText(/Ana reason/)).toHaveLength(3);
-    expect(screen.queryAllByText(/Ben reason/)).toHaveLength(0);
     const alternatives = screen.getByText('Alternatives').parentElement as HTMLElement;
     expect(alternatives).toHaveTextContent('Ben');
     expect(alternatives).toHaveTextContent('Cy');
-    expect(screen.getByRole('button', { name: 'Use Ben' })).toBeInTheDocument();
+    const ben = within(alternatives).getByText('Ben');
+    expect(within(alternatives).getAllByText('Ben')).toHaveLength(1);
+    const row = ben.closest('details')!;
+    expect(row.open).toBe(false);
+    fireEvent.click(ben.closest('summary')!);
+    expect(row.open).toBe(true);
+    expect(within(row).getAllByText(/Ben reason/)).toHaveLength(3);
+    expect(within(row).getByRole('button', { name: 'Preview this agent' })).toBeVisible();
+    expect(within(alternatives).getByText('Cy').closest('details')!.open).toBe(false);
     expect(screen.queryByText('Dee')).not.toBeInTheDocument();
     expect(screen.getByText('Strong evidence')).toBeInTheDocument();
-    expect(screen.getByText(/does not assign anyone on hosted previews/i)).toBeInTheDocument();
+    expect(screen.getByText('Preview only')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /assign|send|follow up boss/i })).not.toBeInTheDocument();
     expect(screen.getByText('How this was calculated')).toBeInTheDocument();
     expect(screen.getByText('Uses Referrio data only. Follow Up Boss activity is not part of the score yet.')).toBeInTheDocument();
@@ -105,6 +110,48 @@ describe('agent recommendation panel', () => {
     expect(screen.getByText(/Contract known: conversion is ranked only when there are documented contracts and documented failures to reach contract/)).toBeInTheDocument();
     expect(screen.getByText(/Draft workload weights: New Lead 1, Paired 2, In Communication 3, Active Lead 4/)).toBeInTheDocument();
     expect(screen.getByText(/Ana: New Lead 0 \(x1\), Paired 1 \(x2\), In Communication 0 \(x3\), Active Lead 1 \(x4\); Under Contract 1 \(separate\); weighted load 6/)).toBeInTheDocument();
+  });
+
+  it('starts collapsed for an assigned referral, reopens on demand and reacts to a Team assignment', async () => {
+    global.fetch = jest.fn(() => respond(body(['Ana', 'Ben']))) as typeof fetch;
+    const props = { referralId: 'r1', mcId: null, zips: ['80014'], canPersistAssignment: true };
+    const { rerender } = render(<AgentRecommendationPanel {...props} assignedAgentId="id-Ben" assignedAgentName="Ben" />);
+    const toggle = screen.getByRole('button', { name: 'Suggested agent' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByText('Assigned to Ben')).toBeVisible();
+    await flush();
+    expect(global.fetch).not.toHaveBeenCalled();
+    fireEvent.click(toggle);
+    await flush();
+    expect(screen.getByRole('button', { name: 'Use Ana' })).toBeVisible();
+    rerender(<AgentRecommendationPanel {...props} assignedAgentId="id-Ana" assignedAgentName="Ana" />);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    rerender(<AgentRecommendationPanel {...props} />);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('keeps the intake suggestion open until confirmed and collapses after a successful alternative assignment', async () => {
+    const agent = { id: 'id-Ben', name: 'Ben', ahaDesignation: 'AHA', phone: '303-555-0100' };
+    const onAssigned = jest.fn();
+    global.fetch = jest.fn((url, init) => init?.method === 'POST' ? respond({ agent }) : respond(body(['Ana', 'Ben']))) as typeof fetch;
+    render(<AgentRecommendationPanel referralId="r1" mcId={null} zips={[]} assignedAgentId="id-Ana" assignedAgentName="Ana" reviewIntakeSuggestion canPersistAssignment side="sell" onAssigned={onAssigned} />);
+    await flush();
+    expect(screen.getByRole('button', { name: 'Use Ana' })).toBeEnabled();
+    const row = screen.getByText('Alternatives').parentElement!.querySelector('details')!;
+    fireEvent.click(within(row).getByText('Ben'));
+    expect(onAssigned).not.toHaveBeenCalled();
+    fireEvent.click(within(row).getByRole('button', { name: 'Assign this agent' }));
+    await waitFor(() => expect(onAssigned).toHaveBeenCalledWith(agent));
+    expect(global.fetch).toHaveBeenCalledWith('/api/referrals/r1/assign', expect.objectContaining({ body: JSON.stringify({ agentId: 'id-Ben', side: 'sell' }) }));
+    expect(screen.getByRole('button', { name: 'Suggested agent' })).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('keeps the suggestions available if saving the assignment fails', async () => {
+    global.fetch = jest.fn((url, init) => init?.method === 'POST' ? Promise.resolve({ ok: false } as Response) : respond(body(['Ana']))) as typeof fetch;
+    render(<AgentRecommendationPanel referralId="r1" mcId={null} zips={[]} canPersistAssignment />);
+    await flush();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Use Ana' })); });
+    expect(screen.getByRole('button', { name: 'Suggested agent' })).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('describes the 15-mile out-of-state scope', async () => {
@@ -174,6 +221,6 @@ describe('agent recommendation panel', () => {
     render(<AgentRecommendationPanel referralId="r1" mcId="mc" zips={['80014']} />);
     await flush();
     expect(await screen.findByText(/Provisional suggestion — every eligible agent has limited history/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Choose another agent' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Choose another agent' })).not.toBeInTheDocument();
   });
 });

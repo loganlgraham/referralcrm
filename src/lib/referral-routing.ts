@@ -29,6 +29,10 @@ export function mailboxRoute(referral: Pick<RoutingSource, 'inboundEmail' | 'aha
   return email.messageId && (bucket === 'AHA' || bucket === 'AHA_OOS') ? bucket : null;
 }
 
+export function needsInitialAgentSuggestion(referral: RoutingSource): boolean {
+  return !referral.inboundEmail && referral.origin !== 'agent' && !routingAgent(referral);
+}
+
 /** Outbound brokerage referrals follow their intake mailbox or their manually assigned agent. */
 export function referralWorkflowRoute(referral: RoutingSource): IntakeRoute | null {
   if (referral.inboundEmail) return mailboxRoute(referral);
