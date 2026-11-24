@@ -1,4 +1,5 @@
 import { createHmac } from 'node:crypto';
+import { day31ReviewIdSchema } from '@/lib/intelligence/sop-decisions';
 import {
   resolveProtectionToken,
   trustedIntelligenceUrl,
@@ -24,13 +25,14 @@ export async function fetchSopDashboard(input: {
   destination.pathname = '/api/integration/referrio/sop';
   const exp = Math.floor(Date.now() / 1000) + 60;
   const body = {
+    version: 2,
     organization: 'AHA',
     accountId: input.accountId,
     days: input.days,
     exp,
   };
   const signature = createHmac('sha256', input.secret)
-    .update(`referrio-sop-v1\nAHA\n${input.accountId}\n${input.days}\n${exp}`)
+    .update(`referrio-sop-v2\nAHA\n${input.accountId}\n${input.days}\n${exp}`)
     .digest('hex');
   const headers: Record<string, string> = {
     'content-type': 'application/json',
@@ -60,7 +62,7 @@ export async function fetchSopDashboard(input: {
 /** Validate a specific review without relying on the dashboard date range. */
 export async function fetchSopReview(input: {
   personId: number;
-  sourceNoteId: number;
+  reviewId: string;
   url: string;
   accountId: string;
   secret: string;
@@ -69,15 +71,15 @@ export async function fetchSopReview(input: {
 }): Promise<SopAudit | null> {
   const customerUrl = trustedIntelligenceUrl(input.url);
   if (!customerUrl || !input.secret || !Number.isSafeInteger(input.personId) || input.personId < 1 ||
-    !Number.isSafeInteger(input.sourceNoteId) || input.sourceNoteId < 1) {
+    !day31ReviewIdSchema.safeParse(input.reviewId).success) {
     throw new Error('Review connection is unavailable.');
   }
   const destination = new URL(customerUrl);
   destination.pathname = '/api/integration/referrio/sop/review';
   const exp = Math.floor(Date.now() / 1000) + 60;
-  const body = { organization: 'AHA', accountId: input.accountId, personId: input.personId, sourceNoteId: input.sourceNoteId, exp };
+  const body = { organization: 'AHA', accountId: input.accountId, personId: input.personId, reviewId: input.reviewId, exp };
   const signature = createHmac('sha256', input.secret)
-    .update(`referrio-sop-review-v1\nAHA\n${input.accountId}\n${input.personId}\n${input.sourceNoteId}\n${exp}`)
+    .update(`referrio-sop-review-v2\nAHA\n${input.accountId}\n${input.personId}\n${input.reviewId}\n${exp}`)
     .digest('hex');
   const headers: Record<string, string> = { 'content-type': 'application/json', 'x-referrio-signature': signature };
   const token = await resolveProtectionToken(input.protectionToken);
@@ -89,7 +91,7 @@ export async function fetchSopReview(input: {
   if (!response.ok) throw new Error('Review evidence could not be verified.');
   const raw: unknown = await response.json();
   const parsed = sopAuditSchema.safeParse(raw && typeof raw === 'object' && 'review' in raw ? raw.review : null);
-  if (!parsed.success || parsed.data.kind !== 'day-31' || parsed.data.personId !== input.personId || parsed.data.sourceNoteId !== input.sourceNoteId) {
+  if (!parsed.success || parsed.data.kind !== 'day-31' || parsed.data.personId !== input.personId || parsed.data.id !== input.reviewId) {
     throw new Error('Review evidence could not be verified.');
   }
   return parsed.data;

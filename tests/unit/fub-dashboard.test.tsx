@@ -4,7 +4,7 @@ import { SWRConfig } from 'swr';
 import { FubDashboard, FubDashboardView } from '@/components/dashboard/fub-dashboard';
 import { fetcher } from '@/utils/fetcher';
 import { fubDashboardFixture } from '../fixtures/fub-dashboard';
-import { fubSopFixture, sopReviews } from '../fixtures/fub-sop';
+import { decisionRecord, fubSopFixture, sopReviews } from '../fixtures/fub-sop';
 
 jest.mock('@/utils/fetcher', () => ({ fetcher: jest.fn() }));
 
@@ -81,6 +81,9 @@ test('Day 31 defaults to pending reviews and filters all, Keep and Release witho
   const dialog = within(screen.getByRole('dialog'));
   expect(dialog.getAllByRole('link')).toHaveLength(1);
   expect(dialog.getByRole('link', { name: 'Pending review client' })).toBeInTheDocument();
+  expect(dialog.getByText(/MT · marker observed/)).toBeInTheDocument();
+  expect(dialog.getByText(/The Day 31 review marker was observed in FUB/)).toBeInTheDocument();
+  expect(dialog.queryByText(/FUB note #/)).not.toBeInTheDocument();
   expect(dialog.queryByRole('link', { name: 'Keep review client' })).not.toBeInTheDocument();
   fireEvent.change(dialog.getByLabelText('Show Day 31 reviews'), { target: { value: 'all' } });
   expect(dialog.getAllByRole('link')).toHaveLength(3);
@@ -126,10 +129,32 @@ test('a decision-read failure hides pending totals and disables decision recordi
   expect(screen.queryByRole('button', { name: 'Record decision' })).not.toBeInTheDocument();
 });
 
-test('reviews use person plus source note identity when deciding whether a review is pending', () => {
-  const duplicatePersonReview = { ...sopReviews[6], id: 'note:904', sourceNoteId: 904, customer: 'New review for kept client' };
+test('reviews use person plus tag episode identity when deciding whether a review is pending', () => {
+  const duplicatePersonReview = { ...sopReviews[6], id: 'tag:44444444-4444-4444-8444-444444444444', customer: 'New review for kept client' };
   render(<FubDashboardView data={{ ...fubSopFixture, sopAudits: [...sopReviews, duplicatePersonReview] }} />);
   expect(screen.getByRole('button', { name: '2 awaiting decision' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'View Day 31 reviews' }));
   expect(screen.getByRole('link', { name: 'New review for kept client' })).toBeInTheDocument();
+});
+
+test('multiple observed episodes for one person stay distinct across the 25-row evidence pages', () => {
+  const episodes = Array.from({ length: 42 }, (_, index) => ({
+    ...sopReviews[5], id: `tag:66666666-6666-4666-8666-${String(index + 1).padStart(12, '0')}`, customer: `Review episode ${index + 1}`,
+  }));
+  render(<FubDashboardView data={{
+    ...fubSopFixture,
+    sopAudits: [...sopReviews.filter((review) => review.kind !== 'day-31'), ...episodes],
+    day31Decisions: [decisionRecord(episodes[0])],
+    sopMetrics: fubSopFixture.sopMetrics?.map((metric) => metric.id === 'day-31' ? { ...metric, count: 42 } : metric),
+  }} />);
+  fireEvent.click(screen.getByRole('button', { name: '41 awaiting decision' }));
+  const dialog = within(screen.getByRole('dialog'));
+  expect(dialog.getAllByRole('link')).toHaveLength(25);
+  expect(dialog.queryByRole('link', { name: 'Review episode 1' })).not.toBeInTheDocument();
+  fireEvent.click(dialog.getByRole('button', { name: 'Next' }));
+  expect(dialog.getAllByRole('link')).toHaveLength(16);
+  expect(dialog.getByRole('link', { name: 'Review episode 42' })).toBeInTheDocument();
+  fireEvent.change(dialog.getByLabelText('Show Day 31 reviews'), { target: { value: 'keep' } });
+  expect(dialog.getAllByRole('link')).toHaveLength(1);
+  expect(dialog.getByRole('link', { name: 'Review episode 1' })).toBeInTheDocument();
 });

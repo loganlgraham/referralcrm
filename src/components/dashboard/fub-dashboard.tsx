@@ -10,7 +10,7 @@ import type { FubDashboardData, SopAudit, SopAuditKind } from '@/lib/intelligenc
 import type { Day31DecisionRecord } from '@/lib/intelligence/sop-decisions';
 
 type EvidenceKind = 'calls' | 'tasks' | SopAuditKind;
-type EvidenceRow = FubDashboardData['evidence']['calls'][number] & { audit?: SopAudit };
+type EvidenceRow = Omit<FubDashboardData['evidence']['calls'][number], 'id'> & { id: number | string; audit?: SopAudit };
 const auditKinds = ['day-3', 'day-7', 'day-31'] as const;
 const isAuditKind = (kind: string): kind is SopAuditKind => auditKinds.some((value) => value === kind);
 const evidenceLabels: Record<EvidenceKind, string> = {
@@ -21,7 +21,7 @@ const evidenceDescriptions: Record<EvidenceKind, string> = {
   tasks: 'Only tasks with a documented open status and due date are included. Missing task details are not counted as overdue.',
   'day-3': 'These FUB notes match the Day 3 reminder for fewer than two calls. Missing reminders do not prove the standard was met. Agent names show the current customer owner.',
   'day-7': 'These FUB notes match the Day 7 reminder for fewer than four calls. Missing reminders do not prove the standard was met. Agent names show the current customer owner.',
-  'day-31': 'Each recorded FUB review needs an explicit Keep or Release decision. Recent conversation or continued ownership does not count as a decision. Reviews remain available across date ranges.',
+  'day-31': 'Each observed Day 31 marker needs an explicit Keep or Release decision. The date shows when the marker was observed, not an assumed handoff date. Recent conversation or continued ownership does not count as a decision. Reviews remain available across date ranges.',
 };
 const number = (value: number) => value.toLocaleString('en-US');
 const time = (value: string, dateOnly = false) => {
@@ -120,15 +120,15 @@ export function FubDashboardView({ data, onDataChange }: { data: FubDashboardDat
   const [savedDecisions, setSavedDecisions] = useState<Day31DecisionRecord[]>([]);
   const decisions = new Map<string, Day31DecisionRecord>();
   for (const record of [...(data.day31Decisions ?? []), ...savedDecisions]) {
-    const key = `${record.personId}:${record.noteId}`;
+    const key = `${record.personId}:${record.reviewId}`;
     if ((decisions.get(key)?.revision ?? -1) < record.revision) decisions.set(key, record);
   }
-  const decisionFor = (review: SopAudit) => decisions.get(`${review.personId}:${review.sourceNoteId}`);
+  const decisionFor = (review: SopAudit) => decisions.get(`${review.personId}:${review.id}`);
   const reviews = data.sopAudits ?? [];
   const pendingReviews = reviews.filter((review) => review.kind === 'day-31' && !decisionFor(review));
   const day31Ready = typeof data.sopMetrics?.find((metric) => metric.id === 'day-31')?.count === 'number' && Array.isArray(data.day31Decisions) && !data.decisionError;
   const onSaved = (record: Day31DecisionRecord) => {
-    setSavedDecisions((previous) => [...previous.filter((item) => item.personId !== record.personId || item.noteId !== record.noteId), record]);
+    setSavedDecisions((previous) => [...previous.filter((item) => item.personId !== record.personId || item.reviewId !== record.reviewId), record]);
     setReviewFilter('all');
     onDataChange?.();
   };
@@ -142,8 +142,8 @@ export function FubDashboardView({ data, onDataChange }: { data: FubDashboardDat
     ? (isAuditKind(selection.kind)
       ? reviews.filter((review) => review.kind === selection.kind)
         .filter((review) => review.kind !== 'day-31' || reviewFilter === 'all' || (reviewFilter === 'pending' ? !decisionFor(review) : decisionFor(review)?.decision === reviewFilter))
-        .map((review) => ({ id: review.sourceNoteId, personId: review.personId, customer: review.customer, agentId: review.agentId,
-          at: review.at, dateOnly: false, detail: review.kind === 'day-31' ? 'This FUB note matches the Day 31 Keep or Release review.' : `This FUB note matches the ${review.kind === 'day-3' ? 'Day 3' : 'Day 7'} follow-up reminder.`, audit: review }))
+        .map((review) => ({ id: review.sourceNoteId ?? review.id, personId: review.personId, customer: review.customer, agentId: review.agentId,
+          at: review.at, dateOnly: false, detail: review.provenance === 'tag_observation' ? 'The Day 31 review marker was observed in FUB. An explicit Keep or Release decision is required.' : review.kind === 'day-31' ? 'This FUB note matches the Day 31 Keep or Release review.' : `This FUB note matches the ${review.kind === 'day-3' ? 'Day 3' : 'Day 7'} follow-up reminder.`, audit: review }))
       : data.evidence[selection.kind]).filter(
         (row) =>
           selection.agentId === null ||
@@ -368,15 +368,15 @@ export function FubDashboardView({ data, onDataChange }: { data: FubDashboardDat
                   </a>
                   <span className="text-sm text-foreground-muted">
                     {time(row.at, row.dateOnly)}
-                    {row.dateOnly ? ' · date only' : ' MT'}
+                    {row.dateOnly ? ' · date only' : row.audit?.provenance === 'tag_observation' ? ' MT · marker observed' : ' MT'}
                   </span>
                 </div>
                 <p className="mt-1 text-sm">{row.detail}</p>
                 <p className="mt-1 text-xs text-foreground-muted">
                   {names.get(row.agentId ?? -1) ?? 'Assignee not recorded'} ·{' '}
-                  {row.audit ? 'FUB note' : selection?.kind === 'calls' ? 'Call' : 'Task'} #{row.id}
+                  {row.audit?.provenance === 'tag_observation' ? 'Day 31 marker in FUB' : `${row.audit ? 'FUB note' : selection?.kind === 'calls' ? 'Call' : 'Task'} #${row.id}`}
                 </p>
-                {row.audit ? <p className="mt-1 text-xs text-foreground-muted">{row.audit.provenance === 'automation' ? 'Confirmed automation reminder.' : 'Reminder text matched; automatic creation has not been confirmed.'}</p> : null}
+                {row.audit && row.audit.provenance !== 'tag_observation' ? <p className="mt-1 text-xs text-foreground-muted">{row.audit.provenance === 'automation' ? 'Confirmed automation reminder.' : 'Reminder text matched; automatic creation has not been confirmed.'}</p> : null}
                 {row.audit?.kind === 'day-31' && Array.isArray(data.day31Decisions) && !data.decisionError ? <FubDay31Decision review={row.audit} record={decisionFor(row.audit)} onSaved={onSaved} /> : null}
               </li>
             ))}

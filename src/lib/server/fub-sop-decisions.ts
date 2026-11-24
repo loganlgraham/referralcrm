@@ -1,6 +1,6 @@
 import { Types } from 'mongoose';
 import { VERIFIED_FUB_ACCOUNT_ID, VERIFIED_FUB_ORGANIZATION } from '@/lib/intelligence/access-control';
-import type { Day31DecisionCommand, Day31DecisionRecord, Day31DecisionRevision, Day31ReviewOrigin } from '@/lib/intelligence/sop-decisions';
+import { day31ReviewIdSchema, type Day31DecisionCommand, type Day31DecisionRecord, type Day31DecisionRevision, type Day31ReviewOrigin } from '@/lib/intelligence/sop-decisions';
 import { FubSopDecision } from '@/models/fub-sop-decision';
 import { User } from '@/models/user';
 
@@ -14,7 +14,8 @@ type StoredDecision = {
   organization: typeof VERIFIED_FUB_ORGANIZATION;
   fubAccountId: string;
   personId: number;
-  noteId: number;
+  reviewId?: string;
+  noteId?: number;
   sourceAt: Date;
   revision: number;
   audit: StoredRevision[];
@@ -22,13 +23,16 @@ type StoredDecision = {
 
 const MAX_REVISIONS = 200;
 
-function identity(personId: number, noteId: number) {
+function identity(personId: number, reviewId: string) {
+  const verifiedId = day31ReviewIdSchema.parse(reviewId);
+  // Keep the old note storage key so existing decision history stays readable
+  // and corrections append to the same document without a migration.
+  const storageId = verifiedId.startsWith('note:') ? verifiedId.slice(5) : verifiedId;
   return {
-    _id: `${VERIFIED_FUB_ORGANIZATION}:${VERIFIED_FUB_ACCOUNT_ID}:${personId}:${noteId}`,
+    _id: `${VERIFIED_FUB_ORGANIZATION}:${VERIFIED_FUB_ACCOUNT_ID}:${personId}:${storageId}`,
     organization: VERIFIED_FUB_ORGANIZATION as typeof VERIFIED_FUB_ORGANIZATION,
     fubAccountId: VERIFIED_FUB_ACCOUNT_ID,
     personId,
-    noteId,
   };
 }
 
@@ -46,7 +50,7 @@ function toRecord(row: StoredDecision): Day31DecisionRecord {
   if (!latest || latest.revision !== row.revision) throw new Error('Invalid Day 31 decision history.');
   return {
     personId: row.personId,
-    noteId: row.noteId,
+    reviewId: day31ReviewIdSchema.parse(row.reviewId ?? `note:${row.noteId}`),
     sourceAt: new Date(row.sourceAt).toISOString(),
     revision: row.revision,
     decision: latest.decision,
@@ -62,7 +66,7 @@ function toRecord(row: StoredDecision): Day31DecisionRecord {
 export async function readDay31Decisions(reviews: readonly Day31ReviewOrigin[]): Promise<Day31DecisionRecord[]> {
   if (reviews.length === 0) return [];
   if (reviews.length > 2000) throw new Error('Too many Day 31 reviews.');
-  const ids = [...new Set(reviews.map((review) => identity(review.personId, review.sourceNoteId)._id))];
+  const ids = [...new Set(reviews.map((review) => identity(review.personId, review.id)._id))];
   const rows = await FubSopDecision.find({
     _id: { $in: ids },
     organization: VERIFIED_FUB_ORGANIZATION,
@@ -83,11 +87,11 @@ export async function saveDay31Decision(input: {
   now?: Date;
 }): Promise<SaveDay31DecisionResult> {
   const { command, origin } = input;
-  if (command.personId !== origin.personId || command.noteId !== origin.sourceNoteId || !Number.isFinite(Date.parse(origin.at))) {
+  if (command.personId !== origin.personId || command.reviewId !== origin.id || !day31ReviewIdSchema.safeParse(origin.id).success || !Number.isFinite(Date.parse(origin.at))) {
     throw new Error('The decision does not match the verified Day 31 review.');
   }
   if (!Types.ObjectId.isValid(input.reviewerId)) throw new Error('Invalid reviewer.');
-  const key = identity(origin.personId, origin.sourceNoteId);
+  const key = identity(origin.personId, origin.id);
   const existing = await FubSopDecision.findOne(key).lean<StoredDecision | null>();
   const duplicate = duplicateResult(existing, command, input.reviewerId);
   if (duplicate) return duplicate;
@@ -110,12 +114,12 @@ export async function saveDay31Decision(input: {
 
   if (!existing) {
     try {
-      await FubSopDecision.create({ ...key, sourceAt: new Date(origin.at), revision: 1, audit: [revision] });
+      await FubSopDecision.create({ ...key, reviewId: origin.id, sourceAt: new Date(origin.at), revision: 1, audit: [revision] });
     } catch (error) {
       if (!duplicateKey(error)) throw error;
       return raced(key, command, input.reviewerId);
     }
-    return { ok: true, changed: true, record: toRecord({ ...key, sourceAt: new Date(origin.at), revision: 1, audit: [revision] }) };
+    return { ok: true, changed: true, record: toRecord({ ...key, reviewId: origin.id, sourceAt: new Date(origin.at), revision: 1, audit: [revision] }) };
   }
 
   const updated = await FubSopDecision.updateOne(

@@ -4,7 +4,7 @@ import { connectMongo } from '@/lib/mongoose';
 import { VERIFIED_FUB_ACCOUNT_ID } from '@/lib/intelligence/access-control';
 import { sameOriginRequest } from '@/lib/intelligence/panel';
 import { trustedIntelligenceUrl } from '@/lib/intelligence/remote';
-import { day31DecisionCommandSchema } from '@/lib/intelligence/sop-decisions';
+import { day31DecisionCommandSchema, day31ReviewIdSchema } from '@/lib/intelligence/sop-decisions';
 import { fetchSopReview } from '@/lib/intelligence/sop-remote';
 import { canViewFubDashboard } from '@/lib/server/fub-access';
 import { readDay31Decisions, saveDay31Decision } from '@/lib/server/fub-sop-decisions';
@@ -16,14 +16,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const session = await getCurrentSession();
   if (!session?.user?.id) return json({ error: 'Sign in to continue.' }, 401);
   const personId = parseId(request.nextUrl.searchParams.get('personId'));
-  const noteId = parseId(request.nextUrl.searchParams.get('noteId'));
-  if (personId === null || noteId === null) return json({ error: 'Choose a valid Day 31 review.' }, 400);
+  const parsedReviewId = day31ReviewIdSchema.safeParse(request.nextUrl.searchParams.get('reviewId'));
+  if (personId === null || !parsedReviewId.success) return json({ error: 'Choose a valid Day 31 review.' }, 400);
+  const reviewId = parsedReviewId.data;
   try {
     await connectMongo();
     if (!await canViewFubDashboard(session.user.id)) return forbidden();
     if (!connectionConfigured()) return unavailable();
-    const review = await readReview(personId, noteId);
-    if (!review || review.kind !== 'day-31' || review.personId !== personId || review.sourceNoteId !== noteId) return missingReview();
+    const review = await readReview(personId, reviewId);
+    if (!review || review.kind !== 'day-31' || review.personId !== personId || review.id !== reviewId) return missingReview();
     if (!await canViewFubDashboard(session.user.id)) return forbidden();
     const records = await readDay31Decisions([review]);
     return json({ record: records[0] ?? null }, 200);
@@ -46,8 +47,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     await connectMongo();
     if (!await canViewFubDashboard(session.user.id)) return forbidden();
     if (!connectionConfigured()) return unavailable();
-    const review = await readReview(parsed.data.personId, parsed.data.noteId);
-    if (!review || review.kind !== 'day-31' || review.personId !== parsed.data.personId || review.sourceNoteId !== parsed.data.noteId) return missingReview();
+    const review = await readReview(parsed.data.personId, parsed.data.reviewId);
+    if (!review || review.kind !== 'day-31' || review.personId !== parsed.data.personId || review.id !== parsed.data.reviewId) return missingReview();
     // The signed evidence read may take time. Recheck a revoked grant before
     // writing the decision, and never accept reviewer identity from the client.
     if (!await canViewFubDashboard(session.user.id)) return forbidden();
@@ -61,10 +62,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 }
 
-function readReview(personId: number, sourceNoteId: number) {
+function readReview(personId: number, reviewId: string) {
   return fetchSopReview({
     personId,
-    sourceNoteId,
+    reviewId,
     url: process.env.REFERRIO_INTELLIGENCE_URL ?? '',
     accountId: process.env.REFERRIO_FUB_ACCOUNT_ID ?? '',
     secret: process.env.REFERRIO_SOP_SECRET ?? process.env.REFERRIO_INTEGRATION_SECRET ?? '',

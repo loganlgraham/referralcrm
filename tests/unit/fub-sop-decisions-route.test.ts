@@ -13,12 +13,13 @@ jest.mock('@/lib/intelligence/sop-remote', () => ({ fetchSopReview: jest.fn() })
 jest.mock('@/lib/server/fub-sop-decisions', () => ({ readDay31Decisions: jest.fn(), saveDay31Decision: jest.fn() }));
 
 const REVIEWER = '6740aabbccddeeff00112233';
-const REVIEW = { id: 'note:900', kind: 'day-31', personId: 75, customer: 'Example Customer', agentId: 2, at: '2026-11-01T12:00:00.000Z', sourceNoteId: 900 };
-const BODY = { personId: 75, noteId: 900, decision: 'keep', reason: 'Client plans a spring move.', expectedRevision: 0, requestId: '66666666-1111-4111-8111-111111111111' };
+const REVIEW_ID = 'tag:11111111-1111-4111-8111-111111111111';
+const REVIEW = { id: REVIEW_ID, kind: 'day-31', personId: 75, customer: 'Example Customer', agentId: 2, at: '2026-11-01T12:00:00.000Z', sourceNoteId: null, provenance: 'tag_observation' };
+const BODY = { personId: 75, reviewId: REVIEW_ID, decision: 'keep', reason: 'Client plans a spring move.', expectedRevision: 0, requestId: '66666666-1111-4111-8111-111111111111' };
 const post = (body: unknown = BODY, origin = 'https://referrio.app') => new NextRequest('https://referrio.app/api/dashboard/fub/decisions', {
   method: 'POST', headers: { origin, 'content-type': 'application/json' }, body: JSON.stringify(body),
 });
-const get = (query = '?personId=75&noteId=900') => new NextRequest(`https://referrio.app/api/dashboard/fub/decisions${query}`, { headers: { 'sec-fetch-site': 'same-origin' } });
+const get = (query = `?personId=75&reviewId=${REVIEW_ID}`) => new NextRequest(`https://referrio.app/api/dashboard/fub/decisions${query}`, { headers: { 'sec-fetch-site': 'same-origin' } });
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -50,7 +51,7 @@ test('validates explicit input and does not accept client reviewer identity', as
 });
 
 test('binds the exact eligible Day 31 source review before saving', async () => {
-  for (const review of [null, { ...REVIEW, kind: 'day-3' }, { ...REVIEW, personId: 76 }, { ...REVIEW, sourceNoteId: 901 }]) {
+  for (const review of [null, { ...REVIEW, kind: 'day-3' }, { ...REVIEW, personId: 76 }, { ...REVIEW, id: 'tag:22222222-2222-4222-8222-222222222222' }]) {
     (fetchSopReview as jest.Mock).mockResolvedValue(review);
     expect((await POST(post())).status).toBe(404);
   }
@@ -68,7 +69,7 @@ test('saves with server session identity and returns private data', async () => 
   const response = await POST(post());
   expect(response.status).toBe(200);
   expect(response.headers.get('cache-control')).toContain('no-store');
-  expect(fetchSopReview).toHaveBeenCalledWith(expect.objectContaining({ personId: 75, sourceNoteId: 900, accountId: '1846967076', secret: 'test-dashboard-secret' }));
+  expect(fetchSopReview).toHaveBeenCalledWith(expect.objectContaining({ personId: 75, reviewId: REVIEW_ID, accountId: '1846967076', secret: 'test-dashboard-secret' }));
   expect(saveDay31Decision).toHaveBeenCalledWith({ command: BODY, origin: REVIEW, reviewerId: REVIEWER });
   expect(canViewFubDashboard).toHaveBeenCalledTimes(2);
 });
@@ -83,7 +84,8 @@ test('returns conflict for stale edits and fails closed on missing connection or
 });
 
 test('reads only decisions tied to the verified review and rejects invalid IDs', async () => {
-  expect((await GET(get('?personId=75&noteId=0'))).status).toBe(400);
+  expect((await GET(get('?personId=75&reviewId=note:0'))).status).toBe(400);
+  expect((await POST(post({ ...BODY, reviewId: 'tag:day31' }))).status).toBe(400);
   const response = await GET(get());
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({ record: null });

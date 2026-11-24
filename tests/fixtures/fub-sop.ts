@@ -8,9 +8,9 @@ export const sopReviews: SopAudit[] = [
   { id: 'note:303', kind: 'day-3', personId: 1003, customer: 'Day 3 unassigned client', agentId: null, at: '2026-11-23T18:00:00.000Z', sourceNoteId: 303 },
   { id: 'note:304', kind: 'day-3', personId: 1004, customer: 'Day 3 unknown owner client', agentId: 88, at: '2026-11-23T18:00:00.000Z', sourceNoteId: 304 },
   { id: 'note:701', kind: 'day-7', personId: 2001, customer: 'Day 7 Jordan client', agentId: 9, at: '2026-11-22T18:00:00.000Z', sourceNoteId: 701 },
-  { id: 'note:901', kind: 'day-31', personId: 3001, customer: 'Pending review client', agentId: 9, at: '2026-10-01T18:00:00.000Z', sourceNoteId: 901 },
-  { id: 'note:902', kind: 'day-31', personId: 3002, customer: 'Keep review client', agentId: 9, at: '2026-10-01T18:00:00.000Z', sourceNoteId: 902 },
-  { id: 'note:903', kind: 'day-31', personId: 3003, customer: 'Release review client', agentId: 10, at: '2026-10-01T18:00:00.000Z', sourceNoteId: 903 },
+  { id: 'tag:11111111-1111-4111-8111-111111111111', kind: 'day-31', personId: 3001, customer: 'Pending review client', agentId: 9, at: '2026-10-01T18:00:00.000Z', sourceNoteId: null, provenance: 'tag_observation' },
+  { id: 'tag:22222222-2222-4222-8222-222222222222', kind: 'day-31', personId: 3002, customer: 'Keep review client', agentId: 9, at: '2026-10-01T18:00:00.000Z', sourceNoteId: null, provenance: 'tag_observation' },
+  { id: 'tag:33333333-3333-4333-8333-333333333333', kind: 'day-31', personId: 3003, customer: 'Release review client', agentId: 10, at: '2026-10-01T18:00:00.000Z', sourceNoteId: null, provenance: 'tag_observation' },
 ];
 
 export function decisionRecord(review: SopAudit, decision: 'keep' | 'release' = 'keep'): Day31DecisionRecord {
@@ -19,7 +19,7 @@ export function decisionRecord(review: SopAudit, decision: 'keep' | 'release' = 
     reason: decision === 'keep' ? 'Client confirmed a January move.' : 'Release approved after explicit review.',
     reviewerId: '507f1f77bcf86cd799439011', reviewerName: 'Stored Reviewer', decidedAt: '2026-11-24T20:00:00.000Z',
   };
-  return { personId: review.personId, noteId: review.sourceNoteId, sourceAt: review.at, ...latest, history: [latest] };
+  return { personId: review.personId, reviewId: review.id, sourceAt: review.at, ...latest, history: [latest] };
 }
 
 export const fubSopFixture: FubDashboardData = {

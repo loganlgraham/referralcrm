@@ -18,7 +18,9 @@ const fubSopDecisionSchema = new Schema({
   organization: { type: String, enum: ['AHA'], required: true, immutable: true },
   fubAccountId: { type: String, required: true, immutable: true },
   personId: { type: Number, required: true, immutable: true },
-  noteId: { type: Number, required: true, immutable: true },
+  reviewId: { type: String, required: true, immutable: true },
+  // Retained for reading decisions created before review IDs supported tags.
+  noteId: { type: Number, immutable: true },
   sourceAt: { type: Date, required: true, immutable: true },
   revision: { type: Number, required: true, min: 1, max: 200 },
   // The service only appends revisions; no API overwrites or deletes history.

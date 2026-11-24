@@ -61,7 +61,7 @@ test('sends the exact source and trimmed reason, keeps controls disabled during 
   expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
   expect(mockFetch).toHaveBeenCalledWith('/api/dashboard/fub/decisions', expect.objectContaining({ method: 'POST' }));
   expect(JSON.parse(mockFetch.mock.calls[0][1].body)).toEqual({
-    personId: review.personId, noteId: review.sourceNoteId, decision: 'keep', reason: 'Client confirmed a January move.', expectedRevision: 0, requestId: uuid,
+    personId: review.personId, reviewId: review.id, decision: 'keep', reason: 'Client confirmed a January move.', expectedRevision: 0, requestId: uuid,
   });
   const record = decisionRecord(review);
   finish(response({ ok: true, changed: true, record }));
@@ -115,7 +115,7 @@ test('changes start from the displayed revision and a conflict never overwrites 
   expect(screen.getByText('Decision: Keep')).toBeInTheDocument();
 });
 
-test.each([null, { ...decisionRecord(review), personId: 999 }, { ...decisionRecord(review), noteId: 999 }])('does not accept a missing or unrelated save record %#', async (record) => {
+test.each([null, { ...decisionRecord(review), personId: 999 }, { ...decisionRecord(review), reviewId: 'tag:99999999-9999-4999-8999-999999999999' }])('does not accept a missing or unrelated save record %#', async (record) => {
   mockFetch.mockResolvedValue(response({ ok: true, record }));
   const onSaved = jest.fn();
   render(<FubDay31Decision review={review} onSaved={onSaved} />);

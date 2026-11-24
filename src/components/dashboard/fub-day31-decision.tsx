@@ -41,7 +41,7 @@ export function FubDay31Decision({ review, record, onSaved }: {
     try {
       const response = await fetch('/api/dashboard/fub/decisions', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ personId: review.personId, noteId: review.sourceNoteId, decision, reason: reason.trim(), expectedRevision, requestId: id }),
+        body: JSON.stringify({ personId: review.personId, reviewId: review.id, decision, reason: reason.trim(), expectedRevision, requestId: id }),
       });
       const body = await response.json();
       if (!response.ok) {
@@ -50,7 +50,7 @@ export function FubDay31Decision({ review, record, onSaved }: {
         } else setError(typeof body.error === 'string' ? body.error : 'The decision could not be saved. Try again.');
         return;
       }
-      if (!body.record || body.record.personId !== review.personId || body.record.noteId !== review.sourceNoteId) {
+      if (!body.record || body.record.personId !== review.personId || body.record.reviewId !== review.id) {
         setError('The decision response could not be confirmed. Refresh before trying again.');
         return;
       }

@@ -1,17 +1,19 @@
 import { z } from 'zod';
-import type { Day31DecisionRecord } from '@/lib/intelligence/sop-decisions';
+import { day31ReviewIdSchema, type Day31DecisionRecord } from '@/lib/intelligence/sop-decisions';
 
 const count = z.number().int().nonnegative();
 export const sopAuditSchema = z.object({
-  id: z.string().regex(/^note:\d+$/),
+  id: day31ReviewIdSchema,
   kind: z.enum(['day-3', 'day-7', 'day-31']),
   personId: z.number().int().safe().positive(),
   customer: z.string().max(500),
   agentId: z.number().int().safe().positive().nullable(),
   at: z.string().datetime({ offset: true }),
-  sourceNoteId: z.number().int().safe().positive(),
-  provenance: z.enum(['automation', 'template_match']).optional(),
-}).refine((row) => row.id === `note:${row.sourceNoteId}`, 'Review identity does not match');
+  sourceNoteId: z.number().int().safe().positive().nullable(),
+  provenance: z.enum(['automation', 'template_match', 'tag_observation']).optional(),
+}).refine((row) => row.id.startsWith('tag:')
+  ? row.kind === 'day-31' && row.sourceNoteId === null && row.provenance === 'tag_observation'
+  : row.id === `note:${row.sourceNoteId}` && row.provenance !== 'tag_observation', 'Review identity does not match');
 export type SopAudit = z.infer<typeof sopAuditSchema>;
 export type SopAuditKind = SopAudit['kind'];
 const evidence = z.object({
