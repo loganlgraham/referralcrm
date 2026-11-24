@@ -43,6 +43,7 @@ const fetcher = async (url: string): Promise<PaginatedResponse<AssignmentOption>
 };
 
 export interface Contact {
+  ahaDesignation?: 'AHA' | 'AHA_OOS' | 'AGIT' | null;
   id?: string | null;
   name?: string | null;
   email?: string | null;
@@ -50,6 +51,7 @@ export interface Contact {
 }
 
 interface AssignmentOption {
+  ahaDesignation?: Contact['ahaDesignation'];
   _id: string;
   name: string;
   email?: string;
@@ -243,6 +245,7 @@ export function ContactAssignment({
         const match = options.find((option) => option._id === selected);
         nextContact = {
           id: selected,
+          ahaDesignation: match?.ahaDesignation,
           name: match?.name ?? '',
           email: match?.email ?? null,
           phone: match?.phone ?? null

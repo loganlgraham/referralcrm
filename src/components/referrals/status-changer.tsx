@@ -28,6 +28,7 @@ import {
   fubSendOutcomeMessage,
   type FubSendUiStatus,
 } from '@/components/referrals/paired-fub-confirmation-toast';
+import type { PairedHandoff } from '@/lib/fub/paired-handoff';
 import type { MockFubApprovalPreview } from '@/lib/server/mock-fub-send';
 
 interface Props {
@@ -66,6 +67,7 @@ interface Props {
   onPreApprovalSaved?: (details: { preApprovalAmountCents: number; referralFeeDueCents: number }) => void;
   onUnderContractIntentChange?: (isPreparing: boolean) => void;
   pairedFubEnabled?: boolean;
+  fixtureFubApproval?: boolean;
 }
 
 /** Fields the prompts collect on top of the status itself. */
@@ -101,6 +103,7 @@ export function StatusChanger({
   onPreApprovalSaved,
   onUnderContractIntentChange,
   pairedFubEnabled = false,
+  fixtureFubApproval = false,
 }: Props) {
   const router = useRouter();
   const normalizedStatus = useMemo(() => normalizeReferralStatus(status) ?? status, [status]);
@@ -174,7 +177,11 @@ export function StatusChanger({
       router.refresh();
 
       onStatusChanged?.(resolvedStatus, { ...body, previousStatus });
-      if (showSuccessToast) {
+      const handoff = body.pairedHandoff as PairedHandoff | undefined;
+      if (handoff) {
+        if (handoff.sent) toast.success(handoff.message);
+        else toast.warning(handoff.message);
+      } else if (showSuccessToast) {
         toast.success('Referral status updated');
       }
       return true;
@@ -300,42 +307,23 @@ export function StatusChanger({
 
   /** Statuses needing more information collect it first instead of writing straight through. */
   const selectStatus = async (nextStatus: ReferralStatus) => {
-    if (nextStatus === 'Paired' && pairedFubEnabled) {
+    if (nextStatus === 'Paired' && pairedFubEnabled && (persistedStatus === 'Paired' || fixtureFubApproval)) {
       setPrompting(true);
-      let preview: MockFubApprovalPreview | null = null;
       try {
-        const response = await fetch(`/api/referrals/${referralId}/fub-send`, {
-          cache: 'no-store',
-        });
-        if (response.ok) {
-          preview = (await response.json()) as MockFubApprovalPreview;
-        }
-      } catch {
-        preview = null;
-      }
-
-      if (!preview) {
+        const response = await fetch(`/api/referrals/${referralId}/fub-send`, { cache: 'no-store' });
+        if (!response.ok) throw new Error('Could not check the Follow Up Boss handoff.');
+        const preview = await response.json() as MockFubApprovalPreview;
+        if (preview.attemptStatus === 'success') toast.success('This referral was already sent to Follow Up Boss.');
+        else if (fixtureFubApproval && persistedStatus !== 'Paired') {
+          const choice = await confirmPairedFubSend(preview);
+          if (choice === 'cancel' || !await submitStatus('Paired', persistedStatus)) return;
+          if (choice === 'send') await submitMockFubApproval(preview.approvalKey);
+        } else await submitMockFubApproval(preview.approvalKey);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Follow Up Boss is unavailable.');
+      } finally {
         setPrompting(false);
-        if (persistedStatus === 'Paired') { toast.error('Follow Up Boss is unavailable. Try again later.'); return; }
-        toast.info('Follow Up Boss is unavailable. Moving to Paired without sending.');
-        setCurrentStatus('Paired');
-        await submitStatus('Paired', persistedStatus);
-        return;
       }
-
-      if (preview.attemptStatus === 'success') { setPrompting(false); toast.success('This referral was already sent to Follow Up Boss.'); return; }
-      const choice = await confirmPairedFubSend(preview);
-      setPrompting(false);
-      if (choice === 'cancel') return;
-
-      setCurrentStatus('Paired');
-      const pairedSaved = persistedStatus === 'Paired' || await submitStatus('Paired', persistedStatus, {}, false);
-      if (!pairedSaved) return;
-      if (choice === 'paired_only') {
-        toast.success('Referral moved to Paired. Nothing was sent to FUB.');
-        return;
-      }
-      await submitMockFubApproval(preview.approvalKey);
       return;
     }
 

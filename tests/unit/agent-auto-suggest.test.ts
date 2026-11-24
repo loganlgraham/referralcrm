@@ -215,18 +215,18 @@ describe('applyIntakeAgentSuggestion', () => {
     process.env.FIXTURE_MONGODB_DATABASE = 'referralcrm-agent-auto-suggest-fixture';
     delete process.env.VERCEL_ENV;
     referralFindById.mockReturnValue({
-      select: () => ({
+      select: () => ({ populate: () => ({
         lean: async () => ({
           _id: new Types.ObjectId('bbbbbbbbbbbbbbbbbbbbbbbb'),
           org: 'AHA',
-          ahaBucket: 'AHA',
+          ahaBucket: 'AHA', inboundEmail: { channel: 'AHA' },
           lookingInZip: '80107',
           lookingInZips: ['80107'],
           lender: null,
           assignedAgent: null,
           buySideAgent: null,
         }),
-      }),
+      }) }),
     });
     referralUpdateOne.mockResolvedValue({ acknowledged: true });
     referralFindOneAndUpdate.mockResolvedValue({ _id: 'bbbbbbbbbbbbbbbbbbbbbbbb' });
@@ -279,16 +279,16 @@ describe('applyIntakeAgentSuggestion', () => {
 
   it('does not overwrite an existing assignment', async () => {
     referralFindById.mockReturnValue({
-      select: () => ({
+      select: () => ({ populate: () => ({
         lean: async () => ({
           _id: new Types.ObjectId('bbbbbbbbbbbbbbbbbbbbbbbb'),
           org: 'AHA',
-          ahaBucket: 'AHA_OOS',
+          ahaBucket: 'AHA_OOS', inboundEmail: { channel: 'AHA_OOS' },
           lookingInZip: '90210',
           assignedAgent: new Types.ObjectId('cccccccccccccccccccccccc'),
           buySideAgent: new Types.ObjectId('cccccccccccccccccccccccc'),
         }),
-      }),
+      }) }),
     });
     await expect(applyIntakeAgentSuggestion('bbbbbbbbbbbbbbbbbbbbbbbb')).resolves.toEqual({
       outcome: 'skipped',
@@ -324,17 +324,17 @@ describe('refreshAgentSuggestion', () => {
 
   it('refreshes suggestion metadata without changing a manual assignment', async () => {
     referralFindById.mockReturnValue({
-      select: () => ({
+      select: () => ({ populate: () => ({
         lean: async () => ({
           _id: new Types.ObjectId('bbbbbbbbbbbbbbbbbbbbbbbb'),
           org: 'AHA',
-          ahaBucket: 'AHA',
+          ahaBucket: 'AHA', inboundEmail: { channel: 'AHA' },
           lookingInZip: '80107',
           assignedAgent: new Types.ObjectId('cccccccccccccccccccccccc'),
           buySideAgent: new Types.ObjectId('cccccccccccccccccccccccc'),
           agentSelectionSource: 'manual',
         }),
-      }),
+      }) }),
     });
     await expect(refreshAgentSuggestion('bbbbbbbbbbbbbbbbbbbbbbbb')).resolves.toEqual({
       outcome: 'skipped',

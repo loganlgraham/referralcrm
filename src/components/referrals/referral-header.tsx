@@ -27,6 +27,7 @@ import { SLAWidget } from '@/components/referrals/sla-widget';
 import type { Contact } from '@/components/referrals/contact-assignment';
 import { AdminTasksCard } from '@/components/referrals/admin-tasks-card';
 import { AdminDetailHeader } from '@/components/referrals/admin-referral-detail';
+import { referralWorkflowRoute } from '@/lib/referral-routing';
 import { TeamCard } from '@/components/referrals/team-card';
 import { FubAgentMapping } from '@/components/referrals/fub-agent-mapping';
 import { AgentRecommendationPanel } from '@/components/referrals/agent-recommendation-panel';
@@ -424,8 +425,10 @@ export function ReferralHeader({
     () => locationLabel.split(',').map((zip: string) => zip.trim()).filter((zip: string) => /^\d{5}$/.test(zip)),
     [locationLabel]
   );
+  const workflowRoute = referralWorkflowRoute(referral);
+  const workflowAgent = referral.clientType === 'Seller' ? effectiveSellSideContact : effectiveBuySideContact;
   const showAgentRecommendation =
-    (viewerRole === 'admin' || viewerRole === 'manager') && referral.org === 'AHA';
+    (viewerRole === 'admin' || viewerRole === 'manager') && Boolean(workflowRoute);
 
   const propertyLabel = useMemo(() => {
     if (effectivePropertyAddress && effectivePropertyAddress.trim().length > 0) {
@@ -753,7 +756,7 @@ export function ReferralHeader({
   const latestSellDealStatusLabel = latestSellDealStatus ?? 'No deals yet';
   const showSplitStatus = isBothClientType && viewerRole === 'admin';
   const pairedFubEnabled =
-    viewerRole === 'admin' && referral.org === 'AHA' && ahaBucket === 'AHA';
+    viewerRole === 'admin' && workflowRoute === 'AHA';
 
   const statusCardMeta = (
     <p className="text-[13px] text-foreground-subtle">
@@ -819,6 +822,7 @@ export function ReferralHeader({
                         onStatusChanged={(next, payload) => handleStatusChanged(next, payload, 'buy')}
                         onUnderContractIntentChange={onUnderContractIntentChange}
                         pairedFubEnabled={pairedFubEnabled}
+                        fixtureFubApproval={referral.fixtureFubApproval === true}
                       />
                     </div>
                     <div className="space-y-2">
@@ -893,6 +897,7 @@ export function ReferralHeader({
                   onStatusChanged={handleStatusChanged}
                   onUnderContractIntentChange={onUnderContractIntentChange}
                   pairedFubEnabled={pairedFubEnabled}
+                  fixtureFubApproval={referral.fixtureFubApproval === true}
                 />
               )}
             </div>
@@ -924,21 +929,25 @@ export function ReferralHeader({
             showMcCcField={showMcCcField}
             agentRecommendationSlot={showAgentRecommendation ? (
               <AgentRecommendationPanel
-                key={ahaBucket}
+                key={workflowRoute}
                 referralId={String(referral._id)}
                 mcId={effectiveMcContact?.id ?? null}
                 zips={recommendationZips}
                 selectionSource={referral.agentSelectionSource ?? null}
-                assignedAgentName={effectiveBuySideContact?.name ?? null}
+                side={referral.clientType === 'Seller' ? 'sell' : 'buy'}
+                assignedAgentName={workflowAgent?.name ?? null}
                 canPersistAssignment={viewerRole === 'admin' && canAssignBuyAgent}
-                onAssigned={contact => onBuySideAgentContactChange?.(contact)}
+                onAssigned={contact => {
+                  const update = referral.clientType === 'Seller' ? onSellSideAgentContactChange : onBuySideAgentContactChange;
+                  update?.({ ...contact, ahaDesignation: workflowRoute });
+                }}
                 embedded
               />
             ) : null}
           />
 
-          {pairedFubEnabled && effectiveBuySideContact?.id && (
-            <FubAgentMapping key={effectiveBuySideContact.id} referralId={String(referral._id)} agentId={effectiveBuySideContact.id} agentName={effectiveBuySideContact.name || 'selected agent'} />
+          {pairedFubEnabled && workflowAgent?.id && (
+            <FubAgentMapping key={workflowAgent.id} referralId={String(referral._id)} agentId={workflowAgent.id} agentName={workflowAgent.name || 'selected agent'} />
           )}
 
           {viewerRole === 'agent' && status === 'Paired' && (

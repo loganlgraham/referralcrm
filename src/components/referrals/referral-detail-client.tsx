@@ -7,6 +7,8 @@ import { toast } from 'sonner';
 import { useSWRConfig } from 'swr';
 
 import { ReferralHeader } from '@/components/referrals/referral-header';
+import { referralWorkflowRoute } from '@/lib/referral-routing';
+import { IntelligencePanel } from '@/components/referrals/intelligence-panel';
 import { ReferralNotes } from '@/components/referrals/referral-notes';
 import { ReferralTimeline } from '@/components/referrals/referral-timeline';
 import type { Contact } from '@/components/referrals/contact-assignment';
@@ -113,6 +115,7 @@ interface ReferralDetail {
   statusLastUpdated?: string | null;
   daysInStatus?: number;
   viewerRole?: string;
+  inboundEmail?: { messageId?: string; channel?: 'AHA' | 'AHA_OOS' | null; routeHint?: string };
   ahaBucket?: 'AHA' | 'AHA_OOS' | '' | null;
   org?: string;
   origin?: 'agent' | 'mc' | 'admin' | null;
@@ -356,6 +359,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
   const [referral, setReferral] = useState<ReferralDetail>(initialReferral);
   const origin = referral.origin ?? initialReferral.origin ?? null;
   const isAgentOrigin = origin === 'agent';
+  const workflowRoute = referralWorkflowRoute(referral);
   const canViewSourceAndEndorser = viewerRole === 'admin';
   const canEditSourceAndEndorser = canViewSourceAndEndorser && !isAgentOrigin;
   const [isEditingDetails, setIsEditingDetails] = useState(false);
@@ -401,6 +405,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
             name: contact.name ?? undefined,
             email: contact.email ?? undefined,
             phone: contact.phone ?? undefined,
+            ahaDesignation: contact.ahaDesignation ?? null,
           }
         : null;
 
@@ -425,6 +430,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
             name: contact.name ?? undefined,
             email: contact.email ?? undefined,
             phone: contact.phone ?? undefined,
+            ahaDesignation: contact.ahaDesignation ?? null,
           }
         : null;
 
@@ -1692,6 +1698,9 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
             </RailCard>
           }
         >
+          {(viewerRole === 'admin' || viewerRole === 'manager') && workflowRoute && (
+            <IntelligencePanel key={referralId + workflowRoute} referralId={referralId} />
+          )}
           <ReferralNotes
             key={referralId}
             referralId={referralId}

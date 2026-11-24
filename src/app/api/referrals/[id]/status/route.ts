@@ -1,3 +1,6 @@
+import { sendOnPair } from '@/lib/server/mock-fub-send';
+import { referralAgentSlotId } from '@/lib/referral-agent-slot';
+import { referralWorkflowRoute, routingAgent } from '@/lib/referral-routing';
 import { NextRequest, NextResponse } from 'next/server';
 import { differenceInDays } from 'date-fns';
 
@@ -934,8 +937,15 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
       ? (referral.sellStatus as ReferralStatus | undefined)
       : (referral.buyStatus as ReferralStatus | undefined);
 
+  const pairedHandoff =
+    shouldPersistReferralStatus && nextStatus === 'Paired' && sideStatus === 'Paired' &&
+    (referral.clientType !== 'Both' || requestSide === 'buy') && referralWorkflowRoute(referral) === 'AHA'
+      ? await sendOnPair(String(referral._id), session, referralAgentSlotId(routingAgent(referral)) ?? '')
+      : null;
+
   return NextResponse.json({
     id: referral._id.toString(),
+    ...(pairedHandoff ? { pairedHandoff } : {}),
     status: shouldPersistReferralStatus ? referral.status : previousStatus,
     sideStatus: sideStatus ?? (shouldPersistReferralStatus ? referral.status : previousStatus),
     contractDetails:

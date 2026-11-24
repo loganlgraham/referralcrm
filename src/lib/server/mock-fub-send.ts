@@ -1,7 +1,11 @@
+import { referralWorkflowRoute, routingAgent } from '@/lib/referral-routing';
 import { createLiveFubClient, liveFubEnabled, readIntakeForHandoff } from '@/lib/server/live-fub-handoff';
 import { createHash } from 'node:crypto';
 
 import { Types } from 'mongoose';
+import type { Session } from 'next-auth';
+import { authorizeFubViewer } from '@/lib/server/intelligence-viewer';
+import type { PairedHandoff } from '@/lib/fub/paired-handoff';
 
 import {
   storedAccountStatus,
@@ -145,26 +149,22 @@ async function loadApproval(
 
   const referral = await Referral.findById(referralId)
     .select(
-      'borrower inboundEmail endorser clientType preApprovalAmountCents estPurchasePriceCents propertyAddress propertyCity propertyState propertyPostalCode initialNotes timeline lender source loanFileNumber lookingInZip lookingInZips borrowerCurrentAddress loanType stageOnTransfer org ahaBucket assignedAgent buySideAgent agentSelectionSource status deletedAt',
+      'borrower inboundEmail endorser clientType preApprovalAmountCents estPurchasePriceCents propertyAddress propertyCity propertyState propertyPostalCode initialNotes timeline lender source loanFileNumber lookingInZip lookingInZips borrowerCurrentAddress loanType stageOnTransfer org origin ahaBucket assignedAgent buySideAgent sellSideAgent agentSelectionSource status buyStatus sellStatus deletedAt',
     )
     .populate('lender', 'name')
-    .populate('assignedAgent', 'name')
-    .populate('buySideAgent', 'name')
+    .populate('assignedAgent buySideAgent sellSideAgent', 'name ahaDesignation')
     .lean<Record<string, any> | null>();
   if (!referral || referral.deletedAt) {
     return serviceError(404, 'not_found', 'Referral not found.');
   }
-  if (referral.org !== 'AHA') {
-    return serviceError(400, 'not_aha', 'Only AHA referrals are supported.');
+  const route = referralWorkflowRoute(referral);
+  if (route === 'AHA_OOS') {
+    return serviceError(400, 'aha_oos', 'This referral follows the AHA out-of-state path.');
   }
-  if (referral.ahaBucket === 'AHA_OOS') {
-    return serviceError(400, 'aha_oos', 'AHA OOS sending is not included in this fixture.');
+  if (route !== 'AHA') {
+    return serviceError(400, 'not_aha', 'This referral has no AHA handoff.');
   }
-  if (referral.ahaBucket !== 'AHA') {
-    return serviceError(400, 'not_aha', 'The referral is not in the AHA intake bucket.');
-  }
-
-  const selectedAgent = referral.buySideAgent ?? referral.assignedAgent ?? null;
+  const selectedAgent = routingAgent(referral);
   const selectedAgentId = populatedId(selectedAgent);
   if (!selectedAgentId) {
     return serviceError(409, 'agent_missing', 'Select an agent before sending to FUB.');
@@ -227,7 +227,7 @@ async function loadApproval(
     mappingState: mapping.state,
     existingPersonId:
       typeof customerLink?.fubPersonId === 'number' ? customerLink.fubPersonId : null,
-    status: String(referral.status ?? ''),
+    status: String(referral.clientType === 'Both' ? referral.buyStatus ?? referral.status : referral.status),
     inboundMessageId: referral.inboundEmail?.messageId,
     intakeFields: {
       ...Object.fromEntries(Object.entries({
@@ -360,9 +360,13 @@ export async function approveMockFubSend(input: {
   referralId: string;
   actorId: string;
   approvalKey: string;
+  expectedAgentId?: string;
 }): Promise<MockFubApprovalServiceResult> {
   const loaded = await loadApproval(input.referralId, input.actorId);
   if ('ok' in loaded) return loaded;
+  if (input.expectedAgentId !== undefined && input.expectedAgentId !== loaded.selectedAgentId) {
+    return serviceError(409, 'approval_changed', 'The assigned agent changed. Review the handoff on the referral.');
+  }
   if (loaded.status !== 'Paired') {
     return serviceError(
       409,
@@ -494,4 +498,36 @@ export async function approveMockFubSend(input: {
   }
 
   return { ok: true, result };
+}
+
+/** The staff member's Paired action authorizes the normal handoff. The journal makes retries safe. */
+export async function sendOnPair(referralId: string, session: Session, expectedAgentId: string): Promise<PairedHandoff | null> {
+  if (!liveFubEnabled()) {
+    return process.env.VERCEL_ENV === 'production'
+      ? { sent: false, message: 'Paired saved. Follow Up Boss is unavailable. Retry from the referral.' }
+      : null;
+  }
+  try {
+    const viewer = await authorizeFubViewer({
+      session, organization: 'AHA', accountId: VERIFIED_FUB_ACCOUNT_ID, canViewReferral: true,
+    });
+    if (!viewer.access.ok || viewer.role !== 'admin' || !viewer.userId) {
+      return { sent: false, message: 'Paired saved. An administrator with Follow Up Boss access can send this referral.' };
+    }
+    const input = { referralId, actorId: viewer.userId };
+    const preview = await readMockFubApprovalPreview(input);
+    if (!preview.ok) return { sent: false, message: 'Paired saved. ' + preview.message };
+    if (preview.preview.mappingState !== 'ready') {
+      return { sent: false, message: 'Paired saved. Confirm the assigned agent’s Follow Up Boss link, then retry the send.' };
+    }
+    const send = await approveMockFubSend({ ...input, expectedAgentId, approvalKey: preview.preview.approvalKey });
+    if (!send.ok) return { sent: false, message: 'Paired saved. ' + send.message };
+    const { status, steps } = send.result;
+    if (status === 'success') return { sent: true, message: 'Paired and sent to Follow Up Boss.' };
+    const failed = steps.find(step => step.errorMessage);
+    return { sent: false, message: 'Paired saved. ' + (failed?.errorMessage ?? 'Check the Follow Up Boss handoff on the referral.') };
+  } catch (error) {
+    console.error('Unable to confirm the Paired handoff', { referralId, error: error instanceof Error ? error.name : 'unknown' });
+    return { sent: false, message: 'Paired saved. Check the Follow Up Boss handoff on the referral.' };
+  }
 }

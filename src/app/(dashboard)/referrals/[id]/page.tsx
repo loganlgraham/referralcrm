@@ -4,7 +4,6 @@ import { notFound } from 'next/navigation';
 import { getReferralById, getAdjacentReferralIds } from '@/lib/server/referrals';
 import { getCurrentSession } from '@/lib/auth';
 import { ReferralDetailClient } from '@/components/referrals/referral-detail-client';
-import { IntelligencePanel } from '@/components/referrals/intelligence-panel';
 
 interface ReferralDetailPageProps {
   params: { id: string };
@@ -74,7 +73,6 @@ export default async function ReferralDetailPage({ params, searchParams }: Refer
 
   return (
     <>
-    {isAdminLike ? <IntelligencePanel referralId={params.id} /> : null}
     {isAdminLike && referral.inboundEmail?.messageId ? (
       <Link prefetch={false} className="text-sm underline" href={`/referrals/${params.id}/intake-files`}>View intake email attachments</Link>
     ) : null}

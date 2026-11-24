@@ -1,3 +1,4 @@
+import { referralWorkflowRoute, routingAgent, type RoutingSource } from '@/lib/referral-routing';
 import { liveFubEnabled, getFubAgentChoices } from '@/lib/server/live-fub-handoff';
 import { NextRequest, NextResponse } from 'next/server';
 import { Types } from 'mongoose';
@@ -158,15 +159,15 @@ async function loadAuthorized(referralId: string): Promise<
   const session = await getCurrentSession();
   if (!Types.ObjectId.isValid(referralId)) return { ok: false, status: 404, reason: 'referral' };
   await connectMongo();
-  const referral = await Referral.findById(referralId).select('org assignedAgent buySideAgent deletedAt').populate('assignedAgent', 'name').populate('buySideAgent', 'name').lean<{
+  const referral = await Referral.findById(referralId).select('org origin clientType ahaBucket inboundEmail assignedAgent buySideAgent sellSideAgent deletedAt').populate('assignedAgent buySideAgent sellSideAgent', 'name ahaDesignation').lean<RoutingSource & {
     org?: string;
     deletedAt?: Date;
+    sellSideAgent?: { _id?: Types.ObjectId; name?: string } | Types.ObjectId | null;
     buySideAgent?: { _id?: Types.ObjectId; name?: string } | Types.ObjectId | null;
     assignedAgent?: { _id?: Types.ObjectId; name?: string } | Types.ObjectId | null;
   } | null>();
   if (!referral || referral.deletedAt) return { ok: false, status: 404, reason: 'referral' };
-  const organization = referral.org === 'AHA' || referral.org === 'AFC' ? referral.org : null;
-  if (!organization) return { ok: false, status: 503, reason: 'not_configured' };
+  const organization: IntelligenceOrg = referralWorkflowRoute(referral) ? 'AHA' : 'AFC';
   // Fall back to the verified AHA account so a missing preview env still finds saved links.
   const configuredAccountId = process.env.REFERRIO_FUB_ACCOUNT_ID ?? '';
   const accountId = configuredAccountId || VERIFIED_FUB_ACCOUNT_ID;
@@ -176,7 +177,7 @@ async function loadAuthorized(referralId: string): Promise<
   });
   const { access, userId } = await authorizeFubViewer({ session, organization, accountId, canViewReferral: canView });
   if (!access.ok) return { ok: false, status: access.status, reason: access.reason };
-  const selectedAgent = referral.buySideAgent ?? referral.assignedAgent;
+  const selectedAgent = routingAgent(referral);
   const agent = selectedAgent && typeof selectedAgent === 'object' && 'name' in selectedAgent ? selectedAgent : null;
   const secret = process.env.REFERRIO_INTEGRATION_SECRET ?? '';
   const url = trustedIntelligenceUrl(process.env.REFERRIO_INTELLIGENCE_URL ?? '') ?? '';

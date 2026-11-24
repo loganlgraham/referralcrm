@@ -5,9 +5,13 @@
  * dashboard and the email report from drifting (C-13).
  */
 
+import { mailboxRoute, type RoutingSource } from '@/lib/referral-routing';
+
 export type NetworkDesignation = 'AHA' | 'AHA_OOS' | 'AGIT';
 
 export type ReferralAgentSlots = {
+  inboundEmail?: RoutingSource['inboundEmail'];
+  origin?: string | null;
   assignedAgent?: { toString(): string } | null | undefined;
   buySideAgent?: { toString(): string } | null | undefined;
   sellSideAgent?: { toString(): string } | null | undefined;
@@ -22,18 +26,12 @@ export type PaymentAgentSlots = {
   } | null;
 };
 
-/**
- * Resolve a referral's network designation by walking
- * assignedAgent → buySideAgent → sellSideAgent and picking the first agent
- * that has a designation in the provided map.
- *
- * When no agent is designated, fall back to referral.ahaBucket (then org)
- * so inbound OOS/AHA New Leads without an agent still bucket correctly.
- */
+/** Imports retain their mailbox network. Manual referrals use their assigned agent. */
 export function getReferralDesignation(
   referral: ReferralAgentSlots,
   designationMap: Map<string, NetworkDesignation | null>
 ): NetworkDesignation | null {
+  if (referral.inboundEmail) return mailboxRoute(referral);
   const slots = [referral.assignedAgent, referral.buySideAgent, referral.sellSideAgent];
   for (const id of slots) {
     if (!id) continue;
@@ -41,6 +39,7 @@ export function getReferralDesignation(
     if (designation) return designation;
   }
 
+  if (referral.origin) return null;
   if (referral.ahaBucket === 'AHA_OOS') return 'AHA_OOS';
   if (referral.ahaBucket === 'AHA' || referral.org === 'AHA') return 'AHA';
   return null;

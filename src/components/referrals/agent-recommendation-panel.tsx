@@ -19,6 +19,7 @@ export function AgentRecommendationPanel({
   canPersistAssignment = false,
   embedded = false,
   assignedAgentName = null,
+  side = 'buy',
   onAssigned,
 }: {
   referralId: string;
@@ -28,6 +29,7 @@ export function AgentRecommendationPanel({
   canPersistAssignment?: boolean;
   embedded?: boolean;
   assignedAgentName?: string | null;
+  side?: 'buy' | 'sell';
   onAssigned?: (agent: { id: string; name: string }) => void;
 }) {
   const [load, setLoad] = useState<LoadState>({ status: 'loading' });
@@ -70,7 +72,7 @@ export function AgentRecommendationPanel({
       const response = await fetch(`/api/referrals/${referralId}/assign`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agentId, side: 'buy' }),
+        body: JSON.stringify({ agentId, side }),
       });
       if (!response.ok) throw new Error('Unable to save agent selection');
       const ranked = load.status === 'done' && load.body.state === 'ready' ? load.body.recommendations : [];

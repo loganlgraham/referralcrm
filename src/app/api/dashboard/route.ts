@@ -1021,7 +1021,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     ...referralMatch,
   })
     .select(
-      'createdAt updatedAt referralDate status lostReason statusLastUpdated referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents stageOnTransfer initialNotes notes.content notes.createdAt assignedAgent buySideAgent sellSideAgent lender org ahaBucket propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser origin dealSide clientType sla lookingInZip lookingInZips loanFileNumber borrower.name audit.field audit.previousValue audit.newValue audit.timestamp'
+      'createdAt updatedAt referralDate status lostReason statusLastUpdated referralFeeDueCents referralFeeBasisPoints commissionBasisPoints estPurchasePriceCents preApprovalAmountCents stageOnTransfer initialNotes notes.content notes.createdAt assignedAgent buySideAgent sellSideAgent lender org ahaBucket inboundEmail.channel inboundEmail.routeHint inboundEmail.messageId propertyAddress propertyCity propertyState propertyPostalCode borrowerCurrentAddress closedPriceCents source endorser origin dealSide clientType sla lookingInZip lookingInZips loanFileNumber borrower.name audit.field audit.previousValue audit.newValue audit.timestamp'
     )
     .lean<DashboardReferral[]>()
     .exec();
