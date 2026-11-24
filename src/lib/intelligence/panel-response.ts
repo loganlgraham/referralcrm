@@ -7,9 +7,10 @@ export type PanelActivity =
   | { status: 'not_found' }
   | { status: 'unavailable' }
   | { status: 'not_configured' }
-  | { status: 'no_activity'; coverageDetail: string | null }
+  | { status: 'no_activity'; personStage: string | null; coverageDetail: string | null }
   | {
       status: 'ready';
+      personStage: string | null;
       incomplete: boolean;
       latest: RemoteCustomer['latest'];
       followUp: RemoteCustomer['followUp'];
@@ -73,7 +74,7 @@ export function panelFromRead(input: {
     return { officialScoring: false, access: 'allowed', link, activity: { status: 'not_found' } };
   }
   if (input.remote.state === 'no_records') {
-    return { officialScoring: false, access: 'allowed', link, activity: { status: 'no_activity', coverageDetail: input.remote.coverageDetail ?? null } };
+    return { officialScoring: false, access: 'allowed', link, activity: { status: 'no_activity', personStage: input.remote.personStage, coverageDetail: input.remote.coverageDetail ?? null } };
   }
   return {
     officialScoring: false,
@@ -81,6 +82,7 @@ export function panelFromRead(input: {
     link,
     activity: {
       status: 'ready',
+      personStage: input.remote.personStage,
       incomplete: input.remote.state === 'incomplete',
       latest: input.remote.latest,
       followUp: input.remote.followUp,

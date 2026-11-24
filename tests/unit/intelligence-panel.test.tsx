@@ -68,6 +68,7 @@ describe('intelligence panel', () => {
     global.fetch = jest.fn(async () => jsonResponse({ officialScoring: false, access: 'denied', link: null, activity: { status: 'not_requested' } }, 403)) as typeof fetch;
     render(<IntelligencePanel referralId="ref-1" />);
     expect(await screen.findByText("You don't have access to this activity.")).toBeInTheDocument();
+    expect(screen.queryByText('FUB stage')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Follow Up Boss person id')).not.toBeInTheDocument();
     expect(screen.queryByText('This is not no activity.')).not.toBeInTheDocument();
   });
@@ -85,6 +86,17 @@ describe('intelligence panel', () => {
     expect(screen.getByText("Follow Up Boss isn't set up here, so activity can't be checked. Saved links are unchanged.")).toBeInTheDocument();
     expect(screen.queryByText("This customer isn't linked.")).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Follow Up Boss person id')).not.toBeInTheDocument();
+  });
+
+  it.each([['Nurture', 'Nurture'], [null, 'Unavailable']])('shows the contact stage with no communication history (%s)', async (personStage, expected) => {
+    global.fetch = jest.fn(async () => jsonResponse({
+      access: 'allowed', link: { personId: 100, participantKey: 'borrower' },
+      activity: { status: 'no_activity', personStage, coverageDetail: null },
+    })) as typeof fetch;
+    render(<IntelligencePanel referralId="ref-1" />);
+    expect(await screen.findByText('FUB stage')).toBeVisible();
+    expect(screen.getByText(expected!)).toBeVisible();
+    expect(screen.getByText('No activity is stored for this contact.')).toBeVisible();
   });
 
   it('removes a link without creating another mapping', async () => {
@@ -117,6 +129,7 @@ describe('intelligence panel', () => {
       link: { personId: 38620, participantKey: 'borrower' },
       activity: {
         status: 'ready',
+        personStage: 'Actively shopping',
         incomplete: false,
         latest: { channel: 'text', direction: 'outbound', occurredAt: '2026-11-18T21:46:51.000Z', displayTime: '11/18/2026 2:46 PM' },
         followUp: { status: 'no_inbound', nextAction: 'No inbound call or text is stored.', detail: 'No inbound call or text is stored.' },
@@ -132,6 +145,7 @@ describe('intelligence panel', () => {
     render(<IntelligencePanel referralId="ref-1" />);
     expect(await screen.findByText('Linked to FUB contact 38620')).toBeInTheDocument();
     expect(screen.getByText(/Text outbound, 11\/18\/2026 2:46 PM/)).toBeInTheDocument();
+    expect(screen.getByText('Actively shopping')).toBeVisible();
     expect(screen.getByText(/Andrew Landauer \(10\)/)).toBeInTheDocument();
     expect(screen.getByText("Call coverage couldn't load.")).toBeInTheDocument();
     expect(screen.queryByText('Some stored activity may be missing.')).not.toBeInTheDocument();

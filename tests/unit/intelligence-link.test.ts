@@ -125,6 +125,7 @@ describe('intelligence reads', () => {
           state: 'ready',
           officialScoring: false,
           personId: 100,
+          personStage: '  Nurture  ',
           latest: null,
           followUp: null,
           fubAssignedUser: null,
@@ -145,7 +146,9 @@ describe('intelligence reads', () => {
       now: 1_795_000_000_000,
       fetchImpl: read,
     };
-    await fetchCustomerIntelligence(input);
+    const remote = await fetchCustomerIntelligence(input);
+    expect(panelFromRead({ participantKey: 'borrower', personId: 100, referrioAgent: null, remote, agentsDiffer: false }).activity)
+      .toMatchObject({ status: 'ready', personStage: 'Nurture' });
     await fetchCustomerIntelligence(input);
     await fetchCustomerIntelligence({ ...input, personId: 101, referralId: 'ref-2' });
     expect(callsForCache).toHaveLength(2);
@@ -235,9 +238,9 @@ describe('intelligence reads', () => {
       participantKey: 'borrower',
       personId: 38620,
       referrioAgent: null,
-      remote: { state: 'no_records', officialScoring: false, personId: 38620, latest: null, followUp: null, fubAssignedUser: null, projectedClosings: [], freshness: { readAt: '2026-11-18T17:00:00.000Z', note: 'Read from stored records.' }, detailPath: null },
+      remote: { state: 'no_records', officialScoring: false, personId: 38620, personStage: 'Lead', latest: null, followUp: null, fubAssignedUser: null, projectedClosings: [], freshness: { readAt: '2026-11-18T17:00:00.000Z', note: 'Read from stored records.' }, detailPath: null },
       agentsDiffer: false,
-    }).activity).toEqual({ status: 'no_activity', coverageDetail: null });
+    }).activity).toEqual({ status: 'no_activity', personStage: 'Lead', coverageDetail: null });
     expect(panelFromRead({
       participantKey: 'borrower',
       personId: 38620,
