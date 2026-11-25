@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import useSWR from 'swr';
 import { fetcher } from '@/utils/fetcher';
 import { Modal } from '@/components/ui/modal';
@@ -59,17 +60,20 @@ export function FubDashboard({ userId, configured = true }: { userId: string; co
         </div>
         <label className="text-sm text-foreground-muted">
           Calls and reminders
-          <select
-            className="ml-2 rounded-lg border border-border bg-surface px-3 py-2 text-foreground"
-            value={days}
-            onChange={(event) =>
-              setDays(Number(event.target.value) as 7 | 30 | 90)
-            }
-          >
-            <option value={7}>Last 7 days</option>
-            <option value={30}>Last 30 days</option>
-            <option value={90}>Last 90 days</option>
-          </select>
+          <span className="relative ml-2 inline-flex">
+            <select
+              className="appearance-none rounded-lg border border-border bg-surface py-2 pl-3 pr-9 text-foreground"
+              value={days}
+              onChange={(event) =>
+                setDays(Number(event.target.value) as 7 | 30 | 90)
+              }
+            >
+              <option value={7}>Last 7 days</option>
+              <option value={30}>Last 30 days</option>
+              <option value={90}>Last 90 days</option>
+            </select>
+            <ChevronDown aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-foreground" />
+          </span>
         </label>
       </div>
       {!configured ? (
