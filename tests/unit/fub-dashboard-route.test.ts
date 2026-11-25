@@ -4,6 +4,7 @@ import { GET } from '@/app/api/dashboard/fub/route';
 import { getCurrentSession } from '@/lib/auth';
 import { canViewFubDashboard } from '@/lib/server/fub-access';
 import { fetchSopDashboard } from '@/lib/intelligence/sop-remote';
+import { readFirstCallReport } from '@/lib/server/fub-first-call-report';
 import { readDay31Decisions } from '@/lib/server/fub-sop-decisions';
 import { fubDashboardFixture } from '../fixtures/fub-dashboard';
 import { fubSopFixture, sopReviews } from '../fixtures/fub-sop';
@@ -106,4 +107,12 @@ test('upstream unavailability returns 503 without reading or fabricating local d
   (fetchSopDashboard as jest.Mock).mockResolvedValue(null);
   expect((await GET(request())).status).toBe(503);
   expect(readDay31Decisions).not.toHaveBeenCalled();
+});
+
+test('an unavailable clock feed does not erase existing reminders or return zero handoffs', async () => {
+  (canViewFubDashboard as jest.Mock).mockResolvedValue(true);
+  (readFirstCallReport as jest.Mock).mockRejectedValue(new Error('unavailable'));
+  const response = await GET(request());
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ ...fubDashboardFixture, firstCallReport: null });
 });

@@ -158,3 +158,20 @@ test('multiple observed episodes for one person stay distinct across the 25-row 
   expect(dialog.getAllByRole('link')).toHaveLength(1);
   expect(dialog.getByRole('link', { name: 'Review episode 1' })).toBeInTheDocument();
 });
+
+test('shows confirmed and observed timing separately and links to the assigned customer', () => {
+  const firstCallReport = { readAt: '2026-11-25T15:30:00Z', rows: [
+    { personId: 101, customer: 'Handoff example', agentId: 9, agentName: 'Jordan', assignedAt: '2026-11-25T15:00:00Z',
+      source: 'confirmed' as const, endedAt: null, callAt:'2026-11-25T15:06:00Z', callId:1, liveConnection:false },
+    { personId: 102, customer: 'Observed example', agentId: 9, agentName: 'Jordan', assignedAt: '2026-11-25T15:00:00Z',
+      source: 'observed' as const, endedAt: null, callAt:null, callId:null, liveConnection:false },
+  ] };
+  render(<FubDashboardView data={{ ...fubDashboardFixture, firstCallReport }} />);
+  fireEvent.click(screen.getByRole('button', { name:/Referrio confirmed · 1 assignment/ }));
+  const dialog = screen.getByRole('dialog');
+  expect(within(dialog).getByRole('link',{ name:'Handoff example' })).toHaveAttribute('href', expect.stringContaining('/101'));
+  expect(within(dialog).getByText(/6m 0s later/)).toBeVisible();
+  expect(within(dialog).queryByText('Observed example')).toBeNull();
+  fireEvent.change(within(dialog).getByRole('combobox'), { target: { value:'No call recorded within 10 min' } });
+  expect(within(dialog).getByText('No matching assignments in this period.')).toBeVisible();
+});
