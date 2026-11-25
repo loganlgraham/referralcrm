@@ -1,3 +1,4 @@
+import { readFirstCallReport } from '@/lib/server/fub-first-call-report';
 import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentSession } from '@/lib/auth';
 import { connectMongo } from '@/lib/mongoose';
@@ -36,17 +37,20 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       { error: 'FUB evidence is temporarily unavailable. Try again shortly.' },
       503,
     );
-  if (data.sopAudits) {
-    if (!(await canViewFubDashboard(session.user.id)))
-      return json({ error: 'Your FUB dashboard access has changed.' }, 403);
-    try {
-      const day31Decisions = await readDay31Decisions(data.sopAudits.filter((review) => review.kind === 'day-31'));
-      return json({ ...data, day31Decisions }, 200);
-    } catch {
-      return json({ ...data, decisionError: 'Day 31 decisions could not be loaded. Try again before recording a review.' }, 200);
-    }
-  }
-  return json(data, 200);
+  if (!(await canViewFubDashboard(session.user.id)))
+    return json({ error: 'Your FUB dashboard access has changed.' }, 403);
+  const [timing, decisions] = await Promise.allSettled([
+    readFirstCallReport(days, data.readAt),
+    data.sopAudits ? readDay31Decisions(data.sopAudits.filter(review => review.kind === 'day-31')) : undefined,
+  ]);
+  if (!(await canViewFubDashboard(session.user.id)))
+    return json({ error: 'Your FUB dashboard access has changed.' }, 403);
+  return json({
+    ...data,
+    firstCallReport: timing.status === 'fulfilled' ? timing.value : null,
+    ...(decisions.status === 'fulfilled' ? { day31Decisions: decisions.value } :
+      { decisionError: 'Day 31 decisions could not be loaded. Try again before recording a review.' }),
+  }, 200);
 }
 function json(body: unknown, status: number): NextResponse {
   return NextResponse.json(body, {

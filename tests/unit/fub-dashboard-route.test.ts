@@ -8,6 +8,7 @@ import { readDay31Decisions } from '@/lib/server/fub-sop-decisions';
 import { fubDashboardFixture } from '../fixtures/fub-dashboard';
 import { fubSopFixture, sopReviews } from '../fixtures/fub-sop';
 
+jest.mock('@/lib/server/fub-first-call-report', () => ({ readFirstCallReport: jest.fn() }));
 jest.mock('@/lib/auth', () => ({ getCurrentSession: jest.fn() }));
 jest.mock('@/lib/mongoose', () => ({ connectMongo: jest.fn() }));
 jest.mock('@/lib/server/fub-access', () => ({ canViewFubDashboard: jest.fn() }));
@@ -73,7 +74,7 @@ test('loads decisions only for authoritative Day 31 notes and rechecks permissio
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual(fubSopFixture);
   expect(readDay31Decisions).toHaveBeenCalledWith(sopReviews.filter((review) => review.kind === 'day-31'));
-  expect(canViewFubDashboard).toHaveBeenCalledTimes(2);
+  expect(canViewFubDashboard).toHaveBeenCalledTimes(3);
   expect(response.headers.get('cache-control')).toContain('no-store');
 });
 

@@ -1,3 +1,4 @@
+import type { FirstCallReport } from '@/lib/intelligence/first-call-timing';
 import { z } from 'zod';
 import { day31ReviewIdSchema, type Day31DecisionRecord } from '@/lib/intelligence/sop-decisions';
 
@@ -86,4 +87,5 @@ export type SopDashboard = z.infer<typeof sopDashboardSchema>;
 export type FubDashboardData = SopDashboard & {
   day31Decisions?: Day31DecisionRecord[];
   decisionError?: string;
+  firstCallReport?: FirstCallReport | null;
 };

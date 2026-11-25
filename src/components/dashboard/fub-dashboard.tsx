@@ -6,6 +6,7 @@ import useSWR from 'swr';
 import { fetcher } from '@/utils/fetcher';
 import { Modal } from '@/components/ui/modal';
 import { buttonClasses } from '@/components/ui/button';
+import { FubFirstCallTiming } from '@/components/dashboard/fub-first-call-timing';
 import { FubDay31Decision } from '@/components/dashboard/fub-day31-decision';
 import type { FubDashboardData, SopAudit, SopAuditKind } from '@/lib/intelligence/sop-contract';
 import type { Day31DecisionRecord } from '@/lib/intelligence/sop-decisions';
@@ -222,7 +223,9 @@ export function FubDashboardView({ data, onDataChange }: { data: FubDashboardDat
           </p>
         </div>
         <div className="divide-y divide-border">
-          {metrics.map((metric) => (
+          {metrics.map((metric) => metric.id === 'first-call' && data.firstCallReport !== undefined ? (
+            <FubFirstCallTiming key={metric.id} report={data.firstCallReport} />
+          ) : (
             <div
               key={metric.id}
               className="grid gap-2 px-5 py-4 md:grid-cols-[1fr_10rem_2fr] md:gap-5"
