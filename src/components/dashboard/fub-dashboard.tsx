@@ -336,74 +336,78 @@ export function FubDashboardView({ data, onDataChange }: { data: FubDashboardDat
         description={`${selection?.agentId === null ? 'All agents' : (names.get(selection?.agentId ?? -1) ?? 'Unattributed activity')} · Times are Mountain Time`}
         size="lg"
       >
-        <p className="mb-4 text-sm text-foreground-muted">
-          {selection ? evidenceDescriptions[selection.kind] : ''}
-        </p>
-        {selection && isAuditKind(selection.kind) && data.sopCoverage ? <p className="mb-4 text-sm text-foreground-muted">{data.sopCoverage.detail}</p> : null}
-        {selection?.kind === 'day-31' ? <div className="mb-4">
-          {data.decisionError ? <p role="alert" className="mb-2 text-sm text-danger">{data.decisionError}</p> : null}
-          <label className="text-sm">Show reviews <select aria-label="Show Day 31 reviews" value={reviewFilter}
-            onChange={(event) => { setReviewFilter(event.target.value as typeof reviewFilter); setPage(0); }}
-            className="ml-2 rounded-lg border border-border bg-surface px-3 py-2">
-            <option value="pending">Awaiting decision</option><option value="all">All reviews</option><option value="keep">Keep</option><option value="release">Release</option>
-          </select></label>
-        </div> : null}
-        {visible.length === 0 ? (
-          <p className="py-5 text-foreground-muted">
-            No matching evidence is available. This does not prove no activity
-            occurred.
+        <div className="space-y-4 px-5 py-4">
+          <div className="space-y-3 text-sm leading-relaxed text-foreground-muted">
+          <p>
+            {selection ? evidenceDescriptions[selection.kind] : ''}
           </p>
-        ) : (
-          <ul className="divide-y divide-border">
-            {visible.map((row) => (
-              <li key={`${row.personId}:${row.id}`} className="py-4">
-                <div className="flex flex-wrap justify-between gap-2">
-                  <a
-                    className="font-medium underline underline-offset-4"
-                    href={`https://americanhomeagents3.followupboss.com/2/people/view/${row.personId}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    {row.customer}
-                  </a>
-                  <span className="text-sm text-foreground-muted">
-                    {time(row.at, row.dateOnly)}
-                    {row.dateOnly ? ' · date only' : row.audit?.provenance === 'tag_observation' ? ' MT · marker observed' : ' MT'}
-                  </span>
-                </div>
-                <p className="mt-1 text-sm">{row.detail}</p>
-                <p className="mt-1 text-xs text-foreground-muted">
-                  {names.get(row.agentId ?? -1) ?? 'Assignee not recorded'} ·{' '}
-                  {row.audit?.provenance === 'tag_observation' ? 'Day 31 marker in FUB' : `${row.audit ? 'FUB note' : selection?.kind === 'calls' ? 'Call' : 'Task'} #${row.id}`}
-                </p>
-                {row.audit && row.audit.provenance !== 'tag_observation' ? <p className="mt-1 text-xs text-foreground-muted">{row.audit.provenance === 'automation' ? 'Confirmed automation reminder.' : 'Reminder text matched; automatic creation has not been confirmed.'}</p> : null}
-                {row.audit?.kind === 'day-31' && Array.isArray(data.day31Decisions) && !data.decisionError ? <FubDay31Decision review={row.audit} record={decisionFor(row.audit)} onSaved={onSaved} /> : null}
-              </li>
-            ))}
-          </ul>
-        )}
-        {rows.length > 25 ? (
-          <div className="mt-4 flex items-center justify-between">
-            <button
-              className={buttonClasses({ variant: 'secondary', size: 'sm' })}
-              disabled={currentPage === 0}
-              onClick={() => setPage(currentPage - 1)}
-            >
-              Previous
-            </button>
-            <span className="text-sm">
-              {currentPage * 25 + 1}–{Math.min((currentPage + 1) * 25, rows.length)} of{' '}
-              {number(rows.length)}
-            </span>
-            <button
-              className={buttonClasses({ variant: 'secondary', size: 'sm' })}
-              disabled={(currentPage + 1) * 25 >= rows.length}
-              onClick={() => setPage(currentPage + 1)}
-            >
-              Next
-            </button>
+          {selection && isAuditKind(selection.kind) && data.sopCoverage ? <p>{data.sopCoverage.detail}</p> : null}
           </div>
-        ) : null}
+          {selection?.kind === 'day-31' ? <div>
+            {data.decisionError ? <p role="alert" className="mb-2 text-sm text-danger">{data.decisionError}</p> : null}
+            <label className="text-sm">Show reviews <select aria-label="Show Day 31 reviews" value={reviewFilter}
+              onChange={(event) => { setReviewFilter(event.target.value as typeof reviewFilter); setPage(0); }}
+              className="ml-2 rounded-lg border border-border bg-surface px-3 py-2">
+              <option value="pending">Awaiting decision</option><option value="all">All reviews</option><option value="keep">Keep</option><option value="release">Release</option>
+            </select></label>
+          </div> : null}
+          {visible.length === 0 ? (
+            <p className="py-5 text-foreground-muted">
+              No matching evidence is available. This does not prove no activity
+              occurred.
+            </p>
+          ) : (
+            <ul className="space-y-3">
+              {visible.map((row) => (
+                <li key={`${row.personId}:${row.id}`} className="rounded-xl border border-border bg-surface p-4">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                    <a
+                      className="min-w-0 break-words font-medium underline underline-offset-4"
+                      href={`https://americanhomeagents3.followupboss.com/2/people/view/${row.personId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {row.customer}
+                    </a>
+                    <span className="text-xs leading-relaxed text-foreground-muted sm:shrink-0 sm:text-right">
+                      {time(row.at, row.dateOnly)}
+                      {row.dateOnly ? ' · date only' : row.audit?.provenance === 'tag_observation' ? ' MT · marker observed' : ' MT'}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm leading-relaxed">{row.detail}</p>
+                  <p className="mt-1 text-xs text-foreground-muted">
+                    {names.get(row.agentId ?? -1) ?? 'Assignee not recorded'} ·{' '}
+                    {row.audit?.provenance === 'tag_observation' ? 'Day 31 marker in FUB' : `${row.audit ? 'FUB note' : selection?.kind === 'calls' ? 'Call' : 'Task'} #${row.id}`}
+                  </p>
+                  {row.audit && row.audit.provenance !== 'tag_observation' ? <p className="mt-1 text-xs text-foreground-muted">{row.audit.provenance === 'automation' ? 'Confirmed automation reminder.' : 'Reminder text matched; automatic creation has not been confirmed.'}</p> : null}
+                  {row.audit?.kind === 'day-31' && Array.isArray(data.day31Decisions) && !data.decisionError ? <FubDay31Decision review={row.audit} record={decisionFor(row.audit)} onSaved={onSaved} /> : null}
+                </li>
+              ))}
+            </ul>
+          )}
+          {rows.length > 25 ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+              <button
+                className={buttonClasses({ variant: 'secondary', size: 'sm' })}
+                disabled={currentPage === 0}
+                onClick={() => setPage(currentPage - 1)}
+              >
+                Previous
+              </button>
+              <span className="text-sm">
+                {currentPage * 25 + 1}–{Math.min((currentPage + 1) * 25, rows.length)} of{' '}
+                {number(rows.length)}
+              </span>
+              <button
+                className={buttonClasses({ variant: 'secondary', size: 'sm' })}
+                disabled={(currentPage + 1) * 25 >= rows.length}
+                onClick={() => setPage(currentPage + 1)}
+              >
+                Next
+              </button>
+            </div>
+          ) : null}
+        </div>
       </Modal>
     </>
   );
