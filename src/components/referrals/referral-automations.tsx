@@ -50,9 +50,9 @@ export function ReferralAutomations({ referralId, personId, borrowerName }: {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ expectedPersonId: personId, automationId: selected.id, previousId: selected.previousId }),
       });
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || 'FUB did not confirm the start. Check the customer in Follow Up Boss.');
-      setNotice('Started ' + selected.name + '.');
+      const result = await res.json().catch(() => null);
+      if (!res.ok || !result?.enrollment?.id) throw new Error(result?.error || 'FUB did not confirm the start. Check the customer in Follow Up Boss.');
+      setNotice('Started ' + selected.name + '.' + (result.auditIncomplete ? ' The local activity record may be incomplete.' : ''));
     } catch (cause) {
       setNotice(cause instanceof TypeError ? 'FUB did not confirm the start. Check the customer in Follow Up Boss.' :
         cause instanceof Error ? cause.message : 'Could not confirm the start.');

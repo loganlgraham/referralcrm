@@ -68,7 +68,11 @@ export async function POST(request: NextRequest, { params }: Context) {
     }
     return reply({ error: 'FUB did not confirm the start. Check the customer in Follow Up Boss before trying again.' }, 502);
   }
-  await FubAutomationStart.updateOne({ _id: key }, { $set: { enrollmentId: result.enrollment.id } });
-  await logReferralActivity({ referralId: params.id, actorRole: 'admin', actorId: viewer.userId, channel: 'update', content: 'Started FUB automation “' + result.enrollment.name + '”.' });
-  return reply(result, 201);
+  const audit = await Promise.allSettled([
+    FubAutomationStart.updateOne({ _id: key }, { $set: { enrollmentId: result.enrollment.id } }),
+    logReferralActivity({ referralId: params.id, actorRole: 'admin', actorId: viewer.userId, channel: 'update', content: 'Started FUB automation “' + result.enrollment.name + '”.' }),
+  ]);
+  const auditIncomplete = audit.some(entry => entry.status === 'rejected');
+  if (auditIncomplete) console.error('FUB automation start confirmed with incomplete local audit', { referralId: params.id, enrollmentId: result.enrollment.id });
+  return reply({ ...result, auditIncomplete }, 201);
 }

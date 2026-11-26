@@ -58,3 +58,17 @@ it('keeps the reservation on an unconfirmed start but releases it after a defini
   expect((await POST(request(), ctx)).status).toBe(409);
   expect(FubAutomationStart.deleteOne).toHaveBeenCalledTimes(1);
 });
+
+it('returns the confirmed FUB result even if local activity logging fails', async () => {
+  const log = jest.spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    (startFubAutomation as jest.Mock).mockResolvedValue({ personId: 123, enrollment: { id: 1, automationId: 10, name: 'Follow-up' } });
+    (logReferralActivity as jest.Mock).mockRejectedValue(new Error('unavailable'));
+    const response = await POST(request(), ctx);
+    expect(response.status).toBe(201);
+    expect((await response.json()).auditIncomplete).toBe(true);
+    expect(FubAutomationStart.deleteOne).not.toHaveBeenCalled();
+  } finally {
+    log.mockRestore();
+  }
+});
