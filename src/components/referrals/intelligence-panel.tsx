@@ -180,7 +180,12 @@ function ActivityBody({
     );
   }
   if (activity.status === 'not_configured') {
-    return <p className="mt-4 text-sm">Follow Up Boss isn&apos;t set up here, so activity can&apos;t be checked. Saved links are unchanged.</p>;
+    return (
+      <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
+        <p>{link ? "This customer is linked. The FUB activity connection is unavailable here." : "The FUB activity connection is unavailable here."}</p>
+        <button className={buttonClasses({ variant: 'secondary', size: 'sm' })} type="button" onClick={onRetry}>Retry activity</button>
+      </div>
+    );
   }
   if (!link) return <p className="mt-4 text-sm">This customer isn&apos;t linked.</p>;
   if (activity.status === 'unavailable' || activity.status === 'not_requested') {

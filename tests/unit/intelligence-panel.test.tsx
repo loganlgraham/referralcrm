@@ -83,7 +83,9 @@ describe('intelligence panel', () => {
 
     render(<IntelligencePanel referralId="ref-1" />);
     expect(await screen.findByText('Linked to FUB contact 38620')).toBeInTheDocument();
-    expect(screen.getByText("Follow Up Boss isn't set up here, so activity can't be checked. Saved links are unchanged.")).toBeInTheDocument();
+    expect(screen.getByText("This customer is linked. The FUB activity connection is unavailable here.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry activity' }));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/api/referrals/ref-1/intelligence?retry=1', { cache: 'no-store' }));
     expect(screen.queryByText("This customer isn't linked.")).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Follow Up Boss person id')).not.toBeInTheDocument();
   });
