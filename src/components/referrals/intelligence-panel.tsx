@@ -1,11 +1,12 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { ReferralAutomations } from './referral-automations';
 import { buttonClasses } from '@/components/ui/button';
 import { railCardClasses, railTitleClasses } from '@/components/referrals/referral-rail';
 import type { PanelActivity, PanelLink, PanelResponse } from '@/lib/intelligence/panel-response';
 
-export function IntelligencePanel({ referralId }: { referralId: string }) {
+export function IntelligencePanel({ referralId, borrowerName }: { referralId: string; borrowerName?: string }) {
   const [access, setAccess] = useState<'loading' | 'allowed' | 'denied' | 'unavailable'>('loading');
   const [link, setLink] = useState<PanelLink | null>(null);
   const [activity, setActivity] = useState<PanelActivity>({ status: 'not_requested' });
@@ -119,6 +120,9 @@ export function IntelligencePanel({ referralId }: { referralId: string }) {
       <h2 id="intelligence-panel-title" className={railTitleClasses}>Customer communication</h2>
       <p className="mt-1 text-sm text-foreground-muted">Stored Follow Up Boss activity for the linked customer.</p>
       <ActivityBody access={access} link={link} activity={activity} onRetry={() => void load(true)} />
+      {access === 'allowed' && link && !editing && activity.status !== 'not_configured' && (
+        <ReferralAutomations key={referralId + ':' + link.personId} referralId={referralId} personId={link.personId} borrowerName={borrowerName} />
+      )}
       {link && activity.status === 'not_configured' ? (
         <p className="mt-4 min-w-0 break-words text-sm">Linked to FUB contact {link.personId}</p>
       ) : null}
