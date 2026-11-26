@@ -90,6 +90,21 @@ describe('intelligence panel', () => {
     expect(screen.queryByLabelText('Follow Up Boss person id')).not.toBeInTheDocument();
   });
 
+  it('opens the same referral on the live site when preview activity is unavailable', async () => {
+    const previous = process.env.NEXT_PUBLIC_VERCEL_ENV;
+    process.env.NEXT_PUBLIC_VERCEL_ENV = 'preview';
+    try {
+      global.fetch = jest.fn(async () => jsonResponse({
+        access: 'allowed', link: { personId: 38620, participantKey: 'borrower' }, activity: { status: 'not_configured' },
+      })) as typeof fetch;
+      render(<IntelligencePanel referralId="ref-1" />);
+      expect(await screen.findByRole('link', { name: 'View activity on referrio.app' })).toHaveAttribute('href', 'https://referrio.app/referrals/ref-1');
+    } finally {
+      if (previous === undefined) delete process.env.NEXT_PUBLIC_VERCEL_ENV;
+      else process.env.NEXT_PUBLIC_VERCEL_ENV = previous;
+    }
+  });
+
   it.each([['Nurture', 'Nurture'], [null, 'Unavailable']])('shows the contact stage with no communication history (%s)', async (personStage, expected) => {
     global.fetch = jest.fn(async () => jsonResponse({
       access: 'allowed', link: { personId: 100, participantKey: 'borrower' },

@@ -124,7 +124,14 @@ export function IntelligencePanel({ referralId, borrowerName }: { referralId: st
         <ReferralAutomations key={referralId + ':' + link.personId} referralId={referralId} personId={link.personId} borrowerName={borrowerName} />
       )}
       {link && activity.status === 'not_configured' ? (
-        <p className="mt-4 min-w-0 break-words text-sm">Linked to FUB contact {link.personId}</p>
+        <div className="mt-4 grid gap-2 text-sm">
+          <p className="min-w-0 break-words">Linked to FUB contact {link.personId}</p>
+          {process.env.NEXT_PUBLIC_VERCEL_ENV === 'preview' && (
+            <a className="justify-self-start underline" href={`https://referrio.app/referrals/${encodeURIComponent(referralId)}`}>
+              View activity on referrio.app
+            </a>
+          )}
+        </div>
       ) : null}
       {link && activity.status !== 'not_configured' ? (
         <div className="mt-4 flex flex-wrap items-center gap-2">
