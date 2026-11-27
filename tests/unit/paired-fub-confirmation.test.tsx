@@ -15,6 +15,7 @@ describe('Paired FUB confirmation', () => {
         preview={{
           customerName: 'Taylor Client',
           selectedAgentName: 'Manual Agent',
+          fubAssigneeName: 'Kristen Truong',
           selectionSource: 'manual',
           mappingState: 'ready',
           existingPersonId: 38620,
@@ -27,6 +28,7 @@ describe('Paired FUB confirmation', () => {
 
     expect(screen.getByText('Taylor Client')).toBeVisible();
     expect(screen.getByText('Manual Agent')).toBeVisible();
+    expect(screen.getByText('Kristen Truong')).toBeVisible();
     expect(screen.getByText('Manual override')).toBeVisible();
     expect(screen.getByText('Existing FUB customer 38620 will be preserved.')).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Pair and send to FUB' }));

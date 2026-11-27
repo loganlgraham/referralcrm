@@ -9,6 +9,20 @@ export type VerifiedAgentMapping =
   | { state: 'missing' }
   | { state: 'ambiguous' };
 
+export const AHA_OOS_FUB_ASSIGNEE = 'Kristen Truong';
+export const AHA_OOS_FUB_TAG = 'OOS Referral';
+
+/** Resolve the coordinator in the verified account; never fall back to the paired agent. */
+export function resolveOosFubMapping(users: readonly { id: number; name: string }[]): VerifiedAgentMapping {
+  const matches = users.filter((user) =>
+    user.name.trim().replace(/\s+/g, ' ').toLowerCase() === AHA_OOS_FUB_ASSIGNEE.toLowerCase()
+    && Number.isSafeInteger(user.id) && user.id > 0,
+  );
+  if (matches.length === 0) return { state: 'missing' };
+  if (matches.length !== 1) return { state: 'ambiguous' };
+  return { state: 'ready', fubUserId: matches[0].id };
+}
+
 export type IntakeFieldSource = {
   source?: string | null;
   loanFileNumber?: string | null;

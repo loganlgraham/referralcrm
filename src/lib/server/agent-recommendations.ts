@@ -65,21 +65,24 @@ export async function buildAgentRecommendations(input: {
   const storedZips = [input.referral.lookingInZip, ...(input.referral.lookingInZips ?? [])]
     .filter((zip): zip is string => typeof zip === 'string' && ZIP.test(zip.trim()))
     .map((zip) => zip.trim());
-  const zips = input.zipOverride ?? Array.from(new Set(storedZips)).slice(0, MAX_ZIPS);
+  const requestedZips = input.zipOverride ?? Array.from(new Set(storedZips)).slice(0, MAX_ZIPS);
   const mcId = input.mcOverride === undefined ? idOf(input.referral.lender) : input.mcOverride;
   const storedBucket = input.referral.ahaBucket;
   const bucket: 'AHA' | 'AHA_OOS' | null = storedBucket === 'AHA' || storedBucket === 'AHA_OOS' ? storedBucket : null;
+  // The AHA channel uses the entire AHA pool and no geographic scoring.
+  const zips = bucket === 'AHA' ? [] : requestedZips;
 
   if (input.referral.org !== 'AHA') return emptyRecommendationResponse('not_applicable', version);
 
   const [agentDocs, mcDoc] = await Promise.all([
     bucket
-      ? Agent.find({ ahaDesignation: bucket }).select('name active ahaDesignation zipCoverage').lean<{
+      ? Agent.find({ ahaDesignation: bucket }).select('name active ahaDesignation zipCoverage statesLicensed').lean<{
           _id: Types.ObjectId;
           name?: string;
           active?: boolean;
           ahaDesignation?: string | null;
           zipCoverage?: string[];
+          statesLicensed?: string[];
         }[]>()
       : Promise.resolve([]),
     mcId ? LenderMC.findById(mcId).select('name').lean<{ name?: string } | null>() : Promise.resolve(null),
@@ -90,9 +93,32 @@ export async function buildAgentRecommendations(input: {
     active: doc.active !== false,
     ahaDesignation: doc.ahaDesignation ?? null,
     coveredZips: Array.from(new Set((doc.zipCoverage ?? []).map((zip) => String(zip).trim()))),
+    statesLicensed: doc.statesLicensed ?? [],
   }));
   const radiusMiles = bucket === 'AHA_OOS' ? AGENT_RECOMMENDATION_POLICY.nearbyZipMiles : null;
   const nearbyZips = radiusMiles === null ? [] : zipsWithinMiles(zips, radiusMiles);
+  if (bucket === 'AHA_OOS' && nearbyZips.length > 0 && candidates.length > 0) {
+    const closedZips = await Payment.aggregate<{ _id: Types.ObjectId; zips: string[] }>([
+      { $match: {
+        status: { $in: ['closed', 'payment_sent', 'paid'] },
+        propertyPostalCode: { $in: nearbyZips },
+        agentAttribution: { $ne: 'OUTSIDE_AGENT' },
+        usedAssignedAgent: { $ne: false },
+        referralId: { $ne: input.referral._id },
+      } },
+      { $lookup: { from: 'referrals', localField: 'referralId', foreignField: '_id', as: 'referral' } },
+      { $unwind: '$referral' },
+      { $match: { 'referral.deletedAt': null } },
+      { $set: { creditedAgentId: { $ifNull: ['$agentId', { $ifNull: [
+        { $cond: [{ $eq: ['$side', 'sell'] }, '$referral.sellSideAgent', '$referral.buySideAgent'] },
+        '$referral.assignedAgent',
+      ] }] } } },
+      { $match: { creditedAgentId: { $in: candidates.map((agent) => new Types.ObjectId(agent.id)) } } },
+      { $group: { _id: '$creditedAgentId', zips: { $addToSet: '$propertyPostalCode' } } },
+    ]);
+    const byAgent = new Map(closedZips.map((row) => [String(row._id), row.zips]));
+    for (const candidate of candidates) candidate.closedDealZips = byAgent.get(candidate.id) ?? [];
+  }
   const eligibility = selectEligibleAgents({ org: input.referral.org ?? null, bucket, zips, nearbyZips, agents: candidates });
   const inputs = { mcId: mcDoc ? mcId : null, mcName: mcDoc?.name ?? null, zips, bucket, radiusMiles };
   const effectiveMcId = mcDoc ? mcId : null;
@@ -204,7 +230,7 @@ export async function buildAgentRecommendations(input: {
     ? await readFubActivity({ referralId, eligibleIds: eligibleIdList, permitted: input.fubPermitted })
     : PAUSED_FUB;
   const fub = fubAdjustments(eligibleIdList, fubInput.policy);
-  const result = rankAgents({ candidates: eligibility.eligible, outcomes, activeCounts, mcId: effectiveMcId, zips, nearbyZips, fub });
+  const result = rankAgents({ candidates: eligibility.eligible, outcomes, activeCounts, mcId: effectiveMcId, zips, nearbyZips, prioritizeGeography: bucket === 'AHA_OOS', fub });
   const adjustedAgents = result.ranked.filter((entry) => entry.fub.state === 'applied').length;
 
   return {

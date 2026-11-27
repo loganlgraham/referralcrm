@@ -581,15 +581,18 @@ describe('Referral status route table-driven deal status sync', () => {
     expect(sendOnPair).toHaveBeenCalledWith('ref-1', session, agentId);
   });
 
-  it('keeps an OOS import on its mailbox path when the assigned agent is local', async () => {
+  it('sends an OOS import after saving Paired even when the assigned agent is local', async () => {
     const doc = makeReferralDoc();
-    Object.assign(doc, { org: 'AHA', clientType: 'Buyer', inboundEmail: { channel: 'AHA_OOS' } });
-    mockedGetCurrentSession.mockResolvedValueOnce({ user: { id: 'admin-1', role: 'admin' } } as any);
+    const agentId = 'cccccccccccccccccccccccc';
+    const session = { user: { id: 'admin-1', role: 'admin' } };
+    Object.assign(doc, { org: 'AHA', clientType: 'Buyer', inboundEmail: { channel: 'AHA_OOS' }, buySideAgent: { _id: agentId, ahaDesignation: 'AHA' } });
+    mockedGetCurrentSession.mockResolvedValueOnce(session as any);
     mockedReferralFindById.mockReturnValue(doc);
     mockPaymentFindOneChain(null);
+    (sendOnPair as jest.Mock).mockResolvedValueOnce({ sent: true, message: 'Paired and sent to Follow Up Boss.' });
     const response: any = await postHandler(makeRequest({ status: 'Paired' }), { params: { id: 'ref-1' } });
-    expect(response.body.status).toBe('Paired');
-    expect(sendOnPair).not.toHaveBeenCalled();
+    expect(response.body).toMatchObject({ status: 'Paired', pairedHandoff: { sent: true } });
+    expect(sendOnPair).toHaveBeenCalledWith('ref-1', session, agentId);
   });
 
   it('does not notify admins when an admin persists a referral status change', async () => {

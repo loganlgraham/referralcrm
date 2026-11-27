@@ -114,6 +114,16 @@ function successfulClient(
 }
 
 describe('mock FUB approval orchestrator', () => {
+  it('includes the OOS tag in the journaled assignment and does not repeat it on retry', async () => {
+    const repository = createRepository();
+    const client = successfulClient();
+    const input = { ...approval, tags: ['OOS Referral'] };
+    expect((await runMockFubApproval(input, { repository, client })).status).toBe('success');
+    expect((await runMockFubApproval(input, { repository, client })).status).toBe('success');
+    expect(client.assignAgent).toHaveBeenCalledWith(expect.objectContaining({ fubUserId: approval.fubUserId, tags: ['OOS Referral'] }));
+    expect(client.assignAgent).toHaveBeenCalledTimes(1);
+  });
+
   it('does not duplicate completed operations on repeated approval', async () => {
     const repository = createRepository();
     const client = successfulClient();

@@ -60,7 +60,7 @@ function worked(agentId: string, count: number, wins: number, lenderId: string =
 }
 
 function agent(id: string, overrides: Partial<CandidateAgent> = {}): CandidateAgent {
-  return { id, name: `Agent ${id.toUpperCase()}`, active: true, ahaDesignation: 'AHA', coveredZips: [], ...overrides };
+  return { id, name: `Agent ${id.toUpperCase()}`, active: true, ahaDesignation: 'AHA', coveredZips: [], statesLicensed: ['CO'], ...overrides };
 }
 
 const noFub = (ids: string[]) => new Map<string, FubAdjustment>(ids.map((id) => [id, { state: 'neutral', reason: 'paused' }]));
@@ -109,6 +109,39 @@ describe('eligibility', () => {
 
   it('keeps unknown ZIPs to an exact match', () => {
     expect(zipsWithinMiles(['00000', 'bad'])).toEqual(['00000']);
+    expect(selectEligibleAgents({ org: 'AHA', bucket: 'AHA_OOS', zips: ['00000'], nearbyZips: ['00000'], agents: [agent('unknown', { ahaDesignation: 'AHA_OOS', coveredZips: ['00000'] })] }).eligible).toEqual([]);
+  });
+
+  it('excludes Adam and Kristen from AHA even with matching coverage and ignores missing ZIPs', () => {
+    const agents = [agent('adam', { name: '  ADAM   PIPPIN ' }), agent('kristen', { name: 'Kristen Truong' }), agent('allowed')];
+    expect(selectEligibleAgents({ org: 'AHA', bucket: 'AHA', zips: [], nearbyZips: [], agents }).eligible.map((entry) => entry.id)).toEqual(['allowed']);
+  });
+
+  it('accepts closed-deal ZIPs without coverage and requires a destination license', () => {
+    const agents = [
+      agent('closed', { ahaDesignation: 'AHA_OOS', closedDealZips: ['80107'], statesLicensed: [' Colorado '] }),
+      agent('unlicensed', { ahaDesignation: 'AHA_OOS', closedDealZips: ['80107'], statesLicensed: ['CA'] }),
+      agent('missing', { ahaDesignation: 'AHA_OOS', coveredZips: ['80107'], statesLicensed: [] }),
+    ];
+    expect(selectEligibleAgents({ org: 'AHA', bucket: 'AHA_OOS', zips: ['80107'], nearbyZips: zipsWithinMiles(['80107']), agents }).eligible.map((entry) => entry.id)).toEqual(['closed']);
+  });
+
+  it('does not use a license for another destination to qualify an unlicensed ZIP match', () => {
+    const agents = [agent('wrong-state', { ahaDesignation: 'AHA_OOS', coveredZips: ['80107'], statesLicensed: ['IL'] })];
+    expect(selectEligibleAgents({ org: 'AHA', bucket: 'AHA_OOS', zips: ['80107', '60601'], nearbyZips: zipsWithinMiles(['80107', '60601']), agents }).eligible).toEqual([]);
+  });
+
+  it('ranks exact closed deals, exact coverage, nearby closed deals, then nearby coverage before other criteria', () => {
+    const candidates = [
+      agent('near-coverage', { ahaDesignation: 'AHA_OOS', coveredZips: ['80116'] }),
+      agent('near-closed', { ahaDesignation: 'AHA_OOS', closedDealZips: ['80116'] }),
+      agent('exact-coverage', { ahaDesignation: 'AHA_OOS', coveredZips: ['80107'] }),
+      agent('exact-closed', { ahaDesignation: 'AHA_OOS', closedDealZips: ['80107'] }),
+    ];
+    const result = rankAgents({ candidates, outcomes: deriveAgentOutcomes([...worked('near-coverage', 20, 20), ...worked('exact-closed', 10, 0)], NOW), activeCounts: new Map(), mcId: MC, zips: ['80107'], nearbyZips: zipsWithinMiles(['80107']), prioritizeGeography: true, fub: noFub(candidates.map((entry) => entry.id)) });
+    expect(result.ranked.map((entry) => entry.agentId)).toEqual(['exact-closed', 'exact-coverage', 'near-closed', 'near-coverage']);
+    expect(result.ranked[0].reasons[0]).toBe('Closed a deal in a looking-in ZIP');
+    expect(result.ranked[3].score).toBeGreaterThan(result.ranked[0].score);
   });
 
   it('does not apply to AFC referrals or referrals without a bucket', () => {

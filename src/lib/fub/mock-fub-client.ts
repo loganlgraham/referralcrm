@@ -10,6 +10,7 @@ export type MockFubPersonState = {
   email: string;
   phone: string;
   assignedUserId: number | null;
+  tags?: string[];
   fields: Record<string, string>;
   notes: Array<MockFubNoteInput & { createdAt: Date }>;
   operationKeys: string[];
@@ -124,15 +125,17 @@ export function createMockFubClient(input: {
         return {
           previousUserId: person.assignedUserId,
           assignedUserId: person.assignedUserId ?? operation.fubUserId,
+          tags: person.tags ?? [],
         };
       }
       await notify(input.behavior, 'assign_agent', 'before', operation.operationKey);
       const previousUserId = person.assignedUserId;
       person.assignedUserId = operation.fubUserId;
+      person.tags = Array.from(new Set([...(person.tags ?? []), ...(operation.tags ?? [])]));
       person.operationKeys.push(operation.operationKey);
       await input.repository.save(person);
       await notify(input.behavior, 'assign_agent', 'after', operation.operationKey);
-      return { previousUserId, assignedUserId: operation.fubUserId };
+      return { previousUserId, assignedUserId: operation.fubUserId, tags: person.tags };
     },
 
     async populateFields(operation) {

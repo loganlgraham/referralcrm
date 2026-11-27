@@ -3,9 +3,16 @@ import {
   buildFubIntakeSummary,
   mergeEmptyFubFields,
   resolveVerifiedAgentMapping,
+  resolveOosFubMapping,
 } from '@/lib/fub/fub-send-policy';
 
 describe('mock FUB send policy', () => {
+  it('resolves only Kristen for OOS and rejects missing, invalid, or ambiguous matches', () => {
+    expect(resolveOosFubMapping([{ id: 10, name: 'Other Agent' }, { id: 72, name: ' KRISTEN  TRUONG ' }])).toEqual({ state: 'ready', fubUserId: 72 });
+    expect(resolveOosFubMapping([{ id: 10, name: 'Other Agent' }])).toEqual({ state: 'missing' });
+    expect(resolveOosFubMapping([{ id: 0, name: 'Kristen Truong' }])).toEqual({ state: 'missing' });
+    expect(resolveOosFubMapping([{ id: 71, name: 'Kristen Truong' }, { id: 72, name: 'Kristen Truong' }])).toEqual({ state: 'ambiguous' });
+  });
   it('requires one audited mapping that is not claimed by another agent', () => {
     const ready = resolveVerifiedAgentMapping(
       [

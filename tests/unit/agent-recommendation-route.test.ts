@@ -76,6 +76,8 @@ describe('agent recommendation route', () => {
     [{ origin: 'mc', lookingInZips: ['60601', '80014'] }, 'AHA', 'AHA_OOS'],
     [{ origin: 'admin' }, 'AHA', null],
     [{ inboundEmail: { channel: 'AHA_OOS' }, lookingInZip: '80014' }, 'AHA', 'AHA_OOS'],
+    [{ inboundEmail: { channel: 'AHA' }, lookingInZip: '60601' }, 'AHA', 'AHA'],
+    [{ inboundEmail: { channel: 'AHA' } }, 'AHA', 'AHA'],
     [{ assignedAgent: { ahaDesignation: 'AHA' }, lookingInZip: '60601' }, 'AHA', 'AHA'],
     [{ assignedAgent: { ahaDesignation: 'AGIT' }, lookingInZip: '80014' }, 'AFC', null],
     [{ origin: 'agent', lookingInZip: '80014' }, 'AFC', null],

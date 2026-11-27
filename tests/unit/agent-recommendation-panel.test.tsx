@@ -158,8 +158,9 @@ describe('agent recommendation panel', () => {
     global.fetch = jest.fn(() => respond({ ...body(['Ana', 'Ben']), inputs: { mcId: null, mcName: null, zips: ['80107'], bucket: 'AHA_OOS', radiusMiles: 15 } })) as typeof fetch;
     render(<AgentRecommendationPanel referralId="r1" mcId={null} zips={['80107']} />);
     await flush();
-    expect(await screen.findByText(/covering an area within 15 miles of 80107/)).toBeInTheDocument();
-    expect(screen.getByText(/ZIP success uses only past referrals in these exact ZIPs/)).toBeInTheDocument();
+    expect(await screen.findByText(/licensed in the destination state with closed-deal or coverage ZIPs within 15 miles of 80107/)).toBeInTheDocument();
+    expect(screen.getByText(/Exact closed-deal ZIP matches come first/)).toBeInTheDocument();
+    expect(screen.getByText(/ZIP success uses only past referrals with documented deal ZIPs matching these exact ZIPs/)).toBeInTheDocument();
   });
 
   it('refreshes when the MC or ZIP changes', async () => {

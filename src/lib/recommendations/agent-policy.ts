@@ -1,25 +1,9 @@
 import { LOST_REASON_COUNTS_AGAINST_AGENT, LOST_REASON_VALUES, type LostReason } from '@/constants/referrals';
+import { zipsWithinMiles } from '@/lib/recommendations/nearby-zips';
+import { normalizeStateInput, zipToState } from '@/utils/location';
 
-/**
- * Draft, preview-only policy. Nothing here assigns an agent, writes a score,
- * or feeds an official ranking.
- */
-export const AGENT_RECOMMENDATION_POLICY = {
-  version: 'draft-2026-11-19c',
-  officialScoring: false,
-  weights: { mc: 0.3, overall: 0.2, contract: 0.15, workload: 0.15, zip: 0.1, usedAfc: 0.1 },
-  windowMonths: 24,
-  /** Pseudo-referrals pulling a small record toward the pool rate. */
-  priorStrength: 10,
-  /** Resolved referrals needed before history is treated as adequate. */
-  minResolvedForEvidence: 5,
-  /** Out-of-state agents qualify when a covered ZIP is this close to a referral ZIP. */
-  nearbyZipMiles: 15,
-  fubContributionEnabled: false,
-  fubMaxAdjustment: 5,
-  fubMinAssignedPeople: 5,
-  fubMinComparableAgents: 3,
-} as const;
+import { AGENT_RECOMMENDATION_POLICY, DRAFT_WORKLOAD_STAGE_WEIGHTS } from '@/lib/recommendations/agent-policy-config';
+export { AGENT_RECOMMENDATION_POLICY, DRAFT_WORKLOAD_STAGE_WEIGHTS } from '@/lib/recommendations/agent-policy-config';
 
 export type FactorKey = keyof typeof AGENT_RECOMMENDATION_POLICY.weights;
 export type RateFactorKey = Exclude<FactorKey, 'workload'>;
@@ -28,12 +12,6 @@ export type EvidenceStrength = 'Strong' | 'Moderate' | 'Limited';
 
 const CLOSED_PAYMENT_STATUSES = new Set(['closed', 'payment_sent', 'paid']);
 const ZIP = /^\d{5}$/u;
-export const DRAFT_WORKLOAD_STAGE_WEIGHTS = {
-  'New Lead': 1,
-  Paired: 2,
-  'In Communication': 3,
-  'Active Lead': 4,
-} as const;
 export type DraftWorkloadStage = keyof typeof DRAFT_WORKLOAD_STAGE_WEIGHTS;
 export type WorkloadStageCounts = Record<DraftWorkloadStage, number>;
 
@@ -287,7 +265,30 @@ export type CandidateAgent = {
   active: boolean;
   ahaDesignation: string | null;
   coveredZips: string[];
+  statesLicensed?: string[];
+  closedDealZips?: string[];
 };
+
+const EXCLUDED_AHA_NAMES = new Set(['adam pippin', 'kristen truong']);
+
+/** Only search areas in a recorded licensed state can qualify an OOS agent. */
+export function agentGeographyMatch(agent: CandidateAgent, zips: readonly string[], nearbyZips?: readonly string[]): number {
+  const licensed = new Set((agent.statesLicensed ?? []).map((state) => normalizeStateInput(state.trim())).filter(Boolean));
+  const destinations = zips.filter((zip) => {
+    const state = zipToState(zip);
+    return state !== null && licensed.has(state);
+  });
+  if (destinations.length === 0) return 4;
+  const exact = new Set(destinations);
+  if (agent.closedDealZips?.some((zip) => exact.has(zip))) return 0;
+  if (agent.coveredZips.some((zip) => exact.has(zip))) return 1;
+  const nearby = new Set(destinations.length === zips.length && nearbyZips
+    ? nearbyZips
+    : zipsWithinMiles(destinations, AGENT_RECOMMENDATION_POLICY.nearbyZipMiles));
+  if (agent.closedDealZips?.some((zip) => nearby.has(zip))) return 2;
+  if (agent.coveredZips.some((zip) => nearby.has(zip))) return 3;
+  return 4;
+}
 
 export type EligibilityResult = {
   eligible: CandidateAgent[];
@@ -297,8 +298,8 @@ export type EligibilityResult = {
 
 /**
  * AHA referrals use active agents from the same bucket. Out-of-state agents
- * must cover a ZIP near the referral (the Suggest Agent rule); local AHA
- * agents rarely list ZIPs, so coverage is not required for them.
+ * need closed-deal or coverage ZIP evidence and a destination-state license.
+ * Local AHA agents do not need ZIP coverage.
  */
 export function selectEligibleAgents(input: {
   org: string | null;
@@ -311,7 +312,6 @@ export function selectEligibleAgents(input: {
   if (input.org !== 'AHA') return { eligible: [], reason: 'not_aha', excluded };
   if (input.bucket !== 'AHA' && input.bucket !== 'AHA_OOS') return { eligible: [], reason: 'no_bucket', excluded };
   if (input.bucket === 'AHA_OOS' && input.zips.length === 0) return { eligible: [], reason: 'no_zip', excluded };
-  const nearby = new Set([...input.zips, ...input.nearbyZips]);
   const eligible: CandidateAgent[] = [];
   for (const agent of input.agents) {
     if (!agent.active) {
@@ -322,7 +322,8 @@ export function selectEligibleAgents(input: {
       excluded.otherNetwork += 1;
       continue;
     }
-    if (input.bucket === 'AHA_OOS' && !agent.coveredZips.some((zip) => nearby.has(zip))) {
+    if (input.bucket === 'AHA' && EXCLUDED_AHA_NAMES.has(agent.name.trim().replace(/\s+/g, ' ').toLowerCase())) continue;
+    if (input.bucket === 'AHA_OOS' && agentGeographyMatch(agent, input.zips, input.nearbyZips) === 4) {
       excluded.outsideRadius += 1;
       continue;
     }
@@ -519,6 +520,7 @@ export function rankAgents(input: {
   mcId: string | null;
   zips: readonly string[];
   nearbyZips?: readonly string[];
+  prioritizeGeography?: boolean;
   fub: ReadonlyMap<string, FubAdjustment>;
 }): { ranked: AgentRecommendation[]; baselines: Record<RateFactorKey, number>; workloadMedian: number; provisional: boolean } {
   const target = new Set(input.zips);
@@ -627,10 +629,19 @@ export function rankAgents(input: {
     } satisfies AgentRecommendation;
   });
 
-  scored.sort(compareRecommendations);
+  const geography = new Map(input.candidates.map((agent) => [agent.id, input.prioritizeGeography ? agentGeographyMatch(agent, input.zips, input.nearbyZips) : 0]));
+  scored.sort((a, b) => (geography.get(a.agentId) ?? 0) - (geography.get(b.agentId) ?? 0) || compareRecommendations(a, b));
   scored.forEach((entry, index) => {
     entry.rank = index + 1;
     entry.reasons = buildReasons(entry, input.zips);
+    if (input.prioritizeGeography) {
+      const match = geography.get(entry.agentId);
+      const reason = match === 0 ? 'Closed a deal in a looking-in ZIP'
+        : match === 1 ? 'Lists a looking-in ZIP in coverage'
+          : match === 2 ? 'Closed a deal within 15 miles of a looking-in ZIP'
+            : 'Lists coverage within 15 miles of a looking-in ZIP';
+      entry.reasons = [reason, ...entry.reasons].slice(0, 3);
+    }
   });
   const provisional = scored.length > 0 && scored.every((entry) => !entry.adequateHistory);
   return { ranked: scored, baselines, workloadMedian, provisional };

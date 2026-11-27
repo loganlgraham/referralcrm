@@ -25,6 +25,7 @@ export type MockFubApprovalInput = {
   selectedAgentName: string;
   selectionSource: 'auto' | 'manual';
   fubUserId: number;
+  tags?: string[];
   existingPersonId: number | null;
   intakeFields: Record<string, string>;
   note: MockFubNoteInput;
@@ -39,8 +40,9 @@ export type MockFubClient = {
   assignAgent(input: {
     personId: number;
     fubUserId: number;
+    tags?: string[];
     operationKey: string;
-  }): Promise<{ previousUserId: number | null; assignedUserId: number }>;
+  }): Promise<{ previousUserId: number | null; assignedUserId: number; tags?: string[] }>;
   populateFields(input: {
     personId: number;
     fields: Record<string, string>;
@@ -130,6 +132,7 @@ async function executeStep(
       return client.assignAgent({
         personId: requirePersonId(attempt),
         fubUserId: input.fubUserId,
+        ...(input.tags?.length ? { tags: input.tags } : {}),
         operationKey: step.operationKey,
       });
     case 'populate_fields':

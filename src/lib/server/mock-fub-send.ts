@@ -1,5 +1,5 @@
 import { referralWorkflowRoute, routingAgent } from '@/lib/referral-routing';
-import { createLiveFubClient, liveFubEnabled, readIntakeForHandoff } from '@/lib/server/live-fub-handoff';
+import { createLiveFubClient, getFubAgentChoices, liveFubEnabled, readIntakeForHandoff } from '@/lib/server/live-fub-handoff';
 import { createHash } from 'node:crypto';
 
 import { Types } from 'mongoose';
@@ -15,6 +15,9 @@ import { createMockFubClient, type MockFubBehavior } from '@/lib/fub/mock-fub-cl
 import {
   buildFubIntakeFields,
   buildFubIntakeSummary,
+  AHA_OOS_FUB_ASSIGNEE,
+  AHA_OOS_FUB_TAG,
+  resolveOosFubMapping,
   resolveVerifiedAgentMapping,
 } from '@/lib/fub/fub-send-policy';
 import {
@@ -42,6 +45,7 @@ export type MockFubMappingState = 'ready' | 'missing' | 'ambiguous';
 export type MockFubApprovalPreview = {
   customerName: string;
   selectedAgentName: string;
+  fubAssigneeName?: string;
   selectionSource: 'auto' | 'manual';
   mappingState: MockFubMappingState;
   existingPersonId: number | null;
@@ -57,7 +61,6 @@ type MockFubServiceError = {
     | 'not_admin'
     | 'not_found'
     | 'not_aha'
-    | 'aha_oos'
     | 'agent_missing'
     | 'mapping_missing'
     | 'mapping_ambiguous'
@@ -85,6 +88,8 @@ type LoadedApproval = {
   };
   selectedAgentId: string;
   selectedAgentName: string;
+  fubAssigneeName: string;
+  tags: string[];
   selectionSource: 'auto' | 'manual';
   fubUserId: number | null;
   mappingState: MockFubMappingState;
@@ -158,10 +163,7 @@ async function loadApproval(
     return serviceError(404, 'not_found', 'Referral not found.');
   }
   const route = referralWorkflowRoute(referral);
-  if (route === 'AHA_OOS') {
-    return serviceError(400, 'aha_oos', 'This referral follows the AHA out-of-state path.');
-  }
-  if (route !== 'AHA') {
+  if (!route) {
     return serviceError(400, 'not_aha', 'This referral has no AHA handoff.');
   }
   const selectedAgent = routingAgent(referral);
@@ -170,7 +172,7 @@ async function loadApproval(
     return serviceError(409, 'agent_missing', 'Select an agent before sending to FUB.');
   }
 
-  const links = await IntelligenceAgentLink.find({
+  const links = route === 'AHA_OOS' ? [] : await IntelligenceAgentLink.find({
     organization: 'AHA',
     fubAccountId: VERIFIED_FUB_ACCOUNT_ID,
   })
@@ -185,7 +187,9 @@ async function loadApproval(
         }>;
       }>
     >();
-  const mapping = resolveVerifiedAgentMapping(
+  const mapping = route === 'AHA_OOS'
+    ? resolveOosFubMapping(liveFubEnabled() ? await getFubAgentChoices() : [])
+    : resolveVerifiedAgentMapping(
     links.map((link) => {
       const latestAudit = link.audit?.at(-1);
       return {
@@ -222,6 +226,8 @@ async function loadApproval(
     },
     selectedAgentId,
     selectedAgentName: populatedName(selectedAgent),
+    fubAssigneeName: route === 'AHA_OOS' ? AHA_OOS_FUB_ASSIGNEE : populatedName(selectedAgent),
+    tags: route === 'AHA_OOS' ? [AHA_OOS_FUB_TAG] : [],
     selectionSource: referral.agentSelectionSource === 'manual' ? 'manual' : 'auto',
     fubUserId: mapping.state === 'ready' ? mapping.fubUserId : null,
     mappingState: mapping.state,
@@ -258,6 +264,7 @@ function publicPreview(loaded: LoadedApproval): MockFubApprovalPreview {
   return {
     customerName: loaded.customer.name,
     selectedAgentName: loaded.selectedAgentName,
+    fubAssigneeName: loaded.fubAssigneeName,
     selectionSource: loaded.selectionSource,
     mappingState: loaded.mappingState,
     existingPersonId: loaded.existingPersonId,
@@ -275,6 +282,7 @@ function approvalFingerprint(loaded: LoadedApproval): string {
         customerPhone: loaded.customer.phone,
         selectedAgentId: loaded.selectedAgentId,
         fubUserId: loaded.fubUserId,
+        tags: loaded.tags,
         existingPersonId: loaded.existingPersonId,
       }),
     )
@@ -378,14 +386,14 @@ export async function approveMockFubSend(input: {
     return serviceError(
       409,
       'mapping_ambiguous',
-      'The selected agent mapping is ambiguous and must be corrected.',
+      `The Follow Up Boss account for ${loaded.fubAssigneeName} is ambiguous and must be corrected.`,
     );
   }
   if (loaded.mappingState === 'missing' || loaded.fubUserId === null) {
     return serviceError(
       409,
       'mapping_missing',
-      'The selected agent needs a verified FUB user mapping.',
+      `A verified Follow Up Boss account for ${loaded.fubAssigneeName} is required.`,
     );
   }
   const live = liveFubEnabled();
@@ -456,6 +464,7 @@ export async function approveMockFubSend(input: {
         selectedAgentName: loaded.selectedAgentName,
         selectionSource: loaded.selectionSource,
         fubUserId: loaded.fubUserId,
+        tags: loaded.tags,
         existingPersonId: loaded.existingPersonId,
         intakeFields: loaded.intakeFields,
         note,
@@ -518,7 +527,7 @@ export async function sendOnPair(referralId: string, session: Session, expectedA
     const preview = await readMockFubApprovalPreview(input);
     if (!preview.ok) return { sent: false, message: 'Paired saved. ' + preview.message };
     if (preview.preview.mappingState !== 'ready') {
-      return { sent: false, message: 'Paired saved. Confirm the assigned agent’s Follow Up Boss link, then retry the send.' };
+      return { sent: false, message: `Paired saved. Confirm the Follow Up Boss account for ${preview.preview.fubAssigneeName ?? preview.preview.selectedAgentName}, then retry the send.` };
     }
     const send = await approveMockFubSend({ ...input, expectedAgentId, approvalKey: preview.preview.approvalKey });
     if (!send.ok) return { sent: false, message: 'Paired saved. ' + send.message };

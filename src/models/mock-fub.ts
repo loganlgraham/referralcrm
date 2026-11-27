@@ -89,6 +89,7 @@ const mockFubPersonSchema = new Schema(
     email: { type: String, default: '' },
     phone: { type: String, default: '' },
     assignedUserId: { type: Number, default: null },
+    tags: { type: [String], default: [] },
     fields: { type: Schema.Types.Mixed, default: {} },
     notes: { type: [mockFubNoteSchema], default: [] },
     operationKeys: { type: [String], default: [] },

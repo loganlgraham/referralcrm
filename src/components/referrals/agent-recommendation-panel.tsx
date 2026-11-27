@@ -6,7 +6,8 @@ import type { Contact } from '@/components/referrals/contact-assignment';
 import { toast } from 'sonner';
 import { buttonClasses } from '@/components/ui/button';
 import { metaPillClasses, railCardClasses, railTitleClasses, railTextButtonClasses } from '@/components/referrals/referral-rail';
-import { AGENT_RECOMMENDATION_POLICY, DRAFT_WORKLOAD_STAGE_WEIGHTS, type AgentRecommendation, type EvidenceStrength } from '@/lib/recommendations/agent-policy';
+import { AGENT_RECOMMENDATION_POLICY, DRAFT_WORKLOAD_STAGE_WEIGHTS } from '@/lib/recommendations/agent-policy-config';
+import type { AgentRecommendation, EvidenceStrength } from '@/lib/recommendations/agent-policy';
 import type { AgentRecommendationResponse, RecommendationFubState } from '@/lib/recommendations/agent-recommendation-response';
 
 const REFRESH_DELAY_MS = 250;
@@ -295,7 +296,7 @@ function emptyMessage(state: Exclude<AgentRecommendationResponse['state'], 'read
     case 'needs_zip':
       return 'Add a ZIP to see out-of-state suggestions.';
     case 'no_candidates':
-      return `No active agents in this bucket cover these ZIPs or anywhere within ${AGENT_RECOMMENDATION_POLICY.nearbyZipMiles} miles.`;
+      return 'No eligible agents match this referral. Out-of-state agents need a recorded destination-state license and a matching closed-deal or coverage ZIP.';
     case 'denied':
     case 'not_applicable':
       return '';
@@ -361,7 +362,7 @@ function comparisonScope(body: AgentRecommendationResponse, windowStart: string)
   const area = body.inputs.zips.length === 0
     ? ''
     : body.inputs.radiusMiles !== null
-      ? ` covering an area within ${body.inputs.radiusMiles} miles of ${body.inputs.zips.join(', ')}`
+      ? ` licensed in the destination state with closed-deal or coverage ZIPs within ${body.inputs.radiusMiles} miles of ${body.inputs.zips.join(', ')}`
       : '';
   return `Compared ${body.totals.eligible} eligible ${pool} agents${area}, using referrals since ${windowStart}${body.inputs.mcName ? `. MC: ${body.inputs.mcName}` : ''}.`;
 }
@@ -378,6 +379,11 @@ function CalculationDetails({ body, shown }: { body: AgentRecommendationResponse
           {`Weights: MC success ${percent(weights.mc)}, overall close rate ${percent(weights.overall)}, contract rate ${percent(weights.contract)}, active workload ${percent(weights.workload)}, ZIP success ${percent(weights.zip)}, financed with AFC ${percent(weights.usedAfc)}. Each part is scored 0–100, where the group average is 50.`}
         </p>
         <p className="break-words">{comparisonScope(body, windowStart)}</p>
+        <p className="break-words">
+          {body.inputs.bucket === 'AHA_OOS'
+            ? 'Exact closed-deal ZIP matches come first, then exact coverage, nearby closed deals, and nearby coverage. The other pairing criteria rank agents within each group.'
+            : 'Looking-in ZIPs do not affect AHA suggestions. Adam Pippin and Kristen Truong are excluded.'}
+        </p>
         <div className="max-w-full overflow-x-auto">
           <table className="w-full min-w-[300px] text-left text-xs">
             <thead>
@@ -432,8 +438,8 @@ function CalculationDetails({ body, shown }: { body: AgentRecommendationResponse
           <li>AFC financing counts only answers given on the closing form. Older closings and defaulted answers are unknown and left out.</li>
           <li>A closing or contract goes to the agent on the deal record. Agents who were reassigned away do not get the result.</li>
           {body.inputs.bucket === 'AHA'
-            ? <li>Local AHA agents rarely list ZIP coverage, so coverage is not required for them.</li>
-            : <li>{`Out-of-state agents must cover a ZIP within ${AGENT_RECOMMENDATION_POLICY.nearbyZipMiles} miles. ZIP success uses only past referrals in these exact ZIPs.`}</li>}
+            ? <li>AHA suggestions use the entire active AHA pool, except Adam Pippin and Kristen Truong. ZIP success is neutral for everyone.</li>
+            : <li>{`Out-of-state agents need a recorded license in the destination state and a closed deal or coverage within ${AGENT_RECOMMENDATION_POLICY.nearbyZipMiles} miles. ZIP success uses only past referrals with documented deal ZIPs matching these exact ZIPs.`}</li>}
         </ul>
       </div>
     </details>

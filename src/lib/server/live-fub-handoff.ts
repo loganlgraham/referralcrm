@@ -92,7 +92,13 @@ export function createLiveFubClient(fubUserId: number): MockFubClient {
   return {
     resolveCustomer: (input) =>
       perform('resolve_customer', { ...input, fubUserId }),
-    assignAgent: (input) => perform('assign_agent', input),
+    assignAgent: async (input) => {
+      const result = await perform<{ previousUserId: number | null; assignedUserId: number; tags?: string[] }>('assign_agent', input);
+      if (input.tags?.some((tag) => !result.tags?.includes(tag))) {
+        throw new MockFubOperationError('definitive', 'fub_tags_unconfirmed', 'Follow Up Boss did not confirm the referral tag. Retry the send.');
+      }
+      return result;
+    },
     populateFields: (input) => perform('populate_fields', input),
     addNote: (input) => perform('add_note', input),
   };

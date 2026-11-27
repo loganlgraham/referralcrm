@@ -72,12 +72,16 @@ describe('persisted mock FUB client', () => {
       });
       repository.people[0].fields.referrioSource = 'Keep';
       repository.people[0].assignedUserId = 44;
+      repository.people[0].tags = ['Existing tag'];
 
       const assignment = await client.assignAgent({
         personId: customer.personId,
         fubUserId: 71,
         operationKey: 'assign',
+        tags: ['OOS Referral'],
       });
+      await client.assignAgent({ personId: customer.personId, fubUserId: 71, operationKey: 'assign', tags: ['OOS Referral'] });
+      expect(repository.people[0].tags).toEqual(['Existing tag', 'OOS Referral']);
       const fields = await client.populateFields({
         personId: customer.personId,
         fields: {
@@ -87,7 +91,7 @@ describe('persisted mock FUB client', () => {
         operationKey: 'fields',
       });
 
-      expect(assignment).toEqual({ previousUserId: 44, assignedUserId: 71 });
+      expect(assignment).toEqual({ previousUserId: 44, assignedUserId: 71, tags: ['Existing tag', 'OOS Referral'] });
       expect(fields).toEqual({
         populated: ['referrioLookingInZip'],
         preserved: ['referrioSource'],

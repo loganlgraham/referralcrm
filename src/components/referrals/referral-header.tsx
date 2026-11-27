@@ -756,7 +756,7 @@ export function ReferralHeader({
   const latestSellDealStatusLabel = latestSellDealStatus ?? 'No deals yet';
   const showSplitStatus = isBothClientType && viewerRole === 'admin';
   const pairedFubEnabled =
-    viewerRole === 'admin' && workflowRoute === 'AHA';
+    viewerRole === 'admin' && workflowRoute !== null;
 
   const statusCardMeta = (
     <p className="text-[13px] text-foreground-subtle">
@@ -947,8 +947,11 @@ export function ReferralHeader({
             ) : null}
           />
 
-          {pairedFubEnabled && workflowAgent?.id && (
+          {pairedFubEnabled && workflowRoute === 'AHA' && workflowAgent?.id && (
             <FubAgentMapping key={workflowAgent.id} referralId={String(referral._id)} agentId={workflowAgent.id} agentName={workflowAgent.name || 'selected agent'} />
+          )}
+          {pairedFubEnabled && workflowRoute === 'AHA_OOS' && (
+            <p className="text-xs text-foreground-subtle">Follow Up Boss assignee: Kristen Truong · Tag: OOS Referral</p>
           )}
 
           {viewerRole === 'agent' && status === 'Paired' && (

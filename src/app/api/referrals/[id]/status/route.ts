@@ -939,7 +939,7 @@ export async function POST(request: NextRequest, { params }: Params): Promise<Ne
 
   const pairedHandoff =
     shouldPersistReferralStatus && nextStatus === 'Paired' && sideStatus === 'Paired' &&
-    (referral.clientType !== 'Both' || requestSide === 'buy') && referralWorkflowRoute(referral) === 'AHA'
+    (referral.clientType !== 'Both' || requestSide === 'buy') && referralWorkflowRoute(referral) !== null
       ? await sendOnPair(String(referral._id), session, referralAgentSlotId(routingAgent(referral)) ?? '')
       : null;
 

@@ -182,6 +182,7 @@ function normalizePerson(doc: Record<string, any>): MockFubPersonState {
     phone: String(doc.phone ?? ''),
     assignedUserId:
       typeof doc.assignedUserId === 'number' ? doc.assignedUserId : null,
+    tags: Array.isArray(doc.tags) ? doc.tags.map(String) : [],
     fields:
       doc.fields && typeof doc.fields === 'object'
         ? Object.fromEntries(
@@ -263,7 +264,7 @@ export function createMongooseMockFubPersonRepository(): MockFubPersonRepository
           filter,
           {
             $set: { assignedUserId: person.assignedUserId },
-            $addToSet: { operationKeys: operationKey },
+            $addToSet: { operationKeys: operationKey, tags: { $each: person.tags ?? [] } },
           },
           { new: true },
         ).lean<Record<string, any> | null>();

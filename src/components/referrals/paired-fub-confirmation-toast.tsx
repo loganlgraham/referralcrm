@@ -52,6 +52,12 @@ export function PairedFubConfirmationCard({
             ) : null}
           </dd>
         </div>
+        {preview.fubAssigneeName && preview.fubAssigneeName !== preview.selectedAgentName ? (
+          <div>
+            <dt className="text-xs text-foreground-subtle">Follow Up Boss assignee</dt>
+            <dd className="font-semibold text-foreground">{preview.fubAssigneeName}</dd>
+          </div>
+        ) : null}
       </dl>
       {preview.existingPersonId ? (
         <p className="text-xs leading-4 text-foreground-subtle">

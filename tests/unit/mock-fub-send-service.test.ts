@@ -3,7 +3,7 @@
  */
 
 import { canUseMockFubFixture } from '@/lib/server/fixture-safety';
-import { liveFubEnabled } from '@/lib/server/live-fub-handoff';
+import { liveFubEnabled, getFubAgentChoices, readIntakeForHandoff } from '@/lib/server/live-fub-handoff';
 import { authorizeFubViewer } from '@/lib/server/intelligence-viewer';
 import { runMockFubApproval } from '@/lib/fub/mock-fub-orchestrator';
 import { readMockFubApprovalPreview, sendOnPair } from '@/lib/server/mock-fub-send';
@@ -12,7 +12,7 @@ import { MockFubSendAttempt, FubSendAttempt } from '@/models/mock-fub';
 import { Referral } from '@/models/referral';
 import { User } from '@/models/user';
 
-jest.mock('@/lib/server/live-fub-handoff', () => ({ liveFubEnabled: jest.fn(), createLiveFubClient: jest.fn() }));
+jest.mock('@/lib/server/live-fub-handoff', () => ({ liveFubEnabled: jest.fn(), createLiveFubClient: jest.fn(), getFubAgentChoices: jest.fn(), readIntakeForHandoff: jest.fn() }));
 jest.mock('@/lib/server/intelligence-viewer', () => ({ authorizeFubViewer: jest.fn() }));
 jest.mock('@/lib/fub/mock-fub-orchestrator', () => ({ ...jest.requireActual('@/lib/fub/mock-fub-orchestrator'), runMockFubApproval: jest.fn() }));
 
@@ -165,24 +165,37 @@ describe('mock FUB approval preview service', () => {
     expect(runMockFubApproval).toHaveBeenCalledTimes(1);
   });
 
-  it('blocks AHA OOS before looking up a mapping', async () => {
-    referralFind.mockReturnValue(
-      referralChain({
-        org: 'AHA',
-        ahaBucket: 'AHA_OOS',
-        inboundEmail: { channel: 'AHA_OOS' },
-        buySideAgent: { ahaDesignation: 'AHA' },
-        borrower: { name: 'OOS Client' },
-      }),
-    );
-
-    const result = await readMockFubApprovalPreview({
-      referralId: 'aaaaaaaaaaaaaaaaaaaaaaaa',
-      actorId: 'bbbbbbbbbbbbbbbbbbbbbbbb',
+  it('assigns paired OOS customers to Kristen while retaining the selected Referrio agent and original intake', async () => {
+    const actorId = 'bbbbbbbbbbbbbbbbbbbbbbbb';
+    const agentId = 'cccccccccccccccccccccccc';
+    const session = { user: { id: actorId, role: 'admin' }, expires: '' } as const;
+    (liveFubEnabled as jest.Mock).mockReturnValue(true);
+    (getFubAgentChoices as jest.Mock).mockResolvedValue([{ id: 71, name: 'Manual Agent' }, { id: 72, name: 'Kristen Truong' }]);
+    (authorizeFubViewer as jest.Mock).mockResolvedValue({ role: 'admin', userId: actorId, access: { ok: true } });
+    (FubSendAttempt.findOne as jest.Mock).mockReturnValue(leanChain(null));
+    (readIntakeForHandoff as jest.Mock).mockResolvedValue({ fields: { source: 'Original source' }, note: 'Original OOS email' });
+    customerLinkFind.mockReturnValue(leanChain({ fubPersonId: 42 }));
+    referralFind.mockReturnValue(referralChain({
+      org: 'AHA', ahaBucket: 'AHA', inboundEmail: { channel: 'AHA_OOS', messageId: 'original-email' },
+      status: 'Paired', borrower: { name: 'OOS Client' },
+      buySideAgent: { _id: agentId, name: 'Manual Agent', ahaDesignation: 'AHA' },
+    }));
+    (runMockFubApproval as jest.Mock).mockResolvedValue({ status: 'success', steps: [], personId: 42 });
+    await expect(readMockFubApprovalPreview({ referralId: 'aaaaaaaaaaaaaaaaaaaaaaaa', actorId })).resolves.toMatchObject({
+      ok: true, preview: { selectedAgentName: 'Manual Agent', fubAssigneeName: 'Kristen Truong', mappingState: 'ready' },
     });
-
-    expect(result).toMatchObject({ ok: false, code: 'aha_oos' });
+    await expect(sendOnPair('aaaaaaaaaaaaaaaaaaaaaaaa', session, agentId)).resolves.toMatchObject({ sent: true });
     expect(agentLinkFind).not.toHaveBeenCalled();
+    expect(runMockFubApproval).toHaveBeenCalledWith(expect.objectContaining({
+      selectedAgentId: agentId, selectedAgentName: 'Manual Agent', existingPersonId: 42, fubUserId: 72, tags: ['OOS Referral'],
+      note: expect.objectContaining({ body: 'Original OOS email' }),
+    }), expect.anything());
+
+    (getFubAgentChoices as jest.Mock).mockResolvedValue([{ id: 71, name: 'Manual Agent' }]);
+    await expect(sendOnPair('aaaaaaaaaaaaaaaaaaaaaaaa', session, agentId)).resolves.toMatchObject({ sent: false, message: expect.stringContaining('Kristen Truong') });
+    (getFubAgentChoices as jest.Mock).mockResolvedValue([{ id: 72, name: 'Kristen Truong' }, { id: 73, name: 'Kristen Truong' }]);
+    await expect(sendOnPair('aaaaaaaaaaaaaaaaaaaaaaaa', session, agentId)).resolves.toMatchObject({ sent: false });
+    expect(runMockFubApproval).toHaveBeenCalledTimes(1);
   });
 
   it('reports missing and ambiguous selected-agent mappings', async () => {
