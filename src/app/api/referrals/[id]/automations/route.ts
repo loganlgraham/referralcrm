@@ -36,7 +36,13 @@ export async function GET(request: NextRequest, { params }: Context) {
     const list = await readFubAutomations(personId, viewer.isAdmin);
     if (list.personId !== personId || !Array.isArray(list.enrollments) || !Array.isArray(list.choices)) throw new Error();
     return reply({ ...list, choices: viewer.isAdmin ? list.choices : [], isAdmin: viewer.isAdmin, canStart: viewer.isAdmin && liveFubEnabled() });
-  } catch {
+  } catch (error) {
+    if (error instanceof MockFubOperationError && error.code === 'fub_automations_restricted' && error.status === 403) {
+      return reply({
+        code: 'fub_automations_restricted',
+        error: 'Follow Up Boss hasn’t enabled automation access for this connection. Contact Follow Up Boss to enable access for the registered integration.',
+      }, 503);
+    }
     return reply({ error: 'Could not load FUB automations.' }, 503);
   }
 }

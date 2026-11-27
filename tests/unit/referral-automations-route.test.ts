@@ -35,6 +35,34 @@ it('permits a management read without exposing the catalog or start capability',
   expect((await POST(request(), ctx)).status).toBe(403);
   expect(startFubAutomation).not.toHaveBeenCalled();
 });
+
+it('returns a safe specific state for confirmed upstream automation restrictions', async () => {
+  (readFubAutomations as jest.Mock).mockRejectedValue(new MockFubOperationError(
+    'definitive', 'fub_automations_restricted', 'Private upstream diagnostic', 403,
+  ));
+
+  const response = await GET(request(), ctx);
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({
+    code: 'fub_automations_restricted',
+    error: 'Follow Up Boss hasn’t enabled automation access for this connection. Contact Follow Up Boss to enable access for the registered integration.',
+  });
+  expect(startFubAutomation).not.toHaveBeenCalled();
+  expect(FubAutomationStart.create).not.toHaveBeenCalled();
+});
+
+it.each([
+  new Error('Network unavailable'),
+  new MockFubOperationError('definitive', 'fub_handoff_incomplete', 'Forbidden', 403),
+  new MockFubOperationError('definitive', 'fub_automations_restricted', 'Unavailable', 502),
+])('keeps unrelated read failures generic: %s', async (error) => {
+  (readFubAutomations as jest.Mock).mockRejectedValue(error);
+
+  const response = await GET(request(), ctx);
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({ error: 'Could not load FUB automations.' });
+});
+
 it('blocks a cross-site request, a stale contact and preview writes before reserving a start', async () => {
   (allowedMutation as jest.Mock).mockReturnValueOnce(false);
   expect((await POST(request(), ctx)).status).toBe(403);

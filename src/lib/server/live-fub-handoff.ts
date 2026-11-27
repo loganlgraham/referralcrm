@@ -58,13 +58,18 @@ async function perform<T>(operation: string, input: unknown): Promise<T> {
     },
   );
   const result = await res.json().catch(() => null);
-  if (!res.ok || !result)
+  if (!res.ok || !result) {
+    const code = operation === 'automation_list' && res.status === 403
+      && result?.code === 'fub_automations_restricted'
+      ? 'fub_automations_restricted'
+      : 'fub_handoff_incomplete';
     throw new MockFubOperationError(
       result?.uncertain === false ? 'definitive' : 'ambiguous',
-      'fub_handoff_incomplete',
+      code,
       result?.error ?? 'Follow Up Boss did not confirm the operation.',
       res.ok ? 502 : res.status,
     );
+  }
   return result as T;
 }
 export function readFubAutomations(personId: number, includeChoices: boolean) {
