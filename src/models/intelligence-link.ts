@@ -77,6 +77,8 @@ intelligenceAccessSchema.index(
 
 export const IntelligenceLink = models.IntelligenceLink || model('IntelligenceLink', intelligenceLinkSchema);
 export const IntelligenceAgentLink = models.IntelligenceAgentLink || model('IntelligenceAgentLink', intelligenceAgentLinkSchema);
+export const FubDashboardAccess = models.FubDashboardAccess || model('FubDashboardAccess', intelligenceAccessSchema.clone());
+
 export const IntelligenceAccess = models.IntelligenceAccess || model('IntelligenceAccess', intelligenceAccessSchema);
 
 export type IntelligenceLinkRecord = {
