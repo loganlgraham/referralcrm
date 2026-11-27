@@ -7,6 +7,7 @@ const list = { personId: 123, isAdmin: true, canStart: true, enrollments: [
 const original = global.fetch;
 afterEach(() => { global.fetch = original; });
 const json = (data: unknown) => ({ ok: true, json: async () => data } as Response);
+const failed = (status: number, code?: string) => ({ ok: false, status, json: async () => ({ code }) } as Response);
 const renderCard = () => render(<ReferralAutomations personId={123} referralId="ref-test" borrowerName="Test Borrower" />);
 
 it('shows a linked contact’s current run and lets an admin confirm a specific start once', async () => {
@@ -49,6 +50,54 @@ it('shows a read failure separately from an empty list and disables confirmation
   fireEvent.click(await screen.findByText('Start FUB automation'));
   fireEvent.change(screen.getByLabelText('Automation'), { target: { value: '8' } });
   expect(screen.getByText('Confirm start')).toBeDisabled();
+});
+
+it('explains confirmed access restrictions, removes old start choices and links to the verified FUB contact', async () => {
+  global.fetch = jest.fn()
+    .mockResolvedValueOnce(json(list))
+    .mockResolvedValueOnce(failed(503, 'fub_automations_restricted'))
+    .mockResolvedValueOnce(json(list));
+  renderCard();
+  fireEvent.click(await screen.findByRole('button', { name: 'Start FUB automation' }));
+  fireEvent.change(screen.getByLabelText('Automation'), { target: { value: '8' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh automations' }));
+
+  expect(await screen.findByText('Follow Up Boss hasn’t enabled automation access for this connection. Contact Follow Up Boss to enable access for the registered integration.')).toBeVisible();
+  expect(screen.queryByText('Welcome')).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Confirm start' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Start FUB automation' })).toBeNull();
+  expect(screen.getByRole('link', { name: 'Open contact in Follow Up Boss' })).toHaveAttribute(
+    'href', 'https://americanhomeagents3.followupboss.com/2/people/view/123',
+  );
+  expect(screen.getByRole('link', { name: 'Open contact in Follow Up Boss' })).toHaveAttribute('rel', 'noopener noreferrer');
+  expect((global.fetch as jest.Mock).mock.calls.every(([, options]) => options?.method !== 'POST')).toBe(true);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh automations' }));
+  expect(await screen.findByText('Welcome')).toBeVisible();
+  expect(screen.queryByText(/hasn’t enabled automation access/)).toBeNull();
+  expect(screen.queryByRole('link', { name: 'Open contact in Follow Up Boss' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Start FUB automation' })).toBeEnabled();
+  expect(screen.queryByRole('button', { name: 'Confirm start' })).toBeNull();
+});
+
+it.each([
+  { status: 503, code: undefined },
+  { status: 403, code: undefined },
+  { status: 503, code: 'other_error' },
+  { status: 403, code: 'fub_automations_restricted' },
+])('does not label generic failures as a provider restriction: %o', async ({ status, code }) => {
+  global.fetch = jest.fn(async () => failed(status, code));
+  renderCard();
+  expect(await screen.findByText(/Couldn’t load automations/)).toBeVisible();
+  expect(screen.queryByText(/hasn’t enabled automation access/)).toBeNull();
+  expect(screen.queryByRole('link', { name: 'Open contact in Follow Up Boss' })).toBeNull();
+});
+
+it('does not construct a contact link from an invalid person ID', async () => {
+  global.fetch = jest.fn(async () => failed(503, 'fub_automations_restricted'));
+  render(<ReferralAutomations personId={-1} referralId="ref-test" />);
+  expect(await screen.findByText(/hasn’t enabled automation access/)).toBeVisible();
+  expect(screen.queryByRole('link', { name: 'Open contact in Follow Up Boss' })).toBeNull();
 });
 
 it('cancels an unfinished list request when leaving the referral', () => {

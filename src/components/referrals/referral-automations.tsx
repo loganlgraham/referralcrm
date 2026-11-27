@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { buttonClasses } from '@/components/ui/button';
 import type { FubEnrollment, ReferralAutomationList } from '@/lib/fub/automations';
+import { VERIFIED_FUB_DOMAIN } from '@/lib/intelligence/access-control';
 
 export function ReferralAutomations({ referralId, personId, borrowerName }: {
   referralId: string; personId: number; borrowerName?: string;
 }) {
   const url = '/api/referrals/' + referralId + '/automations';
   const [data, setData] = useState<ReferralAutomationList | null>(null);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<'unavailable' | 'restricted' | null>(null);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState('');
   const [selecting, setSelecting] = useState(false);
@@ -25,14 +26,23 @@ export function ReferralAutomations({ referralId, personId, borrowerName }: {
     const controller = new AbortController();
     readController.current = controller;
     setLoading(true);
-    setError(false);
+    setError(null);
     try {
       const res = await fetch(url, { cache: 'no-store', signal: controller.signal });
       const list = await res.json();
+      if (res.status === 503 && list?.code === 'fub_automations_restricted') {
+        if (current === generation.current) {
+          setData(null);
+          setError('restricted');
+          setSelecting(false);
+          setChoiceId('');
+        }
+        return;
+      }
       if (!res.ok || list.personId !== personId || !Array.isArray(list.enrollments) || !Array.isArray(list.choices)) throw new Error();
       if (current === generation.current) setData(list);
     } catch {
-      if (current === generation.current) { setData(null); setError(true); }
+      if (current === generation.current) { setData(null); setError('unavailable'); }
     } finally {
       if (current === generation.current) setLoading(false);
     }
@@ -84,7 +94,16 @@ export function ReferralAutomations({ referralId, personId, borrowerName }: {
         <button type="button" className={secondary} disabled={loading || starting} onClick={() => void load()}>Refresh automations</button>
       </div>
       {loading && !data && <p>Loading automations…</p>}
-      {error && <p role="status">Couldn’t load automations for this contact.</p>}
+      {error === 'unavailable' && <p role="status">Couldn’t load automations for this contact.</p>}
+      {error === 'restricted' && <div className="grid gap-2">
+        <p role="status">Follow Up Boss hasn’t enabled automation access for this connection. Contact Follow Up Boss to enable access for the registered integration.</p>
+        {Number.isSafeInteger(personId) && personId > 0 && <a
+          className="justify-self-start underline"
+          href={`https://${VERIFIED_FUB_DOMAIN}.followupboss.com/2/people/view/${personId}`}
+          target="_blank"
+          rel="noopener noreferrer"
+        >Open contact in Follow Up Boss</a>}
+      </div>}
       {data && <>
         {active.length ? <Runs items={active} /> : <p>No active automations for this contact.</p>}
         {completed.length > 0 && <details>
