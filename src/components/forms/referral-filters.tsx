@@ -7,7 +7,7 @@ import useSWR from 'swr';
 import { REFERRAL_STATUSES, REFERRAL_TIMELINE_OPTIONS } from '@/constants/referrals';
 import { fetcher } from '@/utils/fetcher';
 import { cn } from '@/lib/cn';
-import { Input } from '@/components/ui/input';
+import { SearchInput } from '@/components/ui/search-input';
 import { selectFieldClasses } from '@/components/ui/field-group';
 
 type FilterMode = 'admin' | 'mc' | 'agent';
@@ -72,6 +72,7 @@ function StatusMultiSelect({
             <button
               type="button"
               onClick={() => onChange([])}
+              disabled={disabled}
               className="w-full px-3 py-1.5 text-left text-sm text-primary hover:bg-surface-muted"
             >
               Clear all
@@ -86,6 +87,7 @@ function StatusMultiSelect({
                 type="checkbox"
                 checked={selected.includes(status)}
                 onChange={() => toggle(status)}
+                disabled={disabled}
                 className="h-3.5 w-3.5 rounded border-border-strong text-accent focus:ring-accent/30"
               />
               {status}
@@ -101,21 +103,13 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
+  const [isSearching, setIsSearching] = useState(false);
+  const filtersDisabled = isPending || isSearching;
   const searchParamsString = useMemo(() => searchParams.toString(), [searchParams]);
 
   const isAgentMode = mode === 'agent';
   const isAdminMode = mode === 'admin';
   const showAhaBucket = isAdminMode;
-
-  const searchValue = searchParams.get('search') ?? '';
-  const [searchTerm, setSearchTerm] = useState(searchValue);
-  const [debouncedSearch, setDebouncedSearch] = useState(searchValue);
-  const isTypingRef = useRef(false);
-  const searchParamsStringRef = useRef(searchParamsString);
-
-  useEffect(() => {
-    searchParamsStringRef.current = searchParamsString;
-  }, [searchParamsString]);
 
   const handleChange = useCallback(
     (key: string, value: string) => {
@@ -125,9 +119,10 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
       } else {
         params.set(key, value);
       }
+      params.delete('page');
       startTransition(() => {
         const queryString = params.toString();
-        router.replace(queryString ? `/referrals?${queryString}` : '/referrals');
+        router.replace(queryString ? `/referrals?${queryString}` : '/referrals', { scroll: false });
       });
     },
     [router, searchParamsString, startTransition]
@@ -160,58 +155,14 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
   const agentReferralValue = isAdminMode ? searchParams.get('agentReferrals') ?? '' : '';
   const timelineValue = searchParams.get('timeline') ?? '';
 
-  useEffect(() => {
-    if (isTypingRef.current) {
-      return;
-    }
-
-    setSearchTerm(searchValue);
-    setDebouncedSearch(searchValue);
-  }, [searchValue]);
-
-  useEffect(() => {
-    const params = new URLSearchParams(searchParamsStringRef.current);
-    const existing = params.get('search') ?? '';
-    const trimmed = debouncedSearch.trim();
-
-    if (trimmed === existing.trim()) {
-      return;
-    }
-
-    if (!trimmed) {
-      params.delete('search');
-    } else {
-      params.set('search', trimmed);
-    }
-
-    startTransition(() => {
-      const queryString = params.toString();
-      router.replace(queryString ? `/referrals?${queryString}` : '/referrals');
-    });
-  }, [debouncedSearch, router, startTransition]);
-
-  const handleSearchInput = useCallback((value: string) => {
-    isTypingRef.current = true;
-    setSearchTerm(value);
-  }, []);
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      setDebouncedSearch(searchTerm);
-      isTypingRef.current = false;
-    }, 200);
-
-    return () => window.clearTimeout(timeout);
-  }, [searchTerm]);
-
   return (
     <div className="space-y-4 rounded-card border border-border bg-surface-raised p-4 shadow-card">
       <label className="flex flex-col gap-1.5">
         <span className="text-eyebrow text-foreground-subtle">Search</span>
-        <Input
+        <SearchInput
           type="text"
-          value={searchTerm}
-          onChange={(event) => handleSearchInput(event.target.value)}
+          navigation="server"
+          onPendingChange={setIsSearching}
           className="h-10"
           placeholder="Name, email, phone, loan #"
         />
@@ -226,7 +177,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
         <StatusMultiSelect
           selected={searchParams.get('status')?.split(',').filter(Boolean) ?? []}
           onChange={(statuses) => handleChange('status', statuses.join(','))}
-          disabled={isPending}
+          disabled={filtersDisabled}
         />
         {isAdminMode && (
           <label className="flex flex-col gap-1.5">
@@ -235,7 +186,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
               value={agentReferralValue}
               onChange={(event) => handleChange('agentReferrals', event.target.value)}
               className={selectFieldClasses}
-              disabled={isPending}
+              disabled={filtersDisabled}
             >
               <option value="">All</option>
               <option value="yes">Yes</option>
@@ -250,7 +201,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
               value={ahaBucketValue}
               onChange={(event) => handleChange('ahaBucket', event.target.value)}
               className={selectFieldClasses}
-              disabled={isPending}
+              disabled={filtersDisabled}
             >
               <option value="">All</option>
               <option value="AHA">AHA</option>
@@ -270,7 +221,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
             value={lenderValue}
             onChange={(event) => handleChange('mc', event.target.value)}
             className={selectFieldClasses}
-            disabled={isPending}
+            disabled={filtersDisabled}
           >
             <option value="">All</option>
             {Array.isArray(lenders) && lenders.map((lender) => (
@@ -288,7 +239,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
               value={agentValue}
               onChange={(event) => handleChange('agent', event.target.value)}
               className={selectFieldClasses}
-              disabled={isPending}
+              disabled={filtersDisabled}
             >
               <option value="">All</option>
               {Array.isArray(sortedAgents) && sortedAgents.map((agentOption) => (
@@ -306,7 +257,7 @@ export function Filters({ mode = 'admin' }: FiltersProps) {
             value={timelineValue}
             onChange={(event) => handleChange('timeline', event.target.value)}
             className={selectFieldClasses}
-            disabled={isPending}
+            disabled={filtersDisabled}
           >
             <option value="">All</option>
             {REFERRAL_TIMELINE_OPTIONS.map((option) => (

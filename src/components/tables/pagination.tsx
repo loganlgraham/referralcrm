@@ -14,9 +14,10 @@ interface PaginationProps {
   pageSize: number;
   totalPages: number;
   itemLabel?: string;
+  disabled?: boolean;
 }
 
-export function Pagination({ currentPage, totalItems, pageSize, totalPages, itemLabel = 'items' }: PaginationProps) {
+export function Pagination({ currentPage, totalItems, pageSize, totalPages, itemLabel = 'items', disabled = false }: PaginationProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -25,6 +26,7 @@ export function Pagination({ currentPage, totalItems, pageSize, totalPages, item
 
   const updateParams = useCallback(
     (updates: { page?: number; pageSize?: number }) => {
+      if (disabled) return;
       const params = new URLSearchParams(searchParamsString);
       
       if (updates.page !== undefined) {
@@ -50,7 +52,7 @@ export function Pagination({ currentPage, totalItems, pageSize, totalPages, item
         router.replace(queryString ? `${pathname}?${queryString}` : pathname);
       });
     },
-    [router, pathname, searchParamsString, startTransition]
+    [disabled, router, pathname, searchParamsString, startTransition]
   );
 
   const handlePrevious = () => {
@@ -92,7 +94,7 @@ export function Pagination({ currentPage, totalItems, pageSize, totalPages, item
           <select
             value={pageSize}
             onChange={handlePageSizeChange}
-            disabled={isPending}
+            disabled={disabled || isPending}
             className={cn(selectFieldClasses, 'text-numeric h-8 w-auto pr-2')}
           >
             {pageSize === 20 && <option value={20}>20</option>}
@@ -106,7 +108,7 @@ export function Pagination({ currentPage, totalItems, pageSize, totalPages, item
             variant="secondary"
             size="sm"
             onClick={handlePrevious}
-            disabled={currentPage <= 1 || isPending}
+            disabled={currentPage <= 1 || disabled || isPending}
             className="w-8 px-0"
             aria-label="Previous page"
           >
@@ -120,7 +122,7 @@ export function Pagination({ currentPage, totalItems, pageSize, totalPages, item
             variant="secondary"
             size="sm"
             onClick={handleNext}
-            disabled={currentPage >= totalPages || isPending}
+            disabled={currentPage >= totalPages || disabled || isPending}
             className="w-8 px-0"
             aria-label="Next page"
           >

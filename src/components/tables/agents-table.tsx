@@ -7,8 +7,6 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
-  useState,
   useTransition,
 } from 'react';
 import { useSession } from 'next-auth/react';
@@ -22,7 +20,7 @@ import { buildGmailComposeUrl } from '@/utils/gmail';
 import { cn } from '@/lib/cn';
 import { PageHeader } from '@/components/ui/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Input } from '@/components/ui/input';
+import { SearchInput } from '@/components/ui/search-input';
 import { selectFieldClasses } from '@/components/ui/field-group';
 import { TBody, THead, Table, TableScroll, TableShell, Td, Th, Tr } from '@/components/ui/table-shell';
 
@@ -116,15 +114,12 @@ export function AgentsTable({
   if (sortDirection) apiParams.set('sortDirection', sortDirection);
   
   const apiUrl = `/api/agents?${apiParams.toString()}`;
-  const { data, mutate } = useSWR<AgentsResponse>(apiUrl, fetcher);
-  const searchValue = search;
-  const [searchTerm, setSearchTerm] = useState(searchValue);
-  const [debouncedSearch, setDebouncedSearch] = useState(searchValue);
-  const isTypingRef = useRef(false);
+  const { data, mutate, error, isValidating } = useSWR<AgentsResponse>(apiUrl, fetcher, {
+    keepPreviousData: true,
+  });
 
   const updateParams = useCallback(
     (updates: {
-      search?: string;
       ahaFilter?: string;
       activeFilter?: string;
       page?: number;
@@ -132,15 +127,6 @@ export function AgentsTable({
       sortDirection?: 'asc' | 'desc';
     }) => {
       const params = new URLSearchParams(searchParamsString);
-      
-      if (updates.search !== undefined) {
-        if (!updates.search.trim()) {
-          params.delete('search');
-        } else {
-          params.set('search', updates.search.trim());
-        }
-        params.delete('page');
-      }
       
       if (updates.ahaFilter !== undefined) {
         if (updates.ahaFilter === 'all') {
@@ -189,51 +175,12 @@ export function AgentsTable({
       
       startTransition(() => {
         const queryString = params.toString();
-        router.replace(queryString ? `/agents?${queryString}` : '/agents');
+        router.replace(queryString ? `/agents?${queryString}` : '/agents', { scroll: false });
       });
     },
     [router, searchParamsString, startTransition]
   );
   
-  // Sync from URL to local state (only when not typing)
-  useEffect(() => {
-    if (isTypingRef.current) return;
-    setSearchTerm(searchValue);
-    setDebouncedSearch(searchValue);
-  }, [searchValue]);
-
-  // Push debouncedSearch to URL (with deduplication)
-  useEffect(() => {
-    const params = new URLSearchParams(searchParamsString);
-    const existing = params.get('search') ?? '';
-    const trimmed = debouncedSearch.trim();
-    if (trimmed === existing.trim()) return;
-    if (!trimmed) {
-      params.delete('search');
-    } else {
-      params.set('search', trimmed);
-    }
-    params.delete('page');
-    startTransition(() => {
-      const queryString = params.toString();
-      router.replace(queryString ? `/agents?${queryString}` : '/agents');
-    });
-  }, [debouncedSearch, router, searchParamsString, startTransition]);
-
-  const handleSearchInput = useCallback((value: string) => {
-    isTypingRef.current = true;
-    setSearchTerm(value);
-  }, []);
-
-  // Debounce: update debouncedSearch from searchTerm (400ms for smoother typing)
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      setDebouncedSearch(searchTerm);
-      isTypingRef.current = false;
-    }, 400);
-    return () => window.clearTimeout(timeout);
-  }, [searchTerm]);
-
   // Refresh data when agents are added (via SWR mutate)
   useEffect(() => {
     mutate();
@@ -261,7 +208,7 @@ export function AgentsTable({
     }
   };
 
-  const SortableHeader = ({ label, sortKey }: { label: string; sortKey: SortKey }) => {
+  const renderSortableHeader = (label: string, sortKey: SortKey) => {
     const direction = sortBy === sortKey ? sortDirection : null;
     const icon = direction === 'asc' ? '▲' : direction === 'desc' ? '▼' : '↕';
 
@@ -303,10 +250,9 @@ export function AgentsTable({
           {isAdmin && (
             <label className="flex-1 space-y-1.5">
               <span className="text-eyebrow block text-foreground-subtle">Search</span>
-              <Input
-                type="text"
-                value={searchTerm}
-                onChange={(event) => handleSearchInput(event.target.value)}
+              <SearchInput
+                navigation="client"
+                isLoading={isValidating}
                 placeholder="Name, email, phone, brokerage"
               />
             </label>
@@ -343,32 +289,40 @@ export function AgentsTable({
         </div>
       </div>
 
-      <TableShell>
+      {error && (
+        <p role="alert" className="text-sm text-danger">
+          Couldn’t update results. Showing previous results.{' '}
+          <button type="button" onClick={() => void mutate().catch(() => undefined)} className="font-medium underline">
+            Try again
+          </button>
+        </p>
+      )}
+      <TableShell aria-busy={isValidating}>
         <TableScroll>
           <Table className="min-w-full">
             <THead>
               <tr>
                 <Th dense={isAdmin}>
-                  <SortableHeader label="Agent" sortKey="name" />
+                  {renderSortableHeader('Agent', 'name')}
                 </Th>
                 {isAdmin && <Th dense>Status</Th>}
                 <Th dense={isAdmin}>
-                  <SortableHeader label="Closings (12mo)" sortKey="closings" />
+                  {renderSortableHeader('Closings (12mo)', 'closings')}
                 </Th>
                 <Th dense={isAdmin}>
-                  <SortableHeader label="Closing %" sortKey="closingRate" />
+                  {renderSortableHeader('Closing %', 'closingRate')}
                 </Th>
                 <Th dense={isAdmin}>
-                  <SortableHeader label="NPS" sortKey="nps" />
+                  {renderSortableHeader('NPS', 'nps')}
                 </Th>
                 <Th dense={isAdmin}>
-                  <SortableHeader label="Avg response" sortKey="avgResponse" />
+                  {renderSortableHeader('Avg response', 'avgResponse')}
                 </Th>
                 <Th dense={isAdmin}>
-                  <SortableHeader label="Referral fees paid" sortKey="referralFees" />
+                  {renderSortableHeader('Referral fees paid', 'referralFees')}
                 </Th>
                 <Th dense={isAdmin}>
-                  <SortableHeader label="Net income" sortKey="netIncome" />
+                  {renderSortableHeader('Net income', 'netIncome')}
                 </Th>
               </tr>
             </THead>
@@ -457,6 +411,7 @@ export function AgentsTable({
       </TableShell>
       {data && (
         <Pagination
+          disabled={isValidating || Boolean(error)}
           currentPage={data.page}
           totalItems={data.total}
           pageSize={data.pageSize}

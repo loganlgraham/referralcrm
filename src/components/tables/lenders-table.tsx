@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ChangeEvent, Dispatch, FormEvent, SetStateAction, useEffect, useMemo, useState, useCallback, useTransition } from 'react';
+import { ChangeEvent, Dispatch, FormEvent, SetStateAction, useMemo, useState, useCallback, useTransition } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import useSWR from 'swr';
@@ -11,6 +11,7 @@ import { fetcher } from '@/utils/fetcher';
 import { cn } from '@/lib/cn';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { SearchInput } from '@/components/ui/search-input';
 import { EmptyState } from '@/components/ui/empty-state';
 import { FieldGrid, FieldLabel, selectFieldClasses } from '@/components/ui/field-group';
 import { TBody, THead, Table, TableScroll, TableShell, Td, Th, Tr } from '@/components/ui/table-shell';
@@ -139,13 +140,16 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
   
   // Build API URL with filters
   const apiParams = new URLSearchParams();
+  apiParams.set('minimal', 'true');
   apiParams.set('page', page.toString());
   apiParams.set('pageSize', pageSize.toString());
   if (search) apiParams.set('search', search);
   if (activeFilter !== 'all') apiParams.set('activeFilter', activeFilter);
   
   const apiUrl = `/api/lenders?${apiParams.toString()}`;
-  const { data, mutate } = useSWR<LendersResponse>(apiUrl, fetcher);
+  const { data, mutate, error, isValidating } = useSWR<LendersResponse>(apiUrl, fetcher, {
+    keepPreviousData: true,
+  });
   const [internalShowForm, setInternalShowForm] = useState(false);
   const showForm = externalShowForm ?? internalShowForm;
   const setShowForm = externalSetShowForm ?? setInternalShowForm;
@@ -160,25 +164,15 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
   });
   const [lastCreatedLender, setLastCreatedLender] = useState<CreatedLenderSummary | null>(null);
   const [sendingWelcome, setSendingWelcome] = useState(false);
-  const [searchQuery, setSearchQuery] = useState(search);
 
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' } | null>(
     null
   );
   
   const updateParams = useCallback(
-    (updates: { search?: string; activeFilter?: string; page?: number }) => {
+    (updates: { activeFilter?: string; page?: number }) => {
       const params = new URLSearchParams(searchParamsString);
       
-      if (updates.search !== undefined) {
-        if (!updates.search.trim()) {
-          params.delete('search');
-        } else {
-          params.set('search', updates.search.trim());
-        }
-        params.delete('page');
-      }
-
       if (updates.activeFilter !== undefined) {
         if (updates.activeFilter === 'all') {
           params.delete('activeFilter');
@@ -198,28 +192,12 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
       
       startTransition(() => {
         const queryString = params.toString();
-        router.replace(queryString ? `/lenders?${queryString}` : '/lenders');
+        router.replace(queryString ? `/lenders?${queryString}` : '/lenders', { scroll: false });
       });
     },
     [router, searchParamsString, startTransition]
   );
   
-  // Debounce search input
-  useEffect(() => {
-    const timeout = setTimeout(() => {
-      if (searchQuery !== search) {
-        updateParams({ search: searchQuery });
-      }
-    }, 300);
-
-    return () => clearTimeout(timeout);
-  }, [searchQuery, search, updateParams]);
-
-  // Sync searchQuery with URL param
-  useEffect(() => {
-    setSearchQuery(search);
-  }, [search]);
-
   const sortedLenders = useMemo(() => {
     const items = Array.isArray(data?.items) ? data.items : [];
     if (!data) {
@@ -275,7 +253,7 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
     });
   };
 
-  const SortableHeader = ({ label, sortKey }: { label: string; sortKey: SortKey }) => {
+  const renderSortableHeader = (label: string, sortKey: SortKey) => {
     const direction = sortConfig?.key === sortKey ? sortConfig.direction : null;
     const icon = direction === 'asc' ? '▲' : direction === 'desc' ? '▼' : '↕';
 
@@ -422,14 +400,11 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
       {isAdmin && (
         <div className="rounded-card border border-border bg-surface-raised p-4 shadow-card">
           <div className="flex flex-wrap items-end gap-4">
-            <label className="block flex-1 space-y-2">
+            <label className="block max-w-2xl flex-1 space-y-2">
               <span className="text-eyebrow text-foreground-subtle">Search</span>
-              <Input
-                type="text"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                disabled={isPending}
-                className="max-w-2xl"
+              <SearchInput
+                navigation="client"
+                isLoading={isValidating}
                 placeholder="Name, email, phone, NMLS ID"
               />
             </label>
@@ -449,13 +424,21 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
           </div>
         </div>
       )}
-      <TableShell>
+      {error && (
+        <p role="alert" className="text-sm text-danger">
+          Couldn’t update results. Showing previous results.{' '}
+          <button type="button" onClick={() => void mutate().catch(() => undefined)} className="font-medium underline">
+            Try again
+          </button>
+        </p>
+      )}
+      <TableShell aria-busy={isValidating}>
         <TableScroll>
           <Table className="min-w-full">
             <THead>
               <Tr>
                 <Th dense={isAdmin} className="text-eyebrow">
-                  <SortableHeader label="Lender" sortKey="name" />
+                  {renderSortableHeader('Lender', 'name')}
                 </Th>
                 {isAdmin && (
                   <Th dense className="text-eyebrow">
@@ -463,10 +446,10 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
                   </Th>
                 )}
                 <Th dense={isAdmin} className="text-eyebrow">
-                  <SortableHeader label="NMLS" sortKey="nmls" />
+                  {renderSortableHeader('NMLS', 'nmls')}
                 </Th>
                 <Th dense={isAdmin} className="text-eyebrow">
-                  <SortableHeader label="Licensed states" sortKey="states" />
+                  {renderSortableHeader('Licensed states', 'states')}
                 </Th>
               </Tr>
             </THead>
@@ -515,6 +498,7 @@ export function LendersTable({ showForm: externalShowForm, setShowForm: external
       </TableShell>
       {data && (
         <Pagination
+          disabled={isValidating || Boolean(error)}
           currentPage={data.page}
           totalItems={data.total}
           pageSize={data.pageSize}

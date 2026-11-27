@@ -300,13 +300,12 @@ referralSchema.index({ deletedAt: 1, 'borrower.email': 1 });
 referralSchema.index({ deletedAt: 1, loanFileNumber: 1 });
 referralSchema.index({ deletedAt: 1, status: 1, createdAt: -1 });
 referralSchema.index({ deletedAt: 1, referralDate: 1 });
-// Sparse index supports the duplicate-phone lookup without forcing legacy
+// Partial index supports the duplicate-phone lookup without forcing legacy
 // docs to backfill before queries work. `findOne` on `borrower.phoneDigits`
 // is O(log n) regardless of collection size.
 referralSchema.index(
   { 'borrower.phoneDigits': 1 },
   {
-    sparse: true,
     partialFilterExpression: { 'borrower.phoneDigits': { $type: 'string' } },
   }
 );
