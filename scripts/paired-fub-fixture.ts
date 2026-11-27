@@ -338,7 +338,7 @@ async function runBrowserFlow(
     () => document.documentElement.scrollWidth <= window.innerWidth,
   );
   await page.getByRole('button', { name: 'Pair and send to FUB' }).click();
-  await page.getByText('Paired saved and sent to the mock FUB fixture.').waitFor();
+  await page.getByText('Paired saved and sent to Follow Up Boss.').waitFor();
   await page.screenshot({
     path: '/tmp/paired-fub-desktop.png',
     fullPage: true,
@@ -394,7 +394,7 @@ async function runBrowserFlow(
   await moveToPaired(page);
   await page.getByText(/does not have a verified FUB user mapping/u).waitFor();
   await page.getByRole('button', { name: 'Move to Paired only' }).click();
-  await page.getByText('Referral moved to Paired. Nothing was sent to FUB.').waitFor();
+  await page.getByText('Referral status updated').waitFor();
   results.push({
     id: 'missing-mapping',
     title: 'Missing mapping blocks send',
@@ -409,9 +409,9 @@ async function runBrowserFlow(
   await page.goto(`${baseUrl}/referrals/${referrals.partial.id}`);
   await moveToPaired(page);
   await page.getByRole('button', { name: 'Pair and send to FUB' }).click();
-  await page.getByText(/mock FUB send is incomplete/u).waitFor();
+  await page.getByText(/The FUB send is incomplete/u).waitFor();
   await page.getByRole('button', { name: 'Retry safe steps' }).click();
-  await page.getByText(/mock FUB send recovered and finished/u).waitFor();
+  await page.getByText(/The FUB send recovered and finished/u).waitFor();
   const partialAttempt = await MockFubSendAttempt.findOne({
     fixtureRunId,
     referralId: new Types.ObjectId(referrals.partial.id),
@@ -429,7 +429,7 @@ async function runBrowserFlow(
   await page.goto(`${baseUrl}/referrals/${referrals.timeout.id}`);
   await moveToPaired(page);
   await page.getByRole('button', { name: 'Pair and send to FUB' }).click();
-  await page.getByText(/mock FUB result is uncertain/u).waitFor();
+  await page.getByText(/The FUB result is uncertain/u).waitFor();
   const timeoutApprovalKey = await approvalKey(page, referrals.timeout.id);
   const timeoutRetry = await approvalPost(
     page,
@@ -516,7 +516,7 @@ async function runBrowserFlow(
     () => document.documentElement.scrollWidth <= window.innerWidth,
   );
   await mobilePage.getByRole('button', { name: 'Pair and send to FUB' }).click();
-  await mobilePage.getByText('Paired saved and sent to the mock FUB fixture.').waitFor();
+  await mobilePage.getByText('Paired saved and sent to Follow Up Boss.').waitFor();
   results.push({
     id: 'mobile-390',
     title: '390px real application flow',

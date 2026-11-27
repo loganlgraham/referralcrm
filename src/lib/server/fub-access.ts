@@ -331,8 +331,11 @@ function duplicateKey(error: unknown): boolean {
 
 /** Every dashboard read rechecks the stored role and separate dashboard grant. */
 export async function canViewFubDashboard(userId: string): Promise<boolean> {
-  const user = await readStoredFields(userId);
+  const [user, ownerUserId] = await Promise.all([
+    readStoredFields(userId),
+    readOwnerUserId(),
+  ]);
   if (!user || user.role !== 'admin' || storedAccountStatus(user) !== 'active') return false;
-  if (await readOwnerUserId() === userId) return true;
+  if (ownerUserId === userId) return true;
   return await readAccessState(VERIFIED_FUB_ORGANIZATION, userId, 'dashboard') === 'granted';
 }

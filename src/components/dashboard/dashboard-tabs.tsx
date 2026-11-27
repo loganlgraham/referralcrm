@@ -1108,7 +1108,10 @@ function PieChartCard({
     return `M ${cx} ${cy} L ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${end.x} ${end.y} Z`;
   };
 
-  let currentAngle = -Math.PI / 2;
+  const sliceAngles = data.reduce<number[]>((angles, item) => {
+    const startAngle = angles[angles.length - 1];
+    return [...angles, startAngle + (total > 0 ? (item.value / total) * Math.PI * 2 : 0)];
+  }, [-Math.PI / 2]);
 
   return (
     <div className={dashCardClasses}>
@@ -1124,10 +1127,8 @@ function PieChartCard({
           <div className="flex justify-center">
             <svg viewBox="0 0 160 160" className="h-48 w-48">
               {data.map((item, index) => {
-                const sliceAngle = (item.value / total) * Math.PI * 2;
-                const startAngle = currentAngle;
-                const endAngle = currentAngle + sliceAngle;
-                currentAngle = endAngle;
+                const startAngle = sliceAngles[index];
+                const endAngle = sliceAngles[index + 1];
                 const path = describeArc(startAngle, endAngle, 70, 80, 80);
                 return (
                   <path
@@ -1871,32 +1872,25 @@ function PreApprovalConversionSection({
   canEdit: boolean;
   onSaved: () => void;
 }) {
-  const [selectedMonth, setSelectedMonth] = useState<string>('');
-  const [inputAhaValue, setInputAhaValue] = useState<string>('');
-  const [inputAhaOosValue, setInputAhaOosValue] = useState<string>('');
+  const [selectedMonth, setSelectedMonth] = useState(() => monthlyReferrals[monthlyReferrals.length - 1]?.monthKey ?? '');
+  const selectedEntry = monthlyReferrals.find((entry) => entry.monthKey === selectedMonth);
+  const [inputAhaValue, setInputAhaValue] = useState(() => selectedEntry && selectedEntry.ahaPreApprovals > 0 ? String(selectedEntry.ahaPreApprovals) : '');
+  const [inputAhaOosValue, setInputAhaOosValue] = useState(() => selectedEntry && selectedEntry.ahaOosPreApprovals > 0 ? String(selectedEntry.ahaOosPreApprovals) : '');
+  const [inputSource, setInputSource] = useState({ monthlyReferrals, selectedMonth });
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [deletingMonth, setDeletingMonth] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    const match = monthlyReferrals.find((entry) => entry.monthKey === selectedMonth);
-    if (match) {
-      setInputAhaValue(match.ahaPreApprovals > 0 ? String(match.ahaPreApprovals) : '');
-      setInputAhaOosValue(match.ahaOosPreApprovals > 0 ? String(match.ahaOosPreApprovals) : '');
-    } else {
-      setInputAhaValue('');
-      setInputAhaOosValue('');
-    }
-  }, [monthlyReferrals, selectedMonth]);
-
-  useEffect(() => {
-    if (!selectedMonth && monthlyReferrals.length) {
-      const lastEntry = monthlyReferrals[monthlyReferrals.length - 1];
-      setSelectedMonth(lastEntry?.monthKey ?? '');
-    }
-  }, [monthlyReferrals, selectedMonth]);
-
-  const selectedEntry = monthlyReferrals.find((entry) => entry.monthKey === selectedMonth);
+  // Reset the editable draft before committing a changed month/server snapshot,
+  // avoiding an extra effect render with the previous month's input values.
+  if (!selectedMonth && monthlyReferrals.length) {
+    setSelectedMonth(monthlyReferrals[monthlyReferrals.length - 1].monthKey);
+  }
+  if (inputSource.monthlyReferrals !== monthlyReferrals || inputSource.selectedMonth !== selectedMonth) {
+    setInputSource({ monthlyReferrals, selectedMonth });
+    setInputAhaValue(selectedEntry && selectedEntry.ahaPreApprovals > 0 ? String(selectedEntry.ahaPreApprovals) : '');
+    setInputAhaOosValue(selectedEntry && selectedEntry.ahaOosPreApprovals > 0 ? String(selectedEntry.ahaOosPreApprovals) : '');
+  }
   const referralsForMonth = selectedEntry?.totalReferrals ?? 0;
   const existingPreApprovals = selectedEntry?.preApprovals ?? 0;
   const ahaPreApprovals = selectedEntry?.ahaPreApprovals ?? 0;
@@ -3749,6 +3743,9 @@ export function DashboardTabs() {
   const { data: fubAccess, error: fubAccessError } = useSWR<{ allowed: boolean; configured?: boolean }>(session?.user?.role === 'admin' ? ['/api/dashboard/fub?access=1', session.user.id] : null, ([url]: [string, string]) => fetcher(url), { refreshInterval: 30_000, shouldRetryOnError: false });
   const canViewFub = session?.user?.role === 'admin' && fubAccess?.allowed === true && !fubAccessError;
 
+  // Browser storage is unavailable during SSR. Restore it once after hydration
+  // before enabling the dashboard request so the saved filters load first.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const stored = loadStoredNetworks();
     if (stored) {
@@ -3756,6 +3753,7 @@ export function DashboardTabs() {
     }
     setNetworksLoaded(true);
   }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const networkParam = serializeNetworkList(selectedNetworks);
   const { start: customStart, end: customEnd } = customRange;
@@ -3791,13 +3789,6 @@ export function DashboardTabs() {
     );
   };
 
-  useEffect(() => {
-    if (timeframe === 'custom') {
-      return;
-    }
-    setCustomRange(getPresetRange(timeframe));
-  }, [timeframe]);
-
   const role = session?.user?.role ?? data?.permissions?.role ?? null;
   const canViewGlobal = data?.permissions?.canViewGlobal ?? role === 'admin';
 
@@ -3817,11 +3808,10 @@ export function DashboardTabs() {
     });
   }, [canViewFub, canViewGlobal, role]);
 
-  useEffect(() => {
-    if (visibleTabs.length && !visibleTabs.some((tab) => tab.value === activeTab)) {
-      setActiveTab(visibleTabs[0].value);
-    }
-  }, [visibleTabs, activeTab]);
+  // Apply permission changes before committing a tab that is no longer visible.
+  if (visibleTabs.length && !visibleTabs.some((tab) => tab.value === activeTab)) {
+    setActiveTab(visibleTabs[0].value);
+  }
 
   const pillTabs = useMemo<PillTabDefinition<TabValue>[]>(
     () => visibleTabs.map((tab) => ({ id: tab.value, label: tab.label })),

@@ -17,13 +17,17 @@ export function ReferralAutomations({ referralId, personId, borrowerName }: {
   const [starting, setStarting] = useState(false);
   const busy = useRef(false);
   const generation = useRef(0);
+  const readController = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
     const current = ++generation.current;
+    readController.current?.abort();
+    const controller = new AbortController();
+    readController.current = controller;
     setLoading(true);
     setError(false);
     try {
-      const res = await fetch(url, { cache: 'no-store' });
+      const res = await fetch(url, { cache: 'no-store', signal: controller.signal });
       const list = await res.json();
       if (!res.ok || list.personId !== personId || !Array.isArray(list.enrollments) || !Array.isArray(list.choices)) throw new Error();
       if (current === generation.current) setData(list);
@@ -35,7 +39,12 @@ export function ReferralAutomations({ referralId, personId, borrowerName }: {
   }, [url, personId]);
   useEffect(() => {
     void load();
-    return () => { generation.current++; };
+    return () => {
+      // This counter invalidates async reads; it is not a rendered DOM ref.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      generation.current++;
+      readController.current?.abort();
+    };
   }, [load]);
 
   const selected = data?.choices.find(option => String(option.id) === choiceId);

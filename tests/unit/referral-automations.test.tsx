@@ -50,3 +50,17 @@ it('shows a read failure separately from an empty list and disables confirmation
   fireEvent.change(screen.getByLabelText('Automation'), { target: { value: '8' } });
   expect(screen.getByText('Confirm start')).toBeDisabled();
 });
+
+it('cancels an unfinished list request when leaving the referral', () => {
+  let signal: AbortSignal | null | undefined;
+  global.fetch = jest.fn((_, options) => {
+    signal = options?.signal;
+    return new Promise<Response>(() => {});
+  });
+  const view = renderCard();
+  expect(signal?.aborted).toBe(false);
+
+  view.unmount();
+
+  expect(signal?.aborted).toBe(true);
+});

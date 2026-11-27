@@ -28,6 +28,7 @@ export async function loadAuthorized(referralId: string): Promise<
 > {
   const session = await getCurrentSession();
   if (!Types.ObjectId.isValid(referralId)) return { ok: false, status: 404, reason: 'referral' };
+  if (!session?.user?.id) return { ok: false, status: 401, reason: 'unauthenticated' };
   await connectMongo();
   const referral = await Referral.findById(referralId).select('org origin clientType ahaBucket inboundEmail assignedAgent buySideAgent sellSideAgent deletedAt').populate('assignedAgent buySideAgent sellSideAgent', 'name ahaDesignation').lean<RoutingSource & {
     org?: string;
