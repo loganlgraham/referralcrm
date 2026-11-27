@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import type { Contact } from '@/components/referrals/contact-assignment';
@@ -168,7 +170,7 @@ export function AgentRecommendationPanel({
                 <div className="min-w-0">
                   <div className="grid min-w-0 gap-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="break-words text-base font-semibold text-foreground">{top.name}</p>
+                      <Link href={`/agents/${top.agentId}`} className="break-words text-base font-semibold text-foreground underline-offset-4 hover:text-primary hover:underline">{top.name}</Link>
                       <EvidenceBadge strength={top.evidenceStrength} />
                     </div>
                     <button
@@ -194,7 +196,7 @@ export function AgentRecommendationPanel({
                         <li key={entry.agentId}>
                           <details className="group">
                             <summary className="flex cursor-pointer list-none items-center justify-between gap-2 rounded-sm py-2 font-medium text-foreground hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary [&::-webkit-details-marker]:hidden">
-                              <span className="min-w-0 break-words">{entry.name}</span>
+                              <Link href={`/agents/${entry.agentId}`} className="min-w-0 break-words underline-offset-4 hover:underline" onClick={(event) => event.stopPropagation()}>{entry.name}</Link>
                               <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 text-foreground-muted transition-transform group-open:rotate-180 motion-reduce:transition-none" />
                             </summary>
                             <div className="pb-3">
@@ -219,7 +221,7 @@ export function AgentRecommendationPanel({
                   <div className="rounded-md border border-dashed border-border px-3 py-2" role="status">
                     <p className="font-semibold">Preview selection — not assigned.</p>
                     <div className="mt-1 flex flex-wrap items-center gap-2">
-                      <span className="break-words">{overrideAgent.name}</span>
+                      <Link href={`/agents/${overrideAgent.agentId}`} className="break-words underline-offset-4 hover:text-primary hover:underline">{overrideAgent.name}</Link>
                       <EvidenceBadge strength={overrideAgent.evidenceStrength} />
                       <button className={`${railTextButtonClasses} ml-auto`} type="button" onClick={() => setOverride(null)}>Clear</button>
                     </div>
@@ -401,7 +403,7 @@ function CalculationDetails({ body, shown }: { body: AgentRecommendationResponse
             <tbody>
               {shown.map((entry) => (
                 <tr key={entry.agentId} className="border-t border-border align-top">
-                  <td className="break-words py-1 pr-2">{entry.name}</td>
+                  <td className="break-words py-1 pr-2"><Link href={`/agents/${entry.agentId}`} className="underline-offset-4 hover:text-primary hover:underline">{entry.name}</Link></td>
                   <td className="py-1 pr-2">{entry.factors.mc.applicable ? record(entry.factors.mc.successes, entry.factors.mc.trials) : 'No MC'}</td>
                   <td className="py-1 pr-2">{record(entry.factors.overall.successes, entry.factors.overall.trials)}</td>
                   <td className="py-1 pr-2">{contractRecord(entry)}</td>
