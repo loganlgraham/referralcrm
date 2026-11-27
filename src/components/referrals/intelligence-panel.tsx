@@ -1,11 +1,12 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { ReferralAutomations } from './referral-automations';
 import { buttonClasses } from '@/components/ui/button';
 import { railCardClasses, railTitleClasses } from '@/components/referrals/referral-rail';
 import type { PanelActivity, PanelLink, PanelResponse } from '@/lib/intelligence/panel-response';
 
-export function IntelligencePanel({ referralId }: { referralId: string }) {
+export function IntelligencePanel({ referralId, borrowerName }: { referralId: string; borrowerName?: string }) {
   const [access, setAccess] = useState<'loading' | 'allowed' | 'denied' | 'unavailable'>('loading');
   const [link, setLink] = useState<PanelLink | null>(null);
   const [activity, setActivity] = useState<PanelActivity>({ status: 'not_requested' });
@@ -119,8 +120,18 @@ export function IntelligencePanel({ referralId }: { referralId: string }) {
       <h2 id="intelligence-panel-title" className={railTitleClasses}>Customer communication</h2>
       <p className="mt-1 text-sm text-foreground-muted">Stored Follow Up Boss activity for the linked customer.</p>
       <ActivityBody access={access} link={link} activity={activity} onRetry={() => void load(true)} />
+      {access === 'allowed' && link && !editing && activity.status !== 'not_configured' && (
+        <ReferralAutomations key={referralId + ':' + link.personId} referralId={referralId} personId={link.personId} borrowerName={borrowerName} />
+      )}
       {link && activity.status === 'not_configured' ? (
-        <p className="mt-4 min-w-0 break-words text-sm">Linked to FUB contact {link.personId}</p>
+        <div className="mt-4 grid gap-2 text-sm">
+          <p className="min-w-0 break-words">Linked to FUB contact {link.personId}</p>
+          {process.env.NEXT_PUBLIC_VERCEL_ENV === 'preview' && (
+            <a className="justify-self-start underline" href={`https://referrio.app/referrals/${encodeURIComponent(referralId)}`}>
+              View activity on referrio.app
+            </a>
+          )}
+        </div>
       ) : null}
       {link && activity.status !== 'not_configured' ? (
         <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -176,7 +187,12 @@ function ActivityBody({
     );
   }
   if (activity.status === 'not_configured') {
-    return <p className="mt-4 text-sm">Follow Up Boss isn&apos;t set up here, so activity can&apos;t be checked. Saved links are unchanged.</p>;
+    return (
+      <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
+        <p>{link ? "This customer is linked. The FUB activity connection is unavailable here." : "The FUB activity connection is unavailable here."}</p>
+        <button className={buttonClasses({ variant: 'secondary', size: 'sm' })} type="button" onClick={onRetry}>Retry activity</button>
+      </div>
+    );
   }
   if (!link) return <p className="mt-4 text-sm">This customer isn&apos;t linked.</p>;
   if (activity.status === 'unavailable' || activity.status === 'not_requested') {

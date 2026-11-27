@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { getVercelOidcToken } from '@vercel/functions/oidc';
 
+import type { AutomationList, FubEnrollment } from '@/lib/fub/automations';
 import { VERIFIED_FUB_ACCOUNT_ID } from '@/lib/intelligence/access-control';
 import { trustedIntelligenceUrl } from '@/lib/intelligence/remote';
 import {
@@ -21,11 +22,13 @@ export function liveFubEnabled() {
 }
 
 async function perform<T>(operation: string, input: unknown): Promise<T> {
+  const previewRead = operation === 'automation_list' && process.env.VERCEL_ENV === 'preview'
+    && process.env.REFERRIO_FUB_ACCOUNT_ID === VERIFIED_FUB_ACCOUNT_ID;
   const origin = trustedIntelligenceUrl(
     process.env.REFERRIO_INTELLIGENCE_URL ?? '',
   );
   const secret = process.env.REFERRIO_INTEGRATION_SECRET;
-  if (!liveFubEnabled() || !origin || !secret)
+  if ((!liveFubEnabled() && !previewRead) || !origin || !secret)
     throw new Error('Follow Up Boss is unavailable.');
   const body = JSON.stringify({
     operation,
@@ -60,9 +63,18 @@ async function perform<T>(operation: string, input: unknown): Promise<T> {
       result?.uncertain === false ? 'definitive' : 'ambiguous',
       'fub_handoff_incomplete',
       result?.error ?? 'Follow Up Boss did not confirm the operation.',
+      res.ok ? 502 : res.status,
     );
   return result as T;
 }
+export function readFubAutomations(personId: number, includeChoices: boolean) {
+  return perform<AutomationList>('automation_list', { personId, includeChoices });
+}
+
+export function startFubAutomation(personId: number, automationId: number, previousId: number) {
+  return perform<{ personId: number; enrollment: FubEnrollment }>('automation_start', { personId, automationId, previousId });
+}
+
 export async function getFubAgentChoices() {
   const result = await perform<{ users: Array<{ id: number; name: string }> }>(
     'agent_choices',
