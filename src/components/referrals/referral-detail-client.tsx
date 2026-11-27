@@ -1701,7 +1701,7 @@ export function ReferralDetailClient({ referral: initialReferral, viewerRole, no
           }
         >
           {(viewerRole === 'admin' || viewerRole === 'manager') && workflowRoute && (
-            <IntelligencePanel key={referralId + workflowRoute} referralId={referralId} />
+            <IntelligencePanel key={referralId + workflowRoute} referralId={referralId} borrowerName={referral.borrower.name} />
           )}
           <ReferralNotes
             key={referralId}

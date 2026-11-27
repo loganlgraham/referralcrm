@@ -200,6 +200,7 @@ export function StatusChanger({
     recovered: boolean,
     toastId: string | number,
     approvalKey: string,
+    detail?: string,
   ): void {
     const outcome = fubSendOutcomeMessage(status, recovered);
     if (outcome.kind === 'success') {
@@ -224,6 +225,9 @@ export function StatusChanger({
     } else {
       toast.error(outcome.message, {
         id: toastId,
+        description: detail,
+        duration: status === 'partial_failure' ? Infinity : undefined,
+        closeButton: true,
         action:
           status === 'partial_failure'
             ? {
@@ -289,12 +293,12 @@ export function StatusChanger({
         return;
       }
       const failedStep = body.steps?.find(step => step.status === 'failed' || step.status === 'ambiguous');
-      if (failedStep?.errorMessage) toast.error(failedStep.errorMessage);
       showMockFubOutcome(
         body.status,
         Boolean(body.recovered),
         toastId,
         approvalKey,
+        failedStep?.errorMessage,
       );
     } catch (error) {
       await recoverMockFubOutcome(

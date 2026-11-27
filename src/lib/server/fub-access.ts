@@ -17,8 +17,11 @@ import {
 } from '@/lib/intelligence/access-control';
 import { clearIntelligenceCache } from '@/lib/intelligence/remote';
 import { ACCOUNT_OWNER_KEY, AccountOwner } from '@/models/account-owner';
-import { IntelligenceAccess, IntelligenceLink } from '@/models/intelligence-link';
+import { FubDashboardAccess, IntelligenceAccess, IntelligenceLink } from '@/models/intelligence-link';
 import { User } from '@/models/user';
+
+export type FubAccessScope = 'referrals' | 'dashboard';
+const accessModel = (scope: FubAccessScope) => scope === 'dashboard' ? FubDashboardAccess : IntelligenceAccess;
 
 type StoredFields = {
   _id: Types.ObjectId;
@@ -129,6 +132,8 @@ export async function readFubAccessPage(actorUserId: string) {
   })
     .select('userId organization revokedAt audit')
     .lean<Array<{ userId: Types.ObjectId; organization: FubOrganization; revokedAt?: Date | null; audit?: StoredAudit[] }>>();
+  const dashboardGrants = await FubDashboardAccess.find({ organization: VERIFIED_FUB_ORGANIZATION, fubAccountId: VERIFIED_FUB_ACCOUNT_ID }).select('userId revokedAt audit').lean<Array<{ userId: Types.ObjectId; revokedAt?: Date | null; audit?: StoredAudit[] }>>();
+  const dashboardUsers = new Set(dashboardGrants.filter((grant) => !grant.revokedAt).map((grant) => String(grant.userId)));
   const accessByUser = new Map<string, boolean>();
   for (const admin of admins) accessByUser.set(String(admin._id), false);
   for (const grant of grants) {
@@ -138,10 +143,11 @@ export async function readFubAccessPage(actorUserId: string) {
   }
   const names = new Map<string, string>();
   for (const admin of admins) names.set(String(admin._id), displayName(admin));
-  const history = grants
+  const history = [...grants.map((grant) => ({ ...grant, scope: 'referrals' as const })), ...dashboardGrants.map((grant) => ({ ...grant, scope: 'dashboard' as const }))]
     .flatMap((grant) =>
       (grant.audit ?? []).map((entry) => ({
         at: new Date(entry.at).toISOString(),
+        scope: grant.scope,
         actorId: String(entry.actorId),
         targetId: String(entry.targetUserId),
         organization: entry.organization,
@@ -180,10 +186,12 @@ export async function readFubAccessPage(actorUserId: string) {
         isOwner,
         disabled: storedAccountStatus(admin as StoredFields) !== 'active',
         aha: isOwner || access,
+        dashboard: isOwner || dashboardUsers.has(id),
       };
     }),
     history: history.map((entry) => ({
       at: entry.at,
+      scope: entry.scope,
       actorName: names.get(entry.actorId) ?? 'Administrator',
       targetName: names.get(entry.targetId) ?? 'Administrator',
       organization: entry.organization,
@@ -194,12 +202,13 @@ export async function readFubAccessPage(actorUserId: string) {
   };
 }
 
-export async function changeFubAccess(input: { actorUserId: string; targetUserId: string; organization: FubOrganization; access: boolean; at: string }) {
+export async function changeFubAccess(input: { actorUserId: string; targetUserId: string; organization: FubOrganization; access: boolean; at: string; scope?: FubAccessScope }) {
   const actor = await readStoredFields(input.actorUserId);
   const ownerUserId = await readOwnerUserId();
   const actorIsOwner = Boolean(actor && ownerUserId === input.actorUserId && actor.role === 'admin' && storedAccountStatus(actor) === 'active');
   const target = await readStoredFields(input.targetUserId);
-  const current = await readAccessState(input.organization, input.targetUserId);
+  const scope = input.scope ?? 'referrals';
+  const current = await readAccessState(input.organization, input.targetUserId, scope);
   const plan = planAccessChange({
     actorIsOwner,
     actorUserId: input.actorUserId,
@@ -212,7 +221,7 @@ export async function changeFubAccess(input: { actorUserId: string; targetUserId
     at: input.at,
   });
   if (!plan.ok || !plan.changed) return plan;
-  const written = await writeAccessChange(plan.before, plan.next, plan.audit);
+  const written = await writeAccessChange(plan.before, plan.next, plan.audit, scope);
   if (!written.ok || !written.changed) return written;
   if (plan.dropCache) clearIntelligenceCache();
   return plan;
@@ -248,9 +257,9 @@ async function readStoredFields(userId: string): Promise<StoredFields | null> {
   return doc as StoredFields | null;
 }
 
-async function readAccessState(organization: FubOrganization, userId: string): Promise<AccessStateName> {
+async function readAccessState(organization: FubOrganization, userId: string, scope: FubAccessScope): Promise<AccessStateName> {
   if (!Types.ObjectId.isValid(userId)) return 'absent';
-  const doc = await IntelligenceAccess.findOne({
+  const doc = await accessModel(scope).findOne({
     organization,
     fubAccountId: VERIFIED_FUB_ACCOUNT_ID,
     userId: new Types.ObjectId(userId),
@@ -260,7 +269,7 @@ async function readAccessState(organization: FubOrganization, userId: string): P
   return accessState(doc);
 }
 
-async function writeAccessChange(before: AccessStateName, next: 'granted' | 'revoked', audit: AccessAuditEntry) {
+async function writeAccessChange(before: AccessStateName, next: 'granted' | 'revoked', audit: AccessAuditEntry, scope: FubAccessScope) {
   const userId = new Types.ObjectId(audit.targetUserId);
   const identity = { organization: audit.organization, fubAccountId: VERIFIED_FUB_ACCOUNT_ID, userId };
   const auditDoc = {
@@ -275,7 +284,7 @@ async function writeAccessChange(before: AccessStateName, next: 'granted' | 'rev
   };
   if (before === 'absent' && next === 'granted') {
     try {
-      await IntelligenceAccess.create({
+      await accessModel(scope).create({
         ...identity,
         createdBy: new Types.ObjectId(audit.actorId),
         revokedAt: null,
@@ -284,20 +293,20 @@ async function writeAccessChange(before: AccessStateName, next: 'granted' | 'rev
       return { ok: true as const, changed: true as const };
     } catch (error) {
       if (!duplicateKey(error)) throw error;
-      return raced(identity, next);
+      return raced(identity, next, scope);
     }
   }
   const stateFilter = before === 'revoked' ? { revokedAt: { $ne: null } } : { $or: [{ revokedAt: null }, { revokedAt: { $exists: false } }] };
-  const updated = await IntelligenceAccess.updateOne(
+  const updated = await accessModel(scope).updateOne(
     { ...identity, ...stateFilter },
     { $set: { revokedAt: next === 'granted' ? null : new Date(audit.at) }, $push: { audit: auditDoc } },
   );
   if (updated.matchedCount === 1) return { ok: true as const, changed: true as const };
-  return raced(identity, next);
+  return raced(identity, next, scope);
 }
 
-async function raced(identity: { organization: FubOrganization; fubAccountId: string; userId: Types.ObjectId }, next: 'granted' | 'revoked') {
-  const actual = accessState(await IntelligenceAccess.findOne(identity).select('revokedAt').lean<{ revokedAt?: Date | null } | null>());
+async function raced(identity: { organization: FubOrganization; fubAccountId: string; userId: Types.ObjectId }, next: 'granted' | 'revoked', scope: FubAccessScope) {
+  const actual = accessState(await accessModel(scope).findOne(identity).select('revokedAt').lean<{ revokedAt?: Date | null } | null>());
   const race = accessRaceResult(actual, next);
   if ('conflict' in race) return { ok: false as const, status: 409 as const, reason: 'conflict' as const };
   return { ok: true as const, changed: false as const, dropCache: false as const };
@@ -317,4 +326,16 @@ function displayName(user: object): string {
 
 function duplicateKey(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: unknown }).code === 11000;
+}
+
+
+/** Every dashboard read rechecks the stored role and separate dashboard grant. */
+export async function canViewFubDashboard(userId: string): Promise<boolean> {
+  const [user, ownerUserId] = await Promise.all([
+    readStoredFields(userId),
+    readOwnerUserId(),
+  ]);
+  if (!user || user.role !== 'admin' || storedAccountStatus(user) !== 'active') return false;
+  if (ownerUserId === userId) return true;
+  return await readAccessState(VERIFIED_FUB_ORGANIZATION, userId, 'dashboard') === 'granted';
 }

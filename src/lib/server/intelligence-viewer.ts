@@ -14,12 +14,15 @@ export async function authorizeFubViewer(input: {
   canViewReferral: boolean;
 }): Promise<{ access: PanelAccess; userId: string | null; role: IntelligenceRole }> {
   const userId = input.session?.user?.id ?? null;
-  const stored = userId && Types.ObjectId.isValid(userId)
-    ? await User.collection.findOne(
+  const [stored, ownerUserId] = await Promise.all([
+    userId && Types.ObjectId.isValid(userId)
+    ? User.collection.findOne(
         { _id: new Types.ObjectId(userId) },
         { projection: { role: 1, disabled: 1, active: 1, status: 1 } },
       )
-    : null;
+    : null,
+    readOwnerUserId(),
+  ]);
   const viewer = resolveViewerAuthority({
     sessionUserId: userId,
     sessionRole: input.session?.user?.role ?? null,
@@ -32,7 +35,7 @@ export async function authorizeFubViewer(input: {
           status: typeof stored.status === 'string' ? stored.status : null,
         }
       : null,
-    ownerUserId: await readOwnerUserId(),
+    ownerUserId,
   });
   const grant = viewer.userId ? await readAccessGrant({ organization: input.organization, fubAccountId: input.accountId, userId: viewer.userId }) : null;
   const access = authorizeIntelligencePanel({

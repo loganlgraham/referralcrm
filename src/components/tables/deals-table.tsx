@@ -25,7 +25,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tooltip } from '@/components/ui/tooltip';
 import { PageHeader } from '@/components/ui/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
-import { Input } from '@/components/ui/input';
+import { SearchInput } from '@/components/ui/search-input';
 import { selectFieldClasses } from '@/components/ui/field-group';
 import { cn } from '@/lib/cn';
 import { fetcher } from '@/utils/fetcher';
@@ -168,16 +168,9 @@ export function DealsTable() {
   if (sortDirection) apiParams.set('sortDirection', sortDirection);
   
   const apiUrl = `/api/payments?${apiParams.toString()}`;
-  const { data } = useSWR<PaymentsResponse>(apiUrl, fetcher);
-  const searchValue = search;
-  const [searchTerm, setSearchTerm] = useState(searchValue);
-  const [debouncedSearch, setDebouncedSearch] = useState(searchValue);
-  const isTypingRef = useRef(false);
-  const searchParamsStringRef = useRef(searchParamsString);
-
-  useEffect(() => {
-    searchParamsStringRef.current = searchParamsString;
-  }, [searchParamsString]);
+  const { data, mutate, error, isValidating } = useSWR<PaymentsResponse>(apiUrl, fetcher, {
+    keepPreviousData: true,
+  });
   const [isStatusMenuOpen, setIsStatusMenuOpen] = useState(false);
   const [isDesignationMenuOpen, setIsDesignationMenuOpen] = useState(false);
   const statusMenuRef = useRef<HTMLDivElement | null>(null);
@@ -188,7 +181,6 @@ export function DealsTable() {
   
   const updateParams = useCallback(
     (updates: {
-      search?: string;
       status?: string;
       designation?: string;
       usedAgent?: TriStateFilterValue;
@@ -198,16 +190,6 @@ export function DealsTable() {
       sortDirection?: 'asc' | 'desc';
     }) => {
       const params = new URLSearchParams(searchParamsString);
-      
-      if (updates.search !== undefined) {
-        if (!updates.search.trim()) {
-          params.delete('search');
-        } else {
-          params.set('search', updates.search.trim());
-        }
-        // Reset to page 1 when search changes
-        params.delete('page');
-      }
       
       if (updates.status !== undefined) {
         if (!updates.status) {
@@ -276,7 +258,7 @@ export function DealsTable() {
       
       startTransition(() => {
         const queryString = params.toString();
-        router.replace(queryString ? `/deals?${queryString}` : '/deals');
+        router.replace(queryString ? `/deals?${queryString}` : '/deals', { scroll: false });
       });
     },
     [router, searchParamsString, startTransition]
@@ -298,11 +280,6 @@ export function DealsTable() {
     },
     []
   );
-
-  useEffect(() => {
-    if (timeframe === 'custom') return;
-    setCustomRange(getPresetRange(timeframe === 'all' ? 'month' : timeframe));
-  }, [timeframe]);
 
   const maxSelectableDate = formatDateInput(addYears(new Date(), 1));
   const timeframeLabel =
@@ -330,45 +307,6 @@ export function DealsTable() {
   const isAgentView = role === 'agent';
   const isMcView = role === 'mc';
   const isAdminView = role === 'admin' || role === 'manager';
-
-  // Sync from URL to local state (only when not typing) — match referrals
-  useEffect(() => {
-    if (isTypingRef.current) return;
-    setSearchTerm(searchValue);
-    setDebouncedSearch(searchValue);
-  }, [searchValue]);
-
-  // Push debouncedSearch to URL (with deduplication)
-  useEffect(() => {
-    const params = new URLSearchParams(searchParamsStringRef.current);
-    const existing = params.get('search') ?? '';
-    const trimmed = debouncedSearch.trim();
-    if (trimmed === existing.trim()) return;
-    if (!trimmed) {
-      params.delete('search');
-    } else {
-      params.set('search', trimmed);
-    }
-    params.delete('page');
-    startTransition(() => {
-      const queryString = params.toString();
-      router.replace(queryString ? `/deals?${queryString}` : '/deals');
-    });
-  }, [debouncedSearch, router, startTransition]);
-
-  const handleSearchInput = useCallback((value: string) => {
-    isTypingRef.current = true;
-    setSearchTerm(value);
-  }, []);
-
-  // Debounce: update debouncedSearch from searchTerm (400ms for smoother typing)
-  useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      setDebouncedSearch(searchTerm);
-      isTypingRef.current = false;
-    }, 400);
-    return () => window.clearTimeout(timeout);
-  }, [searchTerm]);
 
   const calculateCommission = (row: DealRow) => {
     if (row.status === 'terminated') {
@@ -442,7 +380,7 @@ export function DealsTable() {
     return (DEAL_STATUS_LABELS[status] ?? status).toString();
   };
 
-  const SortableHeader = ({ label, sortKey }: { label: string; sortKey: SortKey }) => {
+  const renderSortableHeader = (label: string, sortKey: SortKey) => {
     const direction = sortBy === sortKey ? sortDirection : null;
     const icon = direction === 'asc' ? '▲' : direction === 'desc' ? '▼' : '↕';
 
@@ -701,34 +639,34 @@ export function DealsTable() {
         <thead className="sticky top-0 z-10 bg-surface-muted">
           <tr>
             <th className="text-eyebrow px-4 py-2 text-left text-foreground-subtle">
-              <SortableHeader label="Referral" sortKey="referral" />
+              {renderSortableHeader('Referral', 'referral')}
             </th>
             <th className="text-eyebrow px-4 py-2 text-left text-foreground-subtle">
-              <SortableHeader label="Agent" sortKey="agent" />
+              {renderSortableHeader('Agent', 'agent')}
             </th>
             <th className="text-eyebrow px-4 py-2 text-left text-foreground-subtle">
               MC
             </th>
             <th className="text-eyebrow px-4 py-2 text-left text-foreground-subtle">
-              <SortableHeader label="Deal Side" sortKey="dealSide" />
+              {renderSortableHeader('Deal Side', 'dealSide')}
             </th>
             <th className="text-eyebrow px-4 py-2 text-left text-foreground-subtle">
-              <SortableHeader label="Status" sortKey="status" />
+              {renderSortableHeader('Status', 'status')}
             </th>
             <th className="text-eyebrow px-4 py-2 text-left text-foreground-subtle">
-              <SortableHeader label="Under contract date" sortKey="underContractDate" />
+              {renderSortableHeader('Under contract date', 'underContractDate')}
             </th>
             <th className="text-eyebrow px-4 py-2 text-left text-foreground-subtle">
-              <SortableHeader label="Closing date" sortKey="closingDate" />
+              {renderSortableHeader('Closing date', 'closingDate')}
             </th>
             <th className="text-eyebrow px-4 py-2 text-left text-foreground-subtle">
-              <SortableHeader label="Purchase Price" sortKey="purchasePrice" />
+              {renderSortableHeader('Purchase Price', 'purchasePrice')}
             </th>
             <th className="text-eyebrow px-4 py-2 text-left text-foreground-subtle">
               Commission
             </th>
             <th className="text-eyebrow px-4 py-2 text-left text-foreground-subtle">
-              <SortableHeader label="Referral Fee" sortKey="referralFee" />
+              {renderSortableHeader('Referral Fee', 'referralFee')}
             </th>
           </tr>
         </thead>
@@ -946,31 +884,31 @@ export function DealsTable() {
           <thead className="bg-surface-muted">
             <tr>
               <th className="text-eyebrow px-4 py-3 text-left text-foreground-subtle">
-                <SortableHeader label="Referral" sortKey="referral" />
+                {renderSortableHeader('Referral', 'referral')}
               </th>
               <th className="text-eyebrow px-4 py-3 text-left text-foreground-subtle">
-                <SortableHeader label="Status" sortKey="status" />
+                {renderSortableHeader('Status', 'status')}
               </th>
               <th className="text-eyebrow px-4 py-3 text-left text-foreground-subtle">
-                <SortableHeader label="Under contract date" sortKey="underContractDate" />
+                {renderSortableHeader('Under contract date', 'underContractDate')}
               </th>
               <th className="text-eyebrow px-4 py-3 text-left text-foreground-subtle">
-                <SortableHeader label="Closing date" sortKey="closingDate" />
+                {renderSortableHeader('Closing date', 'closingDate')}
               </th>
               <th className="text-eyebrow px-4 py-3 text-left text-foreground-subtle">
-                <SortableHeader label="Outcome" sortKey="outcome" />
+                {renderSortableHeader('Outcome', 'outcome')}
               </th>
               <th className="text-eyebrow px-4 py-3 text-left text-foreground-subtle">
-                <SortableHeader label="Referral Fee" sortKey="referralFee" />
+                {renderSortableHeader('Referral Fee', 'referralFee')}
               </th>
               <th className="text-eyebrow px-4 py-3 text-left text-foreground-subtle">
-                <SortableHeader label={isAgentView ? 'Referral Fee Paid' : 'Paid'} sortKey="receivedAmount" />
+                {renderSortableHeader(isAgentView ? 'Referral Fee Paid' : 'Paid', 'receivedAmount')}
               </th>
               <th className="text-eyebrow px-4 py-3 text-left text-foreground-subtle">
-                <SortableHeader label="Commission" sortKey="commission" />
+                {renderSortableHeader('Commission', 'commission')}
               </th>
               <th className="text-eyebrow px-4 py-3 text-left text-foreground-subtle">
-                <SortableHeader label="Net Commission" sortKey="netCommission" />
+                {renderSortableHeader('Net Commission', 'netCommission')}
               </th>
             </tr>
           </thead>
@@ -1042,10 +980,9 @@ export function DealsTable() {
       <div className="space-y-4 rounded-card border border-border bg-surface-raised p-4 shadow-card">
         <label className="flex flex-col gap-1.5">
           <span className="text-eyebrow text-foreground-subtle">Search</span>
-          <Input
-            type="text"
-            value={searchTerm}
-            onChange={(event) => handleSearchInput(event.target.value)}
+          <SearchInput
+            navigation="client"
+            isLoading={isValidating}
             className="h-10"
             placeholder="Borrower, address, loan #, agent"
           />
@@ -1202,17 +1139,28 @@ export function DealsTable() {
           </div>
         )}
       </div>
-      {summarySection}
-      {deals.length === 0 ? (
-        <EmptyState
-          title="No deals found"
-          description="Try adjusting your filters or timeframe."
-        />
-      ) : (
-        isAdminView ? renderAdminTable() : renderDefaultTable()
+      {error && (
+        <p role="alert" className="text-sm text-danger">
+          Couldn’t update results. Showing previous results.{' '}
+          <button type="button" onClick={() => void mutate().catch(() => undefined)} className="font-medium underline">
+            Try again
+          </button>
+        </p>
       )}
+      <div className="space-y-5" aria-busy={isValidating}>
+        {summarySection}
+        {deals.length === 0 ? (
+          <EmptyState
+            title="No deals found"
+            description="Try adjusting your filters or timeframe."
+          />
+        ) : (
+          isAdminView ? renderAdminTable() : renderDefaultTable()
+        )}
+      </div>
       {data && (
         <Pagination
+          disabled={isValidating || Boolean(error)}
           currentPage={data.page}
           totalItems={data.total}
           pageSize={data.pageSize}

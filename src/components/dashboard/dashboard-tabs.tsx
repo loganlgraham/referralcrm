@@ -14,6 +14,7 @@ import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import useSWR from 'swr';
 import { fetcher } from '@/utils/fetcher';
+import { FubDashboard } from '@/components/dashboard/fub-dashboard';
 import { formatCurrency, formatDate, formatNumber } from '@/utils/formatters';
 import { Info, Trash2 } from 'lucide-react';
 import { dashCardClasses } from '@/components/dashboard/dashboard-ui';
@@ -485,7 +486,8 @@ const TAB_OPTIONS = [
   { label: 'Main', value: 'main' },
   { label: 'MC', value: 'mc' },
   { label: 'Agent', value: 'agent' },
-  { label: 'Admin', value: 'admin' }
+  { label: 'Admin', value: 'admin' },
+  { label: 'FUB', value: 'fub' }
 ] as const;
 
 type TabValue = (typeof TAB_OPTIONS)[number]['value'];
@@ -1106,7 +1108,10 @@ function PieChartCard({
     return `M ${cx} ${cy} L ${start.x} ${start.y} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${end.x} ${end.y} Z`;
   };
 
-  let currentAngle = -Math.PI / 2;
+  const sliceAngles = data.reduce<number[]>((angles, item) => {
+    const startAngle = angles[angles.length - 1];
+    return [...angles, startAngle + (total > 0 ? (item.value / total) * Math.PI * 2 : 0)];
+  }, [-Math.PI / 2]);
 
   return (
     <div className={dashCardClasses}>
@@ -1122,10 +1127,8 @@ function PieChartCard({
           <div className="flex justify-center">
             <svg viewBox="0 0 160 160" className="h-48 w-48">
               {data.map((item, index) => {
-                const sliceAngle = (item.value / total) * Math.PI * 2;
-                const startAngle = currentAngle;
-                const endAngle = currentAngle + sliceAngle;
-                currentAngle = endAngle;
+                const startAngle = sliceAngles[index];
+                const endAngle = sliceAngles[index + 1];
                 const path = describeArc(startAngle, endAngle, 70, 80, 80);
                 return (
                   <path
@@ -1869,32 +1872,25 @@ function PreApprovalConversionSection({
   canEdit: boolean;
   onSaved: () => void;
 }) {
-  const [selectedMonth, setSelectedMonth] = useState<string>('');
-  const [inputAhaValue, setInputAhaValue] = useState<string>('');
-  const [inputAhaOosValue, setInputAhaOosValue] = useState<string>('');
+  const [selectedMonth, setSelectedMonth] = useState(() => monthlyReferrals[monthlyReferrals.length - 1]?.monthKey ?? '');
+  const selectedEntry = monthlyReferrals.find((entry) => entry.monthKey === selectedMonth);
+  const [inputAhaValue, setInputAhaValue] = useState(() => selectedEntry && selectedEntry.ahaPreApprovals > 0 ? String(selectedEntry.ahaPreApprovals) : '');
+  const [inputAhaOosValue, setInputAhaOosValue] = useState(() => selectedEntry && selectedEntry.ahaOosPreApprovals > 0 ? String(selectedEntry.ahaOosPreApprovals) : '');
+  const [inputSource, setInputSource] = useState({ monthlyReferrals, selectedMonth });
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [deletingMonth, setDeletingMonth] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    const match = monthlyReferrals.find((entry) => entry.monthKey === selectedMonth);
-    if (match) {
-      setInputAhaValue(match.ahaPreApprovals > 0 ? String(match.ahaPreApprovals) : '');
-      setInputAhaOosValue(match.ahaOosPreApprovals > 0 ? String(match.ahaOosPreApprovals) : '');
-    } else {
-      setInputAhaValue('');
-      setInputAhaOosValue('');
-    }
-  }, [monthlyReferrals, selectedMonth]);
-
-  useEffect(() => {
-    if (!selectedMonth && monthlyReferrals.length) {
-      const lastEntry = monthlyReferrals[monthlyReferrals.length - 1];
-      setSelectedMonth(lastEntry?.monthKey ?? '');
-    }
-  }, [monthlyReferrals, selectedMonth]);
-
-  const selectedEntry = monthlyReferrals.find((entry) => entry.monthKey === selectedMonth);
+  // Reset the editable draft before committing a changed month/server snapshot,
+  // avoiding an extra effect render with the previous month's input values.
+  if (!selectedMonth && monthlyReferrals.length) {
+    setSelectedMonth(monthlyReferrals[monthlyReferrals.length - 1].monthKey);
+  }
+  if (inputSource.monthlyReferrals !== monthlyReferrals || inputSource.selectedMonth !== selectedMonth) {
+    setInputSource({ monthlyReferrals, selectedMonth });
+    setInputAhaValue(selectedEntry && selectedEntry.ahaPreApprovals > 0 ? String(selectedEntry.ahaPreApprovals) : '');
+    setInputAhaOosValue(selectedEntry && selectedEntry.ahaOosPreApprovals > 0 ? String(selectedEntry.ahaOosPreApprovals) : '');
+  }
   const referralsForMonth = selectedEntry?.totalReferrals ?? 0;
   const existingPreApprovals = selectedEntry?.preApprovals ?? 0;
   const ahaPreApprovals = selectedEntry?.ahaPreApprovals ?? 0;
@@ -3744,7 +3740,12 @@ export function DashboardTabs() {
   // chips; the dashboard fetch waits for it to avoid loading the default first.
   const [networksLoaded, setNetworksLoaded] = useState(false);
   const { data: session } = useSession();
+  const { data: fubAccess, error: fubAccessError } = useSWR<{ allowed: boolean; configured?: boolean }>(session?.user?.role === 'admin' ? ['/api/dashboard/fub?access=1', session.user.id] : null, ([url]: [string, string]) => fetcher(url), { refreshInterval: 30_000, shouldRetryOnError: false });
+  const canViewFub = session?.user?.role === 'admin' && fubAccess?.allowed === true && !fubAccessError;
 
+  // Browser storage is unavailable during SSR. Restore it once after hydration
+  // before enabling the dashboard request so the saved filters load first.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const stored = loadStoredNetworks();
     if (stored) {
@@ -3752,6 +3753,7 @@ export function DashboardTabs() {
     }
     setNetworksLoaded(true);
   }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const networkParam = serializeNetworkList(selectedNetworks);
   const { start: customStart, end: customEnd } = customRange;
@@ -3759,7 +3761,7 @@ export function DashboardTabs() {
     timeframe !== 'custom' || (Boolean(customStart) && Boolean(customEnd) && customStart <= customEnd);
 
   const swrKey = useMemo<string | null>(() => {
-    if (!isRangeReady || !networksLoaded) {
+    if (activeTab === 'fub' || !isRangeReady || !networksLoaded) {
       return null;
     }
     const params = new URLSearchParams({ timeframe, network: networkParam });
@@ -3768,7 +3770,7 @@ export function DashboardTabs() {
       params.set('end', customEnd);
     }
     return `/api/dashboard?${params.toString()}`;
-  }, [isRangeReady, networksLoaded, timeframe, networkParam, customStart, customEnd]);
+  }, [activeTab, isRangeReady, networksLoaded, timeframe, networkParam, customStart, customEnd]);
 
   const { data, error, isLoading, mutate } = useSWR<DashboardResponse>(swrKey, fetcher, {
     refreshInterval: 60_000
@@ -3787,18 +3789,12 @@ export function DashboardTabs() {
     );
   };
 
-  useEffect(() => {
-    if (timeframe === 'custom') {
-      return;
-    }
-    setCustomRange(getPresetRange(timeframe));
-  }, [timeframe]);
-
   const role = session?.user?.role ?? data?.permissions?.role ?? null;
   const canViewGlobal = data?.permissions?.canViewGlobal ?? role === 'admin';
 
   const visibleTabs = useMemo(() => {
     return TAB_OPTIONS.filter((tab) => {
+      if (tab.value === 'fub') return canViewFub;
       if (tab.value === 'main' || tab.value === 'admin') {
         return canViewGlobal;
       }
@@ -3810,13 +3806,12 @@ export function DashboardTabs() {
       }
       return true;
     });
-  }, [canViewGlobal, role]);
+  }, [canViewFub, canViewGlobal, role]);
 
-  useEffect(() => {
-    if (visibleTabs.length && !visibleTabs.some((tab) => tab.value === activeTab)) {
-      setActiveTab(visibleTabs[0].value);
-    }
-  }, [visibleTabs, activeTab]);
+  // Apply permission changes before committing a tab that is no longer visible.
+  if (visibleTabs.length && !visibleTabs.some((tab) => tab.value === activeTab)) {
+    setActiveTab(visibleTabs[0].value);
+  }
 
   const pillTabs = useMemo<PillTabDefinition<TabValue>[]>(
     () => visibleTabs.map((tab) => ({ id: tab.value, label: tab.label })),
@@ -3831,7 +3826,7 @@ export function DashboardTabs() {
   };
 
   const maxSelectableDate = formatDateInput(new Date());
-  const showSkeleton = isRangeReady && (isLoading || !data);
+  const showSkeleton = activeTab !== 'fub' && !error && isRangeReady && (isLoading || !data);
 
   const handlePresetSelect = (preset: TimeframePreset) => {
     setTimeframe(preset);
@@ -3856,20 +3851,13 @@ export function DashboardTabs() {
   // dates instead. "All time" starts at the epoch, which reads as a bug.
   const headerRangeLabel = timeframe === 'all' ? 'All time' : formatDisplayRange(customRange);
 
-  if (error) {
-    return (
-      <div className="rounded-card border border-danger/30 bg-danger-soft p-4 text-danger shadow-card">
-        Unable to load dashboard analytics. Please try again later.
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-5">
       <PageHeader
         eyebrow="Analytics"
         title="Performance dashboards"
-        description={headerRangeLabel}
+        description={activeTab === 'fub' ? 'Team follow-up and supporting evidence' : headerRangeLabel}
       />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -3880,7 +3868,7 @@ export function DashboardTabs() {
           activeTab={activeTab}
           onTabChange={setActiveTab}
         />
-        <div className="flex flex-wrap items-center gap-3">
+        {activeTab !== 'fub' ? <div className="flex flex-wrap items-center gap-3">
           <TimeframeDropdown
             timeframe={timeframe}
             rangeLabel={timeframeLabel}
@@ -3901,7 +3889,7 @@ export function DashboardTabs() {
               onSelectAll={() => updateNetworks([])}
             />
           </div>
-        </div>
+        </div> : null}
       </div>
 
       {showSkeleton ? (
@@ -3923,7 +3911,7 @@ export function DashboardTabs() {
         </div>
       ) : null}
 
-      {!isRangeReady ? (
+      {activeTab === 'fub' ? (canViewFub ? <FubDashboard key={session?.user?.id} userId={session?.user?.id ?? ''} configured={fubAccess?.configured === true} /> : null) : error ? (<div role="alert" className="rounded-card border border-danger/30 bg-danger-soft p-4 text-danger">Unable to load dashboard analytics. Please try again later.</div>) : !isRangeReady ? (
         <div className="rounded-card border border-warning/30 bg-warning-soft p-4 text-sm text-warning shadow-card">
           Select a start and end date to load dashboard metrics.
         </div>

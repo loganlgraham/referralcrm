@@ -83,9 +83,26 @@ describe('intelligence panel', () => {
 
     render(<IntelligencePanel referralId="ref-1" />);
     expect(await screen.findByText('Linked to FUB contact 38620')).toBeInTheDocument();
-    expect(screen.getByText("Follow Up Boss isn't set up here, so activity can't be checked. Saved links are unchanged.")).toBeInTheDocument();
+    expect(screen.getByText("This customer is linked. The FUB activity connection is unavailable here.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry activity' }));
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/api/referrals/ref-1/intelligence?retry=1', { cache: 'no-store' }));
     expect(screen.queryByText("This customer isn't linked.")).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Follow Up Boss person id')).not.toBeInTheDocument();
+  });
+
+  it('opens the same referral on the live site when preview activity is unavailable', async () => {
+    const previous = process.env.NEXT_PUBLIC_VERCEL_ENV;
+    process.env.NEXT_PUBLIC_VERCEL_ENV = 'preview';
+    try {
+      global.fetch = jest.fn(async () => jsonResponse({
+        access: 'allowed', link: { personId: 38620, participantKey: 'borrower' }, activity: { status: 'not_configured' },
+      })) as typeof fetch;
+      render(<IntelligencePanel referralId="ref-1" />);
+      expect(await screen.findByRole('link', { name: 'View activity on referrio.app' })).toHaveAttribute('href', 'https://referrio.app/referrals/ref-1');
+    } finally {
+      if (previous === undefined) delete process.env.NEXT_PUBLIC_VERCEL_ENV;
+      else process.env.NEXT_PUBLIC_VERCEL_ENV = previous;
+    }
   });
 
   it.each([['Nurture', 'Nurture'], [null, 'Unavailable']])('shows the contact stage with no communication history (%s)', async (personStage, expected) => {

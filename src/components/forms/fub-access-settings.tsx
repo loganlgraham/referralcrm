@@ -17,8 +17,10 @@ type AccessPage = {
     isOwner: boolean;
     disabled: boolean;
     aha: boolean;
+    dashboard: boolean;
   }>;
   history: Array<{
+    scope: 'referrals' | 'dashboard';
     at: string;
     actorName: string;
     targetName: string;
@@ -66,12 +68,12 @@ export function FubAccessSettings() {
     void load();
   }, [load]);
 
-  async function changeAccess(adminId: string, access: boolean) {
+  async function changeAccess(adminId: string, access: boolean, dashboard = false) {
     const key = `${adminId}:${FUB_ORGANIZATION}`;
     setPending(key);
     setMessage(null);
     try {
-      const response = await fetch('/api/admin/fub-access', {
+      const response = await fetch(dashboard ? '/api/admin/fub-dashboard-access' : '/api/admin/fub-access', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ userId: adminId, access }),
@@ -93,7 +95,7 @@ export function FubAccessSettings() {
   return (
     <FieldGroup
       title="FUB access"
-      description="Grant selected admins read-only FUB Intelligence visibility for referrals they can already open."
+      description="Choose which admins can view FUB activity on referrals and the team FUB dashboard."
     >
       <div className="min-w-0 max-w-full">
         {state === 'loading' ? <p className="text-sm text-foreground-muted">Loading FUB access…</p> : null}
@@ -122,7 +124,7 @@ function FubAccessControls({
   setSelectedAdminId: (id: string) => void;
   pending: string | null;
   message: string | null;
-  changeAccess: (adminId: string, access: boolean) => Promise<void>;
+  changeAccess: (adminId: string, access: boolean, dashboard?: boolean) => Promise<void>;
 }) {
   const assignableAdmins = useMemo(() => page.admins.filter((admin) => !admin.isOwner && !admin.disabled), [page.admins]);
   const selectedAdmin = assignableAdmins.find((admin) => admin.id === selectedAdminId) ?? assignableAdmins[0] ?? null;
@@ -159,6 +161,13 @@ function FubAccessControls({
               pending={pending === `${selectedAdmin.id}:${FUB_ORGANIZATION}`}
               onChange={(access) => void changeAccess(selectedAdmin.id, access)}
             />
+            <AccessToggle
+              label="Can view the FUB team dashboard"
+              checked={selectedAdmin.dashboard}
+              disabled={!page.connection.configured || pending !== null}
+              pending={pending === `${selectedAdmin.id}:${FUB_ORGANIZATION}`}
+              onChange={(access) => void changeAccess(selectedAdmin.id, access, true)}
+            />
           </div>
         ) : (
           <p className="mt-3 text-sm text-foreground-muted">Add an active admin before granting FUB visibility.</p>
@@ -176,7 +185,7 @@ function FubAccessControls({
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
         <p className="text-foreground-muted">
-          {grantedCount} admin{grantedCount === 1 ? '' : 's'} with AHA FUB visibility
+          {grantedCount} admin{grantedCount === 1 ? '' : 's'} with referral FUB visibility · {assignableAdmins.filter((admin) => admin.dashboard).length} with dashboard access
         </p>
         {message ? (
           <p className="text-foreground" role="status">
@@ -190,8 +199,8 @@ function FubAccessControls({
           <summary className="cursor-pointer text-sm font-medium text-foreground">Recent changes</summary>
           <ul className="mt-2 space-y-1">
             {history.map((entry) => (
-              <li key={`${entry.at}:${entry.targetName}:${entry.organization}:${entry.action}`} className="break-words text-sm text-foreground-muted">
-                {formatDenverDateTime(entry.at)} · {entry.action === 'grant' ? 'Granted' : 'Revoked'} AHA for {entry.targetName}
+              <li key={`${entry.at}:${entry.targetName}:${entry.organization}:${entry.scope}:${entry.action}`} className="break-words text-sm text-foreground-muted">
+                {formatDenverDateTime(entry.at)} · {entry.action === 'grant' ? 'Granted' : 'Revoked'} {entry.scope === 'dashboard' ? 'dashboard access' : 'referral FUB visibility'} for {entry.targetName}
               </li>
             ))}
           </ul>

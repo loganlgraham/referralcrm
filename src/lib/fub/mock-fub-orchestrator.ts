@@ -73,6 +73,7 @@ export class MockFubOperationError extends Error {
     readonly certainty: 'definitive' | 'ambiguous',
     readonly code: string,
     message: string,
+    readonly status = 502,
   ) {
     super(message);
     this.name = 'MockFubOperationError';

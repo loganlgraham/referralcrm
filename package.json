@@ -40,7 +40,7 @@
     "mongodb": "^6.20.0",
     "mongoose": "^8.0.3",
     "next": "14.2.35",
-    "next-auth": "^4.24.5",
+    "next-auth": "4.24.15",
     "openai": "^6.27.0",
     "papaparse": "^5.4.1",
     "react": "18.2.0",
